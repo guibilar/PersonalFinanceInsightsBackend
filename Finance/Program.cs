@@ -1,4 +1,5 @@
-﻿using CrossCutting.Calculators;
+﻿
+using CrossCutting.Calculators;
 using CrossCutting.Helpers;
 
 namespace Finance;

@@ -8,14 +8,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ClosedXML" Version="0.105.0" />
-    <PackageReference Include="CsvHelper" Version="33.1.0" />
-    <PackageReference Include="ScottPlot" Version="5.*" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\FinanceDomain\FinanceDomain.csproj" />
+    <ProjectReference Include="..\FinanceDto\FinanceDto.csproj" />
     <ProjectReference Include="..\FinanceLogic\FinanceLogic.csproj" />
-    <ProjectReference Include="..\PersonalFinances\FinanceLogic\FinanceLogic.csproj" />
+    <ProjectReference Include="..\FinanceLogic\FinanceLogic.csproj" />
   </ItemGroup>
 
 </Project>
