@@ -14,7 +14,6 @@
     <ProjectReference Include="..\FinanceDomain\FinanceDomain.csproj" />
     <ProjectReference Include="..\FinanceDto\FinanceDto.csproj" />
     <ProjectReference Include="..\FinanceLogic\FinanceLogic.csproj" />
-    <ProjectReference Include="..\FinanceLogic\FinanceLogic.csproj" />
   </ItemGroup>
 
 </Project>
