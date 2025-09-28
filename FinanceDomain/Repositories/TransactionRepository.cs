@@ -7,12 +7,12 @@ namespace FinanceDomain.Repositories;
 
 public class TransactionRepository : ITransactionRepository
 {
-    private List<Transaction> storedTransactions = [];
+    private readonly List<Transaction> _storedTransactions = [];
 
     public Transaction AddAsync(Transaction transaction)
     {
         transaction.Id = Guid.NewGuid();
-        storedTransactions.Add(transaction);
+        _storedTransactions.Add(transaction);
         return transaction;
     }
 
@@ -21,30 +21,23 @@ public class TransactionRepository : ITransactionRepository
         foreach (var transaction in transactions)
         {
             transaction.Id = Guid.NewGuid();
-            storedTransactions.Add(transaction);
+            _storedTransactions.Add(transaction);
         }
     }
 
     public Transaction? GetById(Guid id)
     {
-        return storedTransactions.FirstOrDefault(t => t.Id == id);
+        return _storedTransactions.FirstOrDefault(t => t.Id == id);
     }
 
     public List<Transaction> GetAll()
     {
-        return storedTransactions.OrderByDescending(x => x.Date).ToList();
-    }
-
-    public List<Transaction> GetForCategoryReport()
-    {
-        return storedTransactions
-            .Where(x => x.Account != AccountType.Savings && x.TransactionType == TransactionType.Debit)
-            .OrderByDescending(x => x.Date).ToList();
+        return _storedTransactions.OrderByDescending(x => x.Date).ToList();
     }
 
     public List<Transaction> Filter(TransactionFilterDto? filter)
     {
-        var query = storedTransactions.AsQueryable();
+        var query = _storedTransactions.AsQueryable();
 
         if (filter == null) return query.ToList();
 
@@ -58,9 +51,9 @@ public class TransactionRepository : ITransactionRepository
             query = query.Where(x => x.TransactionType == filter.TransactionType.Value);
         }
 
-        if (filter.AccountType.HasValue)
+        if (filter.AccountType is { Count: > 0 })
         {
-            query = query.Where(x => x.Account == filter.AccountType.Value);
+            query = query.Where(x => filter.AccountType.Contains(x.Account));
         }
 
         if (filter.StartDate.HasValue)
@@ -84,11 +77,11 @@ public class TransactionRepository : ITransactionRepository
             query = query.Where(x => x.Category.Contains(filter.Category, StringComparison.InvariantCultureIgnoreCase));
         }
 
-        return query.ToList();
+        return query.OrderByDescending(x => x.Date).ToList();
     }
 
     public void Remove(Guid id)
     {
-        storedTransactions.RemoveAll(t => t.Id == id);
+        _storedTransactions.RemoveAll(t => t.Id == id);
     }
 }

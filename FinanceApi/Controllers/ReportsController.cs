@@ -1,5 +1,4 @@
 using CrossCutting.Services;
-using FinanceDomain.Models;
 using FinanceDto.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,7 +11,14 @@ namespace FinanceApi.Controllers
         [HttpGet("monthly-categorized-graph")]
         public ActionResult<MonthlyCategorizedGraphData> GenerateMonthlyCategorizedGraph()
         {
-            var graphData = reportService.GenerateMonthlyCategorizedGraphData();
+            var graphData = reportService.GenerateMonthlySpendCategorizedGraphData();
+            return Ok(graphData);
+        }
+        
+        [HttpGet("current-month-categorized-graph")]
+        public ActionResult<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraph()
+        {
+            var graphData = reportService.GenerateCurrentMonthCategorizedGraphData();
             return Ok(graphData);
         }
     }
