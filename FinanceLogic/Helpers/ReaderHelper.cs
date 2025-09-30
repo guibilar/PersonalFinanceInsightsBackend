@@ -94,7 +94,7 @@ namespace CrossCutting.Helpers
                 }
             }
 
-            records = [.. records.Where(x => x.Category != "Rent")];
+            records = [.. records.Where(x => x.Category != Category.Rent)];
 
             if (!includeRent)
                 return records;
@@ -110,7 +110,7 @@ namespace CrossCutting.Helpers
                     Date = new DateTime(m.Year, m.Month, 1),
                     Description = "Monthly Rent",
                     Amount = 1947.50m,
-                    Category = "Rent",
+                    Category = Category.Rent,
                     Account = account,
                     TransactionType = TransactionTypeHelper.DefineTransactionType(2)
                 });
@@ -168,7 +168,6 @@ namespace CrossCutting.Helpers
                         Date = date,
                         Description = desc,
                         Amount = amountCredit,
-                        Category = "Savings",
                         TransactionType = TransactionType.Credit,
                         Account = AccountType.Savings
                     });
@@ -181,7 +180,6 @@ namespace CrossCutting.Helpers
                         Date = date,
                         Description = desc,
                         Amount = amountDebit,
-                        Category = "Savings",
                         TransactionType = TransactionType.Debit,
                         Account = AccountType.Savings
                     });

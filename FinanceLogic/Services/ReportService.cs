@@ -1,5 +1,4 @@
 using CrossCutting.Calculators;
-using DocumentFormat.OpenXml.Drawing.Charts;
 using FinanceDomain.Models;
 using FinanceDomain.Repositories.Interfaces;
 using FinanceDto.Enums;
@@ -10,7 +9,7 @@ namespace CrossCutting.Services;
 
 public class ReportService(ITransactionRepository transactionRepository) : IReportService
 {
-    public MonthlyCategorizedGraphData GenerateMonthlySpendCategorizedGraphData()
+    public async Task<MonthlyCategorizedGraphData> GenerateMonthlySpendCategorizedGraphDataAsync()
     {
         var filterForMonthlyCategorizedGraphy = new TransactionFilterDto()
         {
@@ -19,13 +18,15 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
                 AccountType.CreditCard
             ],
             TransactionType = TransactionType.Debit,
+            StartDate = new DateTime(DateTime.Now.Year, 1, 1),
+            EndDate = new DateTime(DateTime.Now.Year, 12, 31)
         };
-        var transactions = transactionRepository.Filter(filterForMonthlyCategorizedGraphy);
+        var transactions = await transactionRepository.FilterAsync(filterForMonthlyCategorizedGraphy);
         var graphData = GenerateMonthlyGraphDataFromTransactions(transactions);
         return graphData;
     }
     
-    public MonthlyCategorizedGraphData GenerateCurrentMonthCategorizedGraphData()
+    public async Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraphDataAsync()
     {
         var filterForCurrentMonthCategorizedGraphy = new TransactionFilterDto()
         {
@@ -37,7 +38,7 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
             StartDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1),
             EndDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.DaysInMonth(DateTime.Now.Year, DateTime.Now.Month))
         };
-        var transactions = transactionRepository.Filter(filterForCurrentMonthCategorizedGraphy);
+        var transactions = await transactionRepository.FilterAsync(filterForCurrentMonthCategorizedGraphy);
         var graphData = GenerateMonthlyGraphDataFromTransactions(transactions);
         return graphData;
     }
@@ -68,6 +69,6 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
 
 public interface IReportService
 {
-    MonthlyCategorizedGraphData GenerateMonthlySpendCategorizedGraphData();
-    MonthlyCategorizedGraphData GenerateCurrentMonthCategorizedGraphData();
+    Task<MonthlyCategorizedGraphData> GenerateMonthlySpendCategorizedGraphDataAsync();
+    Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraphDataAsync();
 }

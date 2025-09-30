@@ -9,16 +9,16 @@ namespace FinanceApi.Controllers
     public class ReportsController(IReportService reportService) : ControllerBase
     {
         [HttpGet("monthly-categorized-graph")]
-        public ActionResult<MonthlyCategorizedGraphData> GenerateMonthlyCategorizedGraph()
+        public async Task<ActionResult<MonthlyCategorizedGraphData>> GenerateMonthlyCategorizedGraph()
         {
-            var graphData = reportService.GenerateMonthlySpendCategorizedGraphData();
+            var graphData = await reportService.GenerateMonthlySpendCategorizedGraphDataAsync();
             return Ok(graphData);
         }
         
         [HttpGet("current-month-categorized-graph")]
-        public ActionResult<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraph()
+        public async Task<ActionResult<MonthlyCategorizedGraphData>> GenerateCurrentMonthCategorizedGraph()
         {
-            var graphData = reportService.GenerateCurrentMonthCategorizedGraphData();
+            var graphData = await reportService.GenerateCurrentMonthCategorizedGraphDataAsync();
             return Ok(graphData);
         }
     }

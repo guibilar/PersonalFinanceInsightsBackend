@@ -6,43 +6,40 @@ using Microsoft.Extensions.Logging;
 
 namespace CrossCutting.Services;
 
-using CrossCutting.Calculators;
-using FinanceDto.Models;
-
 public class TransactionService(ILogger<TransactionService> logger, ITransactionRepository transactionRepository) : ITransactionService
 {
     ILogger<TransactionService> _logger = logger;
 
-    public Transaction Add(Transaction transactionInputDto)
+    public async Task<Transaction> AddAsync(Transaction transactionInputDto)
     {
-        return transactionRepository.AddAsync(transactionInputDto);
+        return await transactionRepository.AddAsync(transactionInputDto);
     }
 
-    public void SyncTransactionsByFile()
+    public async Task SyncTransactionsByFileAsync()
     {
         var records = ReaderHelper.ReadRecords(includeRent: true);
-        transactionRepository.AddList(records);
+        await transactionRepository.AddListAsync(records);
         var recordsIncome = ReaderHelper.ReadIncome();
-        transactionRepository.AddList(recordsIncome);
+        await transactionRepository.AddListAsync(recordsIncome);
     }
 
-    public List<Transaction> GetAll()
+    public async Task<List<Transaction>> GetAllAsync()
     {
-        return transactionRepository.GetAll();
+        return await transactionRepository.GetAllAsync();
     }
     
 
-    public List<Transaction> Filter(TransactionFilterDto? filter)
+    public async Task<List<Transaction>> FilterAsync(TransactionFilterDto? filter)
     {
-        return transactionRepository.Filter(filter);
+        return await transactionRepository.FilterAsync(filter);
     }
 
 }
 
 public interface ITransactionService
 {
-    Transaction Add(Transaction transactionInputDto);
-    void SyncTransactionsByFile();
-    List<Transaction> GetAll();
-    List<Transaction> Filter(TransactionFilterDto? filter);
+    Task<Transaction> AddAsync(Transaction transactionInputDto);
+    Task SyncTransactionsByFileAsync();
+    Task<List<Transaction>> GetAllAsync();
+    Task<List<Transaction>> FilterAsync(TransactionFilterDto? filter);
 }

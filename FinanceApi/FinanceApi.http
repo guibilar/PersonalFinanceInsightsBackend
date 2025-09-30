@@ -1,6 +1,9 @@
-@FinanceApi_HostAddress = http://localhost:5255
+@FinanceApi_HostAddress = http://localhost:5096
 
-GET {{FinanceApi_HostAddress}}/weatherforecast/
+POST {{FinanceApi_HostAddress}}/api/Transaction/SyncTransactionsByFile
 Accept: application/json
 
 ###
+
+GET {{FinanceApi_HostAddress}}/api/Transaction/GetAll
+Accept: application/json

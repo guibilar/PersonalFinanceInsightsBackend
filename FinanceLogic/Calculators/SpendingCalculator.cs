@@ -2,12 +2,13 @@ using System.Globalization;
 using ClosedXML.Excel;
 using CrossCutting.Helpers;
 using FinanceDomain.Models;
+using FinanceDto.Enums;
 
 namespace CrossCutting.Calculators
 {
     public static class SpendingCalculator
     {
-        public static void GenerateExcelReport(List<Transaction> records, List<MonthlyRecords> monthly, List<string> categories, string fileName)
+        public static void GenerateExcelReport(List<Transaction> records, List<MonthlyRecords> monthly, List<Category> categories, string fileName)
         {
             using (var workbook = new XLWorkbook())
             {
@@ -16,9 +17,11 @@ namespace CrossCutting.Calculators
 
                 // Header
                 totalsSheet.Cell(1, 1).Value = "Month";
-                for (int i = 0; i < categories.Count; i++)
-                    totalsSheet.Cell(1, i + 2).Value = categories[i];
-                totalsSheet.Cell(1, categories.Count + 2).Value = "Total";
+                foreach (Category category in Enum.GetValues(typeof(Category)))
+                {
+                    totalsSheet.Cell(1, (int)category + 2).Value = category.ToString();
+                }
+                totalsSheet.Cell(1, Enum.GetValues(typeof(Category)).Length + 2).Value = "Total";
 
                 // Monthly totals
                 int row = 2;
@@ -26,15 +29,15 @@ namespace CrossCutting.Calculators
                 {
                     totalsSheet.Cell(row, 1).Value = m.YearMonth.ToString("yyyy-MM");
 
-                    for (int i = 0; i < categories.Count; i++)
+                    foreach (Category category in Enum.GetValues(typeof(Category)))
                     {
-                        var value = m.Categories.TryGetValue(categories[i], out var v) ? v : 0m;
-                        totalsSheet.Cell(row, i + 2).Value = value;
-                        totalsSheet.Cell(row, i + 2).Style.NumberFormat.Format = "$#,##0.00";
+                        var value = m.Categories.TryGetValue(category, out var v) ? v : 0m;
+                        totalsSheet.Cell(row, (int)category + 2).Value = value;
+                        totalsSheet.Cell(row, (int)category + 2).Style.NumberFormat.Format = "$#,##0.00";
                     }
 
-                    totalsSheet.Cell(row, categories.Count + 2).Value = m.Total;
-                    totalsSheet.Cell(row, categories.Count + 2).Style.NumberFormat.Format = "$#,##0.00";
+                    totalsSheet.Cell(row, Enum.GetValues(typeof(Category)).Length + 2).Value = m.Total;
+                    totalsSheet.Cell(row, Enum.GetValues(typeof(Category)).Length + 2).Style.NumberFormat.Format = "$#,##0.00";
 
                     row++;
                 }
@@ -78,7 +81,7 @@ namespace CrossCutting.Calculators
                         ws.Cell(detailRow, 1).Value = g.Key.Description;
                         ws.Cell(detailRow, 2).Value = g.Sum(r => r.Amount);
                         ws.Cell(detailRow, 2).Style.NumberFormat.Format = "$#,##0.00";
-                        ws.Cell(detailRow, 3).Value = g.Key.Category;
+                        ws.Cell(detailRow, 3).Value = g.Key.Category.ToString();
 
                         detailRow++;
                     }
@@ -94,24 +97,22 @@ namespace CrossCutting.Calculators
             Console.WriteLine($"{fileName}.xlsx saved (totals by category + totals by description per month).");
         }
 
-        public static void GenerateMonthlyCategorizedGraph(List<MonthlyRecords> monthly, double avgMonthlyTotal, List<string> categories, string fileName)
+        public static void GenerateMonthlyCategorizedGraph(List<MonthlyRecords> monthly, double avgMonthlyTotal, List<Category> categories, string fileName)
         {
             var plt2 = new ScottPlot.Plot();
 
             var palette = new ScottPlot.Palettes.Category10();
             var barsList = new List<ScottPlot.Bar>();
 
-            for (int monthIndex = 0; monthIndex < monthly.Count; monthIndex++)
+            foreach (var (monthIndex, monthlyRecord) in monthly.Select((record, index) => (index, record)))
             {
                 int pos = monthIndex + 1;
                 double nextBarBase = 0.0;
 
-                for (int catIndex = 0; catIndex < categories.Count; catIndex++)
+                foreach (Category category in Enum.GetValues(typeof(Category)))
                 {
-                    string cat = categories[catIndex];
-
                     double value = 0;
-                    if (monthly[monthIndex].Categories.TryGetValue(cat, out decimal d))
+                    if (monthlyRecord.Categories.TryGetValue(category, out decimal d))
                         value = (double)d;
 
                     if (value == 0)
@@ -122,7 +123,7 @@ namespace CrossCutting.Calculators
                         Position = pos,
                         ValueBase = nextBarBase,
                         Value = nextBarBase + value,
-                        FillColor = palette.GetColor(catIndex)
+                        FillColor = palette.GetColor((int)category)
                     };
 
                     barsList.Add(bar);
@@ -153,7 +154,7 @@ namespace CrossCutting.Calculators
             {
                 plt2.Legend.ManualItems.Add(new ScottPlot.LegendItem()
                 {
-                    LabelText = categories[i],
+                    LabelText = categories[i].ToString(),
                     FillColor = palette.GetColor(i),
                     LineWidth = 0
                 });

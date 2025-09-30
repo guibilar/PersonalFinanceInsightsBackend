@@ -1,12 +1,12 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CrossCutting.Services;
+using FinanceDomain;
 using FinanceDomain.Repositories;
 using FinanceDomain.Repositories.Interfaces;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
-
-// Add services to the container.
 
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
@@ -14,11 +14,34 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
-builder.Services.AddSingleton<ITransactionRepository, TransactionRepository>();
+
+builder.Services.AddDbContext<FinanceDbContext>(options =>
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")),
+    ServiceLifetime.Scoped); // Ensure scoped lifetime for compatibility.
+
+
+builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
 builder.Services.AddScoped<ITransactionService, TransactionService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 
 builder.Services.AddEndpointsApiExplorer();
+
+// Validate database connection on startup
+using (var scope = builder.Services.BuildServiceProvider().CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
+    try
+    {
+        Console.WriteLine("Verifying database connectivity...");
+        dbContext.Database.CanConnect();
+        Console.WriteLine("Database connectivity verified successfully.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Database connectivity test failed: {ex.Message}");
+        throw;
+    }
+}
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddCors(options =>
@@ -33,21 +56,22 @@ builder.Services.AddCors(options =>
 
 
 var app = builder.Build();
+app.UseRouting();
+Console.WriteLine("Starting application...");
 
-
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// Enable Swagger in all environments
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Finance API V1");
+    c.RoutePrefix = string.Empty; // Serve Swagger at the root
+});
+
+Console.WriteLine("Swagger is configured. Visit /swagger/index.html to access the API documentation.");
 
 app.UseCors();
-
-app.UseHttpsRedirection();
 
 app.UseAuthorization();
 
 app.MapControllers();
-
 app.Run();

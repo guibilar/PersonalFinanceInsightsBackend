@@ -5,8 +5,8 @@ namespace FinanceDomain.Repositories.Interfaces;
 
 public interface ITransactionRepository
 {
-    Transaction AddAsync(Transaction transaction);
-    void AddList(List<Transaction> transactions);
-    public List<Transaction> GetAll();
-    public List<Transaction> Filter(TransactionFilterDto? filter);
+    Task<Transaction> AddAsync(Transaction transaction);
+    Task AddListAsync(List<Transaction> transactions);
+    Task<List<Transaction>> GetAllAsync();
+    Task<List<Transaction>> FilterAsync(TransactionFilterDto? filter);
 }

@@ -11,31 +11,31 @@ namespace FinanceApi.Controllers
     {
         // POST api/<TransactionController>
         [HttpPost]
-        public IActionResult Add([FromBody] Transaction transactionInputDto)
+        public async Task<IActionResult> Add([FromBody] Transaction transactionInputDto)
         {
-            return Ok(transactionService.Add(transactionInputDto));
+            return Ok(await transactionService.AddAsync(transactionInputDto));
         }
         
         [Route("SyncTransactionsByFile")]
         [HttpPost]
-        public IActionResult SyncTransactionsByFile()
+        public async Task<IActionResult> SyncTransactionsByFile()
         {
-            transactionService.SyncTransactionsByFile();
+            await transactionService.SyncTransactionsByFileAsync();
             return Ok();
         }
         
         [Route("GetAll")]
         [HttpGet]
-        public IActionResult GetAll()
+        public async Task<IActionResult> GetAll()
         {
-            return Ok(transactionService.GetAll());
+            return Ok(await transactionService.GetAllAsync());
         }
         
         [Route("Filter")]
         [HttpPost]
-        public IActionResult Filter([FromBody] TransactionFilterDto? filter)
+        public async Task<IActionResult> Filter([FromBody] TransactionFilterDto? filter)
         {
-            return Ok(transactionService.Filter(filter));
+            return Ok(await transactionService.FilterAsync(filter));
         }
     }
 }

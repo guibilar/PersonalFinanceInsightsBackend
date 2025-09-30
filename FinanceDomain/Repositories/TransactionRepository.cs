@@ -1,45 +1,45 @@
 using FinanceDomain.Models;
 using FinanceDomain.Repositories.Interfaces;
-using FinanceDto.Enums;
 using FinanceDto.Inputs;
+using Microsoft.EntityFrameworkCore;
 
 namespace FinanceDomain.Repositories;
 
-public class TransactionRepository : ITransactionRepository
+public class TransactionRepository(FinanceDbContext dbContext) : ITransactionRepository
 {
-    private readonly List<Transaction> _storedTransactions = [];
-
-    public Transaction AddAsync(Transaction transaction)
+    public async Task<Transaction> AddAsync(Transaction transaction)
     {
         transaction.Id = Guid.NewGuid();
-        _storedTransactions.Add(transaction);
+        await dbContext.Transactions.AddAsync(transaction);
+        await dbContext.SaveChangesAsync();
         return transaction;
     }
 
-    public void AddList(List<Transaction> transactions)
+    public async Task AddListAsync(List<Transaction> transactions)
     {
         foreach (var transaction in transactions)
         {
             transaction.Id = Guid.NewGuid();
-            _storedTransactions.Add(transaction);
         }
+        await dbContext.Transactions.AddRangeAsync(transactions);
+        await dbContext.SaveChangesAsync();
     }
 
-    public Transaction? GetById(Guid id)
+    public async Task<Transaction?> GetByIdAsync(Guid id)
     {
-        return _storedTransactions.FirstOrDefault(t => t.Id == id);
+        return await dbContext.Transactions.SingleOrDefaultAsync(t => t.Id == id);
     }
 
-    public List<Transaction> GetAll()
+    public async Task<List<Transaction>> GetAllAsync()
     {
-        return _storedTransactions.OrderByDescending(x => x.Date).ToList();
+        return await dbContext.Transactions.OrderByDescending(x => x.Date).ToListAsync();
     }
 
-    public List<Transaction> Filter(TransactionFilterDto? filter)
+    public async Task<List<Transaction>> FilterAsync(TransactionFilterDto? filter)
     {
-        var query = _storedTransactions.AsQueryable();
+        var query = dbContext.Transactions.AsQueryable();
 
-        if (filter == null) return query.ToList();
+        if (filter == null) return await query.ToListAsync();
 
         if (filter.TransactionId.HasValue)
         {
@@ -72,16 +72,21 @@ public class TransactionRepository : ITransactionRepository
                 x.Description.Contains(filter.Description, StringComparison.InvariantCultureIgnoreCase));
         }
 
-        if (!string.IsNullOrEmpty(filter.Category))
+        if (filter.Category.HasValue)
         {
-            query = query.Where(x => x.Category.Contains(filter.Category, StringComparison.InvariantCultureIgnoreCase));
+            query = query.Where(x => x.Category == filter.Category.Value);
         }
 
-        return query.OrderByDescending(x => x.Date).ToList();
+        return await query.OrderByDescending(x => x.Date).ToListAsync();
     }
 
-    public void Remove(Guid id)
+    public async Task RemoveAsync(Guid id)
     {
-        _storedTransactions.RemoveAll(t => t.Id == id);
+        var transaction = await dbContext.Transactions.FindAsync(id);
+        if (transaction != null)
+        {
+            dbContext.Transactions.Remove(transaction);
+            await dbContext.SaveChangesAsync();
+        }
     }
 }
