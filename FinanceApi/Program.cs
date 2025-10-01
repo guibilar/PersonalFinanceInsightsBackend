@@ -16,8 +16,14 @@ builder.Services.AddControllers()
     });
 
 builder.Services.AddDbContext<FinanceDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")),
-    ServiceLifetime.Scoped); // Ensure scoped lifetime for compatibility.
+    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"), npgsqlOptions =>
+    {
+        npgsqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorCodesToAdd: null
+        );
+    }));
 
 
 builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();

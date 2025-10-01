@@ -69,7 +69,7 @@ public class TransactionRepository(FinanceDbContext dbContext) : ITransactionRep
         if (!string.IsNullOrEmpty(filter.Description))
         {
             query = query.Where(x =>
-                x.Description.Contains(filter.Description, StringComparison.InvariantCultureIgnoreCase));
+                x.Description.ToLower() == filter.Description.ToLower());
         }
 
         if (filter.Category.HasValue)
@@ -88,5 +88,10 @@ public class TransactionRepository(FinanceDbContext dbContext) : ITransactionRep
             dbContext.Transactions.Remove(transaction);
             await dbContext.SaveChangesAsync();
         }
+    }
+
+    public async Task<Transaction?> GetByHashAsync(string hash)
+    {
+        return await dbContext.Transactions.SingleOrDefaultAsync(t => t.Hash == hash);
     }
 }

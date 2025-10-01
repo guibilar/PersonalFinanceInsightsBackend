@@ -1,7 +1,9 @@
 using CrossCutting.Services;
+using FinanceApi.Converters;
 using FinanceDomain.Models;
 using FinanceDto.Inputs;
 using Microsoft.AspNetCore.Mvc;
+using TransactionInputDto = FinanceDto.Inputs.TransactionInputDto;
 
 namespace FinanceApi.Controllers
 {
@@ -9,13 +11,21 @@ namespace FinanceApi.Controllers
     [ApiController]
     public class TransactionController(ITransactionService transactionService) : ControllerBase
     {
-        // POST api/<TransactionController>
         [HttpPost]
-        public async Task<IActionResult> Add([FromBody] Transaction transactionInputDto)
+        public async Task<IActionResult> Add([FromBody] TransactionInputDto transaction)
         {
-            return Ok(await transactionService.AddAsync(transactionInputDto));
+            try
+            {
+                var transactionModel = TransactionConverter.ConvertToModel(transaction);
+                var result = await transactionService.AddAsync(transactionModel);
+                return Ok(result);
+            }
+            catch (InvalidOperationException ex) when (ex.Message.Contains("Transaction already exists"))
+            {
+                return Conflict(new { message = ex.Message });
+            }
         }
-        
+
         [Route("SyncTransactionsByFile")]
         [HttpPost]
         public async Task<IActionResult> SyncTransactionsByFile()
@@ -23,14 +33,14 @@ namespace FinanceApi.Controllers
             await transactionService.SyncTransactionsByFileAsync();
             return Ok();
         }
-        
+
         [Route("GetAll")]
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
             return Ok(await transactionService.GetAllAsync());
         }
-        
+
         [Route("Filter")]
         [HttpPost]
         public async Task<IActionResult> Filter([FromBody] TransactionFilterDto? filter)
