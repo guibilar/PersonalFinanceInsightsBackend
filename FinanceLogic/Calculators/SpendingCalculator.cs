@@ -3,6 +3,7 @@ using ClosedXML.Excel;
 using CrossCutting.Helpers;
 using FinanceDomain.Models;
 using FinanceDto.Enums;
+using FinanceDto.Models;
 
 namespace CrossCutting.Calculators
 {

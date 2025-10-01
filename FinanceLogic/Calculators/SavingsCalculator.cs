@@ -1,6 +1,7 @@
 using System.Globalization;
 using FinanceDomain.Models;
 using FinanceDto.Enums;
+using FinanceDto.Models;
 
 namespace CrossCutting.Calculators
 {

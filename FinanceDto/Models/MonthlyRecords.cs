@@ -1,6 +1,6 @@
 using FinanceDto.Enums;
 
-namespace FinanceDomain.Models
+namespace FinanceDto.Models
 {
     public class MonthlyRecords
     {
