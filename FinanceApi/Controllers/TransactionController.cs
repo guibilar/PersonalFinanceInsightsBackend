@@ -47,5 +47,23 @@ namespace FinanceApi.Controllers
         {
             return Ok(await transactionService.FilterAsync(filter));
         }
+
+        [HttpDelete("{id:guid}")]
+        public async Task<IActionResult> Remove(Guid id)
+        {
+            try
+            {
+                await transactionService.RemoveAsync(id);
+                return Ok(new { message = "Transaction deleted successfully." });
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Transaction not found." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while deleting the transaction.", details = ex.Message });
+            }
+        }
     }
 }

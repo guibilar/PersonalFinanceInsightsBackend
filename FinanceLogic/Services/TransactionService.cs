@@ -78,6 +78,11 @@ public class TransactionService(ILogger<TransactionService> logger, ITransaction
         return await transactionRepository.GetByHashAsync(hash);
     }
 
+    public async Task RemoveAsync(Guid id)
+    {
+        await transactionRepository.RemoveAsync(id);
+    }
+
 }
 
 public interface ITransactionService
@@ -88,4 +93,5 @@ public interface ITransactionService
     Task<List<Transaction>> FilterAsync(TransactionFilterDto? filter);
     string GenerateTransactionHash(decimal amount, DateTime date, string description);
     Task<Transaction?> GetByHashAsync(string hash);
+    Task RemoveAsync(Guid id);
 }

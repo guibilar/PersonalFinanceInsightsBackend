@@ -9,4 +9,5 @@ public interface ITransactionRepository
     Task<List<Transaction>> GetAllAsync();
     Task<List<Transaction>> FilterAsync(TransactionFilterDto? filter);
     Task<Transaction?> GetByHashAsync(string hash);
+    Task RemoveAsync(Guid id);
 }

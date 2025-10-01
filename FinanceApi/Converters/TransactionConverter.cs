@@ -9,7 +9,7 @@ namespace FinanceApi.Converters
         {
             return new Transaction
             {
-                Date = dto.Date,
+                Date = DateTime.SpecifyKind(dto.Date, DateTimeKind.Utc),
                 Description = dto.Description,
                 Amount = dto.Amount,
                 Category = dto.Category,
