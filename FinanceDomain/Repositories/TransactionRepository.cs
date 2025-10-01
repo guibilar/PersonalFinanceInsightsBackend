@@ -14,17 +14,7 @@ public class TransactionRepository(FinanceDbContext dbContext) : ITransactionRep
         await dbContext.SaveChangesAsync();
         return transaction;
     }
-
-    public async Task AddListAsync(List<Transaction> transactions)
-    {
-        foreach (var transaction in transactions)
-        {
-            transaction.Id = Guid.NewGuid();
-        }
-        await dbContext.Transactions.AddRangeAsync(transactions);
-        await dbContext.SaveChangesAsync();
-    }
-
+    
     public async Task<Transaction?> GetByIdAsync(Guid id)
     {
         return await dbContext.Transactions.SingleOrDefaultAsync(t => t.Id == id);

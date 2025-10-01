@@ -27,9 +27,31 @@ public class TransactionService(ILogger<TransactionService> logger, ITransaction
     public async Task SyncTransactionsByFileAsync()
     {
         var records = ReaderHelper.ReadRecords(includeRent: true);
-        await transactionRepository.AddListAsync(records);
+        GenerateTransactionHashForRecord(records);
+        await AddTransactionsIfNotExists(records);
+        
         var recordsIncome = ReaderHelper.ReadIncome();
-        await transactionRepository.AddListAsync(recordsIncome);
+        GenerateTransactionHashForRecord(recordsIncome);
+        await AddTransactionsIfNotExists(recordsIncome);
+    }
+
+    private async Task AddTransactionsIfNotExists(List<Transaction> records)
+    {
+        foreach (var record in records)
+        {
+            var hash = GenerateTransactionHash(record.Amount, record.Date, record.Description);
+            var existingTransaction = await transactionRepository.GetByHashAsync(hash);
+            if (existingTransaction == null) await transactionRepository.AddAsync(record);
+        }
+    }
+
+    private void GenerateTransactionHashForRecord(List<Transaction> recordsIncome)
+    {
+        foreach (var record in recordsIncome)
+        {
+            var hash = GenerateTransactionHash(record.Amount, record.Date, record.Description);
+            record.Hash = hash;
+        }
     }
 
     public async Task<List<Transaction>> GetAllAsync()
