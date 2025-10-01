@@ -10,8 +10,6 @@ namespace CrossCutting.Services;
 
 public class TransactionService(ILogger<TransactionService> logger, ITransactionRepository transactionRepository) : ITransactionService
 {
-    private readonly ILogger<TransactionService> _logger = logger;
-
     public async Task<Transaction> AddAsync(Transaction transaction)
     {
         var hash = GenerateTransactionHash(transaction.Amount, transaction.Date, transaction.Description);
@@ -19,7 +17,7 @@ public class TransactionService(ILogger<TransactionService> logger, ITransaction
 
         var existingTransaction = await transactionRepository.GetByHashAsync(hash);
         if (existingTransaction == null) return await transactionRepository.AddAsync(transaction);
-        _logger.LogWarning("Transaction with hash {Hash} already exists", hash);
+        logger.LogWarning("Transaction with hash {Hash} already exists", hash);
         throw new InvalidOperationException($"Transaction already exists with hash: {hash}");
 
     }
