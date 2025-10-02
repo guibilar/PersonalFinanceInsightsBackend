@@ -1,4 +1,14 @@
 services:
+  app:
+    build: .
+    container_name: personal-finance-api
+    ports:
+      - "5096:80"
+    environment:
+      - ConnectionStrings__DefaultConnection=Host=postgres-db;Port=5432;Database=FinanceDb;Username=postgres;Password=postgres
+      - ASPNETCORE_URLS=http://+:80
+    depends_on:
+      - db
   db:
     image: postgres:15
     container_name: postgres-db

@@ -1,11 +1,10 @@
-# Use the official .NET image for running the application
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+# Use the official .NET 8.0 runtime image
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS base
 WORKDIR /app
 EXPOSE 80
-EXPOSE 5096
 
-# Use the .NET SDK image for building the application
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+# Use the .NET 8.0 SDK image for building the application
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 COPY ["FinanceApi/FinanceApi.csproj", "FinanceApi/"]
 RUN dotnet restore "FinanceApi/FinanceApi.csproj"
@@ -17,7 +16,7 @@ RUN dotnet build "FinanceApi.csproj" -c Release -o /app/build
 FROM build AS publish
 RUN dotnet publish "FinanceApi.csproj" -c Release -o /app/publish
 
-# Runtime stage with a smaller image
+# Use .NET 8.0 runtime for the final image
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
