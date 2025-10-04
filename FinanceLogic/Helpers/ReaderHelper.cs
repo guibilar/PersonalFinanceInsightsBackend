@@ -84,7 +84,7 @@ namespace CrossCutting.Helpers
                 {
                     records.Add(new Transaction
                     {
-                        Date = date,
+                        Date = DateTime.SpecifyKind(date, DateTimeKind.Utc),
                         Description = desc,
                         Amount = amount,
                         Category = CategorizationHelper.Categorize(desc),
@@ -107,7 +107,7 @@ namespace CrossCutting.Helpers
             {
                 records.Add(new Transaction
                 {
-                    Date = new DateTime(m.Year, m.Month, 1),
+                    Date = new DateTime(m.Year, m.Month, 1, 0, 0, 0, DateTimeKind.Utc),
                     Description = "Monthly Rent",
                     Amount = 1947.50m,
                     Category = Category.Rent,
@@ -133,7 +133,7 @@ namespace CrossCutting.Helpers
                 {
                     records.Add(new Transaction
                     {
-                        Date = date,
+                        Date = DateTime.SpecifyKind(date, DateTimeKind.Utc),
                         Description = desc,
                         Amount = amount,
                         Category = CategorizationHelper.Categorize(desc),
@@ -165,7 +165,7 @@ namespace CrossCutting.Helpers
                 {
                     records.Add(new Transaction
                     {
-                        Date = date,
+                        Date = DateTime.SpecifyKind(date, DateTimeKind.Utc),
                         Description = desc,
                         Amount = amountCredit,
                         TransactionType = TransactionType.Credit,
@@ -177,7 +177,7 @@ namespace CrossCutting.Helpers
                 {
                     records.Add(new Transaction
                     {
-                        Date = date,
+                        Date = DateTime.SpecifyKind(date, DateTimeKind.Utc),
                         Description = desc,
                         Amount = amountDebit,
                         TransactionType = TransactionType.Debit,

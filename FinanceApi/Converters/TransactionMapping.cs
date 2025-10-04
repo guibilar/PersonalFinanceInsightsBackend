@@ -1,0 +1,36 @@
+using FinanceDomain.Models;
+using FinanceDto.Inputs;
+using FinanceDto.Outputs;
+
+namespace FinanceApi.Converters
+{
+    public static class TransactionMapping
+    {
+        public static Transaction ToModel(TransactionInputDto dto)
+        {
+            return new Transaction
+            {
+                Date = DateTime.SpecifyKind(dto.Date, DateTimeKind.Utc),
+                Description = dto.Description,
+                Amount = dto.Amount,
+                Category = dto.Category,
+                TransactionType = dto.TransactionType,
+                Account = dto.Account,
+                Hash = dto.Hash,
+            };
+        }
+        
+        public static TransactionOutputDto ToOutput(Transaction transaction)
+        {
+            return new TransactionOutputDto
+            {
+                Date = DateTime.SpecifyKind(transaction.Date, DateTimeKind.Utc),
+                Description = transaction.Description,
+                Amount = transaction.Amount,
+                Category = transaction.Category,
+                TransactionType = transaction.TransactionType,
+                Account = transaction.Account,
+            };
+        }
+    }
+}

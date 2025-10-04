@@ -1,6 +1,5 @@
 using CrossCutting.Services;
 using FinanceApi.Converters;
-using FinanceDomain.Models;
 using FinanceDto.Inputs;
 using Microsoft.AspNetCore.Mvc;
 using TransactionInputDto = FinanceDto.Inputs.TransactionInputDto;
@@ -16,9 +15,9 @@ namespace FinanceApi.Controllers
         {
             try
             {
-                var transactionModel = TransactionConverter.ConvertToModel(transaction);
+                var transactionModel = TransactionMapping.ToModel(transaction);
                 var result = await transactionService.AddAsync(transactionModel);
-                return Ok(result);
+                return Ok(TransactionMapping.ToOutput(result));
             }
             catch (InvalidOperationException ex) when (ex.Message.Contains("Transaction already exists"))
             {

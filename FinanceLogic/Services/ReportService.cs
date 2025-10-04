@@ -18,8 +18,8 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
                 AccountType.CreditCard
             ],
             TransactionType = TransactionType.Debit,
-            StartDate = new DateTime(DateTime.Now.Year, 1, 1),
-            EndDate = new DateTime(DateTime.Now.Year, 12, 31)
+            StartDate = new DateTime(DateTime.Now.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+            EndDate = new DateTime(DateTime.Now.Year, 12, 31, 23, 59, 59, DateTimeKind.Utc)
         };
         var transactions = await transactionRepository.FilterAsync(filterForMonthlyCategorizedGraphy);
         var graphData = GenerateMonthlyGraphDataFromTransactions(transactions);
@@ -35,8 +35,8 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
                 AccountType.CreditCard
             ],
             TransactionType = TransactionType.Debit,
-            StartDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1),
-            EndDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.DaysInMonth(DateTime.Now.Year, DateTime.Now.Month))
+            StartDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1, 0, 0, 0, DateTimeKind.Utc),
+            EndDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.DaysInMonth(DateTime.Now.Year, DateTime.Now.Month), 23, 59, 59, DateTimeKind.Utc)
         };
         var transactions = await transactionRepository.FilterAsync(filterForCurrentMonthCategorizedGraphy);
         var graphData = GenerateMonthlyGraphDataFromTransactions(transactions);
@@ -65,10 +65,4 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
         };
         return graphData;
     }
-}
-
-public interface IReportService
-{
-    Task<MonthlyCategorizedGraphData> GenerateMonthlySpendCategorizedGraphDataAsync();
-    Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraphDataAsync();
 }

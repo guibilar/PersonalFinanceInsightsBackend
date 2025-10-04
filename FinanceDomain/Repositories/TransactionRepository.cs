@@ -9,7 +9,6 @@ public class TransactionRepository(FinanceDbContext dbContext) : ITransactionRep
 {
     public async Task<Transaction> AddAsync(Transaction transaction)
     {
-        transaction.Id = Guid.NewGuid();
         await dbContext.Transactions.AddAsync(transaction);
         await dbContext.SaveChangesAsync();
         return transaction;

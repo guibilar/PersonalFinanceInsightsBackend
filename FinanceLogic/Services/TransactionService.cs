@@ -5,6 +5,7 @@ using FinanceDto.Inputs;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
+using FinanceDto.Helper;
 
 namespace CrossCutting.Services;
 
@@ -12,13 +13,10 @@ public class TransactionService(ILogger<TransactionService> logger, ITransaction
 {
     public async Task<Transaction> AddAsync(Transaction transaction)
     {
-        var hash = GenerateTransactionHash(transaction.Amount, transaction.Date, transaction.Description);
-        transaction.Hash = hash;
-
-        var existingTransaction = await transactionRepository.GetByHashAsync(hash);
+        var existingTransaction = await transactionRepository.GetByHashAsync(transaction.Hash);
         if (existingTransaction == null) return await transactionRepository.AddAsync(transaction);
-        logger.LogWarning("Transaction with hash {Hash} already exists", hash);
-        throw new InvalidOperationException($"Transaction already exists with hash: {hash}");
+        logger.LogWarning("Transaction with hash {Hash} already exists", transaction.Hash);
+        throw new InvalidOperationException($"Transaction already exists with hash: {transaction.Hash}");
 
     }
 
@@ -37,17 +35,16 @@ public class TransactionService(ILogger<TransactionService> logger, ITransaction
     {
         foreach (var record in records)
         {
-            var hash = GenerateTransactionHash(record.Amount, record.Date, record.Description);
-            var existingTransaction = await transactionRepository.GetByHashAsync(hash);
+            var existingTransaction = await transactionRepository.GetByHashAsync(record.Hash);
             if (existingTransaction == null) await transactionRepository.AddAsync(record);
         }
     }
 
-    private void GenerateTransactionHashForRecord(List<Transaction> recordsIncome)
+    private static void GenerateTransactionHashForRecord(List<Transaction> recordsIncome)
     {
         foreach (var record in recordsIncome)
         {
-            var hash = GenerateTransactionHash(record.Amount, record.Date, record.Description);
+            var hash = TransactionHashHelper.GenerateTransactionHash(record.Amount, record.Date, record.Description);
             record.Hash = hash;
         }
     }
@@ -62,15 +59,6 @@ public class TransactionService(ILogger<TransactionService> logger, ITransaction
     {
         return await transactionRepository.FilterAsync(filter);
     }
-
-    public string GenerateTransactionHash(decimal amount, DateTime date, string description)
-    {
-        var input = $"{amount:F2}{date:yyyy-MM-dd}{description?.Trim().ToLowerInvariant()}";
-        var inputBytes = Encoding.UTF8.GetBytes(input);
-        var hashBytes = SHA256.HashData(inputBytes);
-        return Convert.ToHexString(hashBytes).ToLowerInvariant();
-    }
-
     public async Task<Transaction?> GetByHashAsync(string hash)
     {
         return await transactionRepository.GetByHashAsync(hash);
@@ -81,15 +69,4 @@ public class TransactionService(ILogger<TransactionService> logger, ITransaction
         await transactionRepository.RemoveAsync(id);
     }
 
-}
-
-public interface ITransactionService
-{
-    Task<Transaction> AddAsync(Transaction transaction);
-    Task SyncTransactionsByFileAsync();
-    Task<List<Transaction>> GetAllAsync();
-    Task<List<Transaction>> FilterAsync(TransactionFilterDto? filter);
-    string GenerateTransactionHash(decimal amount, DateTime date, string description);
-    Task<Transaction?> GetByHashAsync(string hash);
-    Task RemoveAsync(Guid id);
 }
