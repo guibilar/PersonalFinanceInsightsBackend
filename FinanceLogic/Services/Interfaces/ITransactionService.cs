@@ -1,7 +1,7 @@
 using FinanceDomain.Models;
 using FinanceDto.Inputs;
 
-namespace CrossCutting.Services;
+namespace CrossCutting.Services.Interfaces;
 
 public interface ITransactionService
 {

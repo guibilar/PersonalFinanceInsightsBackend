@@ -1,6 +1,6 @@
 using FinanceDto.Models;
 
-namespace CrossCutting.Services;
+namespace CrossCutting.Services.Interfaces;
 
 public interface IReportService
 {

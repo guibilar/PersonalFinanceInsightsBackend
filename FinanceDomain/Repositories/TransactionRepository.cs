@@ -5,23 +5,11 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanceDomain.Repositories;
 
-public class TransactionRepository(FinanceDbContext dbContext) : ITransactionRepository
+public class TransactionRepository(FinanceDbContext dbContext) : BaseRepository<Transaction>(dbContext), ITransactionRepository
 {
-    public async Task<Transaction> AddAsync(Transaction transaction)
+    public override async Task<List<Transaction>> GetAllAsync()
     {
-        await dbContext.Transactions.AddAsync(transaction);
-        await dbContext.SaveChangesAsync();
-        return transaction;
-    }
-    
-    public async Task<Transaction?> GetByIdAsync(Guid id)
-    {
-        return await dbContext.Transactions.SingleOrDefaultAsync(t => t.Id == id);
-    }
-
-    public async Task<List<Transaction>> GetAllAsync()
-    {
-        return await dbContext.Transactions.OrderByDescending(x => x.Date).ToListAsync();
+        return await DbContext.Transactions.OrderByDescending(x => x.Date).ToListAsync();
     }
 
     public async Task<List<Transaction>> FilterAsync(TransactionFilterDto? filter)

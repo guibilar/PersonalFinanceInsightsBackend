@@ -5,6 +5,7 @@ using FinanceDto.Inputs;
 using Microsoft.Extensions.Logging;
 using System.Security.Cryptography;
 using System.Text;
+using CrossCutting.Services.Interfaces;
 using FinanceDto.Helper;
 
 namespace CrossCutting.Services;

@@ -17,10 +17,32 @@ namespace FinanceDomain.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "9.0.0")
+                .HasAnnotation("ProductVersion", "9.0.1")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
+
+            modelBuilder.Entity("FinanceDomain.Models.Budget", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("Budgets");
+                });
 
             modelBuilder.Entity("FinanceDomain.Models.Transaction", b =>
                 {
@@ -33,6 +55,9 @@ namespace FinanceDomain.Migrations
 
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric");
+
+                    b.Property<Guid?>("BudgetId")
+                        .HasColumnType("uuid");
 
                     b.Property<int>("Category")
                         .HasColumnType("integer");
@@ -53,7 +78,23 @@ namespace FinanceDomain.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Transactions", (string)null);
+                    b.HasIndex("BudgetId");
+
+                    b.ToTable("Transactions");
+                });
+
+            modelBuilder.Entity("FinanceDomain.Models.Transaction", b =>
+                {
+                    b.HasOne("FinanceDomain.Models.Budget", "Budget")
+                        .WithMany("Transactions")
+                        .HasForeignKey("BudgetId");
+
+                    b.Navigation("Budget");
+                });
+
+            modelBuilder.Entity("FinanceDomain.Models.Budget", b =>
+                {
+                    b.Navigation("Transactions");
                 });
 #pragma warning restore 612, 618
         }

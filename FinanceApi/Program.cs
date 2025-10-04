@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using CrossCutting.Services;
+using CrossCutting.Services.Interfaces;
 using FinanceDomain;
 using FinanceDomain.Repositories;
 using FinanceDomain.Repositories.Interfaces;
@@ -27,8 +28,12 @@ builder.Services.AddDbContext<FinanceDbContext>(options =>
 
 
 builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
+builder.Services.AddScoped<IBudgetRepository, BudgetRepository>();
+
 builder.Services.AddScoped<ITransactionService, TransactionService>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IBudgetService, BudgetService>();
+
 
 builder.Services.AddEndpointsApiExplorer();
 

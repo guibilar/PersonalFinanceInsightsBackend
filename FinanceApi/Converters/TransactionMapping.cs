@@ -32,5 +32,10 @@ namespace FinanceApi.Converters
                 Account = transaction.Account,
             };
         }
+
+        public static List<TransactionOutputDto> ToOutputList(List<Transaction>? transactions)
+        {
+            return transactions == null ? [] : transactions.Select(ToOutput).ToList();
+        }
     }
 }

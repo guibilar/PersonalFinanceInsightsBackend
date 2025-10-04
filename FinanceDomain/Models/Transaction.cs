@@ -10,5 +10,7 @@ public class Transaction : BaseEntity
     public Category Category { get; set; }
     public TransactionType? TransactionType { get; set; }
     public required AccountType Account { get; set; }
-    public string Hash { get; set; } = string.Empty; 
+    public string Hash { get; set; } = string.Empty;
+    public Guid? BudgetId { get; set; }
+    public Budget? Budget { get; set; }
 }
