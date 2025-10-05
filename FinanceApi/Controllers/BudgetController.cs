@@ -79,4 +79,12 @@ public class BudgetController(IBudgetService budgetService) : ControllerBase
             return StatusCode(500, new { message = "An error occurred while deleting the budget.", details = ex.Message });
         }
     }
+
+    [Route("Filter")]
+    [HttpPost]
+    public async Task<IActionResult> Filter([FromBody] BudgetFilterDto? filter)
+    {
+        var filteredBudgets = await budgetService.FilterAsync(filter);
+        return Ok(BudgetMapping.ToOutputPaginatedList(filteredBudgets));
+    }
 }
