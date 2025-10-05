@@ -1,10 +1,13 @@
 using FinanceDomain.Models;
 using FinanceDto.Inputs;
+using FinanceDto.Models;
+using FinanceDto.Outputs;
 
 namespace FinanceDomain.Repositories.Interfaces;
 
 public interface ITransactionRepository : IBaseRepository<Transaction>
 {
-    Task<List<Transaction>> FilterAsync(TransactionFilterDto? filter);
+    Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto? filter);
+    Task<List<Transaction>> FilterNoPaginationAsync(TransactionFilterDto? filter);
     Task<Transaction?> GetByHashAsync(string hash);
 }

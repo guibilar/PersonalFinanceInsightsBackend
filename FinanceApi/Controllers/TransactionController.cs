@@ -45,7 +45,16 @@ namespace FinanceApi.Controllers
         [HttpPost]
         public async Task<IActionResult> Filter([FromBody] TransactionFilterDto? filter)
         {
-            return Ok(await transactionService.FilterAsync(filter));
+            if (filter is { StartDate: not null })
+            {
+                filter.StartDate = DateTime.SpecifyKind(filter.StartDate.Value.Date, DateTimeKind.Utc);
+            }
+            if (filter is { EndDate: not null })
+            {
+                filter.EndDate = DateTime.SpecifyKind(filter.EndDate.Value.Date, DateTimeKind.Utc);
+            }
+            var filteredTransactions = await transactionService.FilterAsync(filter);
+            return Ok(TransactionMapping.ToOutputPaginatedList(filteredTransactions));
         }
 
         [HttpDelete("{id:guid}")]

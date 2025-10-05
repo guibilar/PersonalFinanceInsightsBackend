@@ -7,6 +7,8 @@ using System.Security.Cryptography;
 using System.Text;
 using CrossCutting.Services.Interfaces;
 using FinanceDto.Helper;
+using FinanceDto.Models;
+using FinanceDto.Outputs;
 
 namespace CrossCutting.Services;
 
@@ -56,7 +58,7 @@ public class TransactionService(ILogger<TransactionService> logger, ITransaction
     }
     
 
-    public async Task<List<Transaction>> FilterAsync(TransactionFilterDto? filter)
+    public async Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto? filter)
     {
         return await transactionRepository.FilterAsync(filter);
     }

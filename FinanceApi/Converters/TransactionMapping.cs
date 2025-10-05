@@ -1,5 +1,6 @@
 using FinanceDomain.Models;
 using FinanceDto.Inputs;
+using FinanceDto.Models;
 using FinanceDto.Outputs;
 
 namespace FinanceApi.Converters
@@ -24,6 +25,7 @@ namespace FinanceApi.Converters
         {
             return new TransactionOutputDto
             {
+                Id = transaction.Id,
                 Date = DateTime.SpecifyKind(transaction.Date, DateTimeKind.Utc),
                 Description = transaction.Description,
                 Amount = transaction.Amount,
@@ -36,6 +38,19 @@ namespace FinanceApi.Converters
         public static List<TransactionOutputDto> ToOutputList(List<Transaction>? transactions)
         {
             return transactions == null ? [] : transactions.Select(ToOutput).ToList();
+        }
+        
+        public static PaginatedList<TransactionOutputDto> ToOutputPaginatedList(PaginatedList<Transaction>? paginatedInput)
+        {
+            var toReturn = new PaginatedList<TransactionOutputDto>()
+            {
+                Items = ToOutputList(paginatedInput.Items),
+                Page = paginatedInput.Page,
+                PageSize = paginatedInput.PageSize,
+                TotalCount = paginatedInput.TotalCount,
+            };
+            
+            return toReturn;
         }
     }
 }

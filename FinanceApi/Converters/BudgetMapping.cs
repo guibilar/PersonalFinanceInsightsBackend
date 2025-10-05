@@ -23,7 +23,6 @@ namespace FinanceApi.Converters
                 Name = budget.Name,
                 Description = budget.Description,
                 Status = budget.Status,
-                Transactions = TransactionMapping.ToOutputList(budget.Transactions)
             };
         }
     }
