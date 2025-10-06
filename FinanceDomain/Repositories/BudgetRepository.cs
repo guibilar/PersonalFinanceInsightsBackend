@@ -32,8 +32,10 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
 
     private IQueryable<Budget> FilterQuery(BudgetFilterDto filter)
     {
-        var query = dbContext.Set<Budget>().AsQueryable();
-        
+        var query = dbContext.Set<Budget>()
+            .Include(x => x.Transactions)
+            .AsQueryable();
+
         if (filter.Status.HasValue)
         {
             query = query.Where(x => x.Status == filter.Status.Value);

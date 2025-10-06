@@ -12,4 +12,5 @@ public class TransactionOutputDto
     public TransactionType? TransactionType { get; set; }
     public AccountType Account { get; set; }
     public Guid BudgetId { get; set; }
+    public BudgetOutputDto? Budget { get; set; }
 }

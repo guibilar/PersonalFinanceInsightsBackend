@@ -32,4 +32,6 @@ public class BudgetService(IBudgetRepository budgetRepository) : IBudgetService
     {
         return await budgetRepository.FilterAsync(filter);
     }
+    
+    
 }

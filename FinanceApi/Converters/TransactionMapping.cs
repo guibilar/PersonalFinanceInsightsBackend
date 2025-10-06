@@ -20,7 +20,7 @@ namespace FinanceApi.Converters
                 Hash = dto.Hash,
             };
         }
-        
+
         public static TransactionOutputDto ToOutput(Transaction transaction)
         {
             return new TransactionOutputDto
@@ -32,6 +32,8 @@ namespace FinanceApi.Converters
                 Category = transaction.Category,
                 TransactionType = transaction.TransactionType,
                 Account = transaction.Account,
+                BudgetId = transaction.BudgetId.HasValue ? transaction.BudgetId.Value : Guid.Empty,
+                Budget = transaction.Budget != null ? BudgetMapping.ToOutput(transaction.Budget) : null
             };
         }
 
@@ -39,8 +41,9 @@ namespace FinanceApi.Converters
         {
             return transactions == null ? [] : transactions.Select(ToOutput).ToList();
         }
-        
-        public static PaginatedList<TransactionOutputDto> ToOutputPaginatedList(PaginatedList<Transaction>? paginatedInput)
+
+        public static PaginatedList<TransactionOutputDto> ToOutputPaginatedList(
+            PaginatedList<Transaction>? paginatedInput)
         {
             var toReturn = new PaginatedList<TransactionOutputDto>()
             {
@@ -49,7 +52,7 @@ namespace FinanceApi.Converters
                 PageSize = paginatedInput.PageSize,
                 TotalCount = paginatedInput.TotalCount,
             };
-            
+
             return toReturn;
         }
     }

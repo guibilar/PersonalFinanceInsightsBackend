@@ -74,5 +74,35 @@ namespace FinanceApi.Controllers
                 return StatusCode(500, new { message = "An error occurred while deleting the transaction.", details = ex.Message });
             }
         }
+        
+        [Route("LinkTransaction")]
+        [HttpPost]
+        public async Task<IActionResult> LinkTransaction([FromBody] TransactionLinkInputDto transactionLinkInputDto)
+        {
+            try
+            {
+                await transactionService.LinkTransactionToBudget(transactionLinkInputDto.BudgetId, transactionLinkInputDto.TransactionId);
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while linking transaction.", details = ex.Message });
+            }
+        }
+    
+        [Route("UnlinkTransaction/{id:guid}")]
+        [HttpPost]
+        public async Task<IActionResult> UnlinkTransaction(Guid id)
+        {
+            try
+            {
+                await transactionService.UnlinkTransactionFromBudget(id);
+                return Ok();
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "An error occurred while unlinking transaction.", details = ex.Message });
+            }
+        }
     }
 }

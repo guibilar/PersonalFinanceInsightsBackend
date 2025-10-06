@@ -12,4 +12,6 @@ public interface ITransactionService
     Task<PaginatedList<Transaction>>FilterAsync(TransactionFilterDto? filter);
     Task<Transaction?> GetByHashAsync(string hash);
     Task RemoveAsync(Guid id);
+    Task LinkTransactionToBudget(Guid budgetId, Guid transactionId);
+    Task UnlinkTransactionFromBudget(Guid transactionId);
 }

@@ -28,6 +28,9 @@ namespace FinanceDomain.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("text");

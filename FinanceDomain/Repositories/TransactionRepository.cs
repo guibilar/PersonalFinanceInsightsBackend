@@ -6,7 +6,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanceDomain.Repositories;
 
-public class TransactionRepository(FinanceDbContext dbContext) : BaseRepository<Transaction>(dbContext), ITransactionRepository
+public class TransactionRepository(FinanceDbContext dbContext)
+    : BaseRepository<Transaction>(dbContext), ITransactionRepository
 {
     public override async Task<List<Transaction>> GetAllAsync()
     {
@@ -16,7 +17,7 @@ public class TransactionRepository(FinanceDbContext dbContext) : BaseRepository<
     public async Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto? filter)
     {
         filter ??= new TransactionFilterDto();
-        
+
         var query = FilterNoPaginationQuery(filter);
 
         var totalCount = await query.CountAsync();
@@ -34,19 +35,21 @@ public class TransactionRepository(FinanceDbContext dbContext) : BaseRepository<
             TotalCount = totalCount
         };
     }
-    
+
     public async Task<List<Transaction>> FilterNoPaginationAsync(TransactionFilterDto? filter)
     {
         filter ??= new TransactionFilterDto();
-        
+
         var query = FilterNoPaginationQuery(filter);
 
-       return await query.ToListAsync();
+        return await query.ToListAsync();
     }
 
     private IQueryable<Transaction> FilterNoPaginationQuery(TransactionFilterDto filter)
     {
-        var query = dbContext.Transactions.AsQueryable();
+        var query = dbContext.Transactions
+            .Include(x => x.Budget)
+            .AsQueryable();
 
         if (filter.TransactionId.HasValue)
         {
@@ -89,7 +92,7 @@ public class TransactionRepository(FinanceDbContext dbContext) : BaseRepository<
             query = query.Where(x => x.BudgetId == filter.BudgetId.Value);
         }
 
-        query = query.OrderByDescending(x => x.Date).ThenBy(x=>x.Id);
+        query = query.OrderByDescending(x => x.Date).ThenBy(x => x.Id);
         return query;
     }
 

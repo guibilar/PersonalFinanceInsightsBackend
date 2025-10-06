@@ -12,7 +12,10 @@ using FinanceDto.Outputs;
 
 namespace CrossCutting.Services;
 
-public class TransactionService(ILogger<TransactionService> logger, ITransactionRepository transactionRepository) : ITransactionService
+public class TransactionService(
+    ILogger<TransactionService> logger,
+    ITransactionRepository transactionRepository,
+    IBudgetRepository budgetRepository) : ITransactionService
 {
     public async Task<Transaction> AddAsync(Transaction transaction)
     {
@@ -20,7 +23,6 @@ public class TransactionService(ILogger<TransactionService> logger, ITransaction
         if (existingTransaction == null) return await transactionRepository.AddAsync(transaction);
         logger.LogWarning("Transaction with hash {Hash} already exists", transaction.Hash);
         throw new InvalidOperationException($"Transaction already exists with hash: {transaction.Hash}");
-
     }
 
     public async Task SyncTransactionsByFileAsync()
@@ -28,7 +30,7 @@ public class TransactionService(ILogger<TransactionService> logger, ITransaction
         var records = ReaderHelper.ReadRecords(includeRent: true);
         GenerateTransactionHashForRecord(records);
         await AddTransactionsIfNotExists(records);
-        
+
         var recordsIncome = ReaderHelper.ReadIncome();
         GenerateTransactionHashForRecord(recordsIncome);
         await AddTransactionsIfNotExists(recordsIncome);
@@ -56,12 +58,13 @@ public class TransactionService(ILogger<TransactionService> logger, ITransaction
     {
         return await transactionRepository.GetAllAsync();
     }
-    
+
 
     public async Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto? filter)
     {
         return await transactionRepository.FilterAsync(filter);
     }
+
     public async Task<Transaction?> GetByHashAsync(string hash)
     {
         return await transactionRepository.GetByHashAsync(hash);
@@ -72,4 +75,33 @@ public class TransactionService(ILogger<TransactionService> logger, ITransaction
         await transactionRepository.RemoveAsync(id);
     }
 
+    public async Task LinkTransactionToBudget(Guid budgetId, Guid transactionId)
+    {
+        var transaction = await transactionRepository.GetByIdAsync(transactionId);
+        
+        if (transaction == null)
+            throw new ArgumentException($"Transaction with id {transactionId} not found.");
+        
+        if(transaction.BudgetId.HasValue)
+            throw new ArgumentException($"Transaction with id {transactionId} already has a budget with id {transaction.BudgetId}.");
+        
+        var budget = await budgetRepository.GetByIdAsync(budgetId);
+        
+        if (budget == null)
+            throw new ArgumentException($"Budget with id {budgetId} not found.");
+        
+        transaction.BudgetId = budget.Id;
+        await transactionRepository.UpdateAsync(transaction);
+    }
+    
+    public async Task UnlinkTransactionFromBudget(Guid transactionId)
+    {
+        var transaction = await transactionRepository.GetByIdAsync(transactionId);
+        
+        if (transaction == null)
+            throw new ArgumentException($"Transaction with id {transactionId} not found.");
+
+        transaction.BudgetId = null;
+        await transactionRepository.UpdateAsync(transaction);
+    }
 }

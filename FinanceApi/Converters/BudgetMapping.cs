@@ -13,18 +13,25 @@ namespace FinanceApi.Converters
             {
                 Name = dto.Name,
                 Description = dto.Description,
-                Status = dto.Status
+                Status = dto.Status,
+                Amount = dto.Amount,
             };
         }
         
         public static BudgetOutputDto ToOutput(Budget budget)
         {
+            var totalSpent = budget.Transactions != null ? budget.Transactions.Sum(t => t.Amount) : 0;
+            var percentageUsed = budget.Amount > 0 ? (totalSpent/budget.Amount)*100 : 0;
             return new BudgetOutputDto
             {
                 Id = budget.Id,
                 Name = budget.Name,
                 Description = budget.Description,
                 Status = budget.Status,
+                TotalAmount = budget.Amount,
+                TotalSpent = totalSpent,
+                TotalRemaining =  budget.Amount - totalSpent,
+                PercentageUsed = percentageUsed,
             };
         }
 
