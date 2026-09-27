@@ -154,7 +154,7 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
             {
                 Date = month,
                 Description = rent.Description,
-                Amount = rent.Amount,
+                Amount = rent.AmountFor(month),
                 Category = Category.Rent,
                 TransactionType = TransactionType.Debit,
                 Account = account

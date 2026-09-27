@@ -15,6 +15,13 @@ public interface ITransactionRepository : IBaseRepository<Transaction>
     /// <summary>Tracked, hidden or not.</summary>
     Task<Transaction?> GetIncludingHiddenAsync(Guid id, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Tracked: the stored fixed monthly rents (this description, on the account) dated on any of
+    /// <paramref name="months"/>, hidden or not, whatever their amount.
+    /// </summary>
+    Task<List<Transaction>> GetRentsAsync(AccountType account, string description, IReadOnlyCollection<DateTime> months,
+        CancellationToken cancellationToken = default);
+
     /// <summary>The stored transaction with this hash on the account, hidden or not; null when there is none.</summary>
     Task<Transaction?> FindByHashAsync(AccountType account, string hash, CancellationToken cancellationToken = default);
 

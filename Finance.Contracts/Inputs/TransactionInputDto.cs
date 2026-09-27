@@ -16,7 +16,7 @@ public class TransactionInputDto
     [Required]
     public DateTimeOffset? Date { get; set; }
 
-    [Required]
+    [Required, MaxLength(TextLimits.TransactionDescription)]
     public required string Description { get; set; }
 
     /// <summary>Always positive; <see cref="TransactionType"/> says which way the money moved.</summary>

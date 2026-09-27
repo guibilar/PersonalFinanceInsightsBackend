@@ -43,6 +43,16 @@ public class TransactionRepository(FinanceDbContext dbContext)
             .SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
     }
 
+    public Task<List<Transaction>> GetRentsAsync(AccountType account, string description,
+        IReadOnlyCollection<DateTime> months, CancellationToken cancellationToken = default)
+    {
+        return DbContext.Transactions
+            .IgnoreQueryFilters()
+            .Where(t => t.Account == account && t.Category == Category.Rent && t.Description == description &&
+                        months.Contains(t.Date))
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<Transaction?> FindByHashAsync(AccountType account, string hash, CancellationToken cancellationToken = default)
     {
         return DbContext.Transactions.IgnoreQueryFilters().AsNoTracking()
