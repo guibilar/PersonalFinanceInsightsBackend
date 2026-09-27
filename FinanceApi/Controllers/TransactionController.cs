@@ -63,7 +63,7 @@ public class TransactionController(ITransactionService transactionService) : Con
         return result.Map(TransactionMapping.ToOutput);
     }
 
-    /// <summary>Corrects a transaction's description and category (the category is then locked against rule changes).</summary>
+    /// <summary>Corrects a transaction's description and category (a changed category is then locked against rule changes).</summary>
     [HttpPut("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

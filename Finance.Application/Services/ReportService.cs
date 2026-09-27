@@ -16,42 +16,39 @@ public class ReportService(ITransactionRepository transactionRepository, Reporti
     {
         var today = calendar.Today();
         var yearStart = new DateTime(today.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
-        var filterForMonthlyCategorizedGraphy = new TransactionFilterDto()
-        {
-            AccountType = [
-                AccountType.Chequing,
-                AccountType.CreditCard
-            ],
-            TransactionType = TransactionType.Debit,
-            StartDate = yearStart,
-            EndDate = yearStart.AddYears(1)
-        };
-        var transactions = await transactionRepository.FilterNoPaginationAsync(filterForMonthlyCategorizedGraphy, cancellationToken);
-        var graphData = GenerateMonthlyGraphDataFromTransactions(transactions);
-        return graphData;
+        var transactions = await SpendingAsync(yearStart, yearStart.AddYears(1), cancellationToken);
+        return GenerateMonthlyGraphDataFromTransactions(transactions);
     }
-    
+
     public async Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraphDataAsync(CancellationToken cancellationToken = default)
     {
         var monthStart = calendar.CurrentMonthStart();
-        var filterForCurrentMonthCategorizedGraphy = new TransactionFilterDto()
+        var transactions = await SpendingAsync(monthStart, monthStart.AddMonths(1), cancellationToken);
+        return GenerateMonthlyGraphDataFromTransactions(transactions);
+    }
+
+    /// <summary>
+    /// Purchases from chequing and the credit card, plus credit card refunds (which reduce spending).
+    /// Money in on chequing is income, not a refund, so it stays out.
+    /// </summary>
+    private async Task<List<Transaction>> SpendingAsync(DateTime start, DateTime end, CancellationToken cancellationToken)
+    {
+        var filter = new TransactionFilterDto
         {
-            AccountType = [
-                AccountType.Chequing,
-                AccountType.CreditCard
-            ],
-            TransactionType = TransactionType.Debit,
-            StartDate = monthStart,
-            EndDate = monthStart.AddMonths(1)
+            AccountType = [AccountType.Chequing, AccountType.CreditCard],
+            StartDate = start,
+            EndDate = end
         };
-        var transactions = await transactionRepository.FilterNoPaginationAsync(filterForCurrentMonthCategorizedGraphy, cancellationToken);
-        var graphData = GenerateMonthlyGraphDataFromTransactions(transactions);
-        return graphData;
+        var transactions = await transactionRepository.FilterNoPaginationAsync(filter, cancellationToken);
+        return transactions
+            .Where(t => t.TransactionType == TransactionType.Debit ||
+                        (t.TransactionType == TransactionType.Credit && t.Account == AccountType.CreditCard))
+            .ToList();
     }
 
     private static MonthlyCategorizedGraphData GenerateMonthlyGraphDataFromTransactions(List<Transaction> transactions)
     {
-        var monthlyRecords = MonthlyRecordsCalculator.GenerateMonthlyRecords(transactions);
+        var monthlyRecords = MonthlyRecordsCalculator.GenerateSpendingRecords(transactions);
         var categories = transactions
             .Select(t => t.Category)
             .Distinct()

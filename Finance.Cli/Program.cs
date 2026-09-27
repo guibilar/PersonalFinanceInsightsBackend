@@ -36,14 +36,15 @@ class Program
             return;
         }
 
-        var records = creditCard.Concat(chequing).Where(t => t.TransactionType == TransactionType.Debit).ToList();
+        // Spending: purchases on both accounts, minus credit card refunds (money in on chequing is income).
+        var records = creditCard.Concat(chequing.Where(t => t.TransactionType == TransactionType.Debit)).ToList();
         var recordsWithOutRent = records.Where(t => t.Category != Category.Rent).ToList();
         var recordsIncome = chequing.Where(t => t.TransactionType == TransactionType.Credit).ToList();
         var recordsSavings = Read("cibc_savings", AccountType.Savings);
 
         // Group totals per month/category
-        var monthly = MonthlyRecordsCalculator.GenerateMonthlyRecords(records);
-        var monthlyWithOutRent = MonthlyRecordsCalculator.GenerateMonthlyRecords(recordsWithOutRent);
+        var monthly = MonthlyRecordsCalculator.GenerateSpendingRecords(records);
+        var monthlyWithOutRent = MonthlyRecordsCalculator.GenerateSpendingRecords(recordsWithOutRent);
         var monthlySavings = SavingsCalculator.GenerateMonthlySavingsRecords(recordsSavings);
 
         // ================= Line Chart: Monthly Totals =================

@@ -13,7 +13,7 @@ public interface ITransactionService
     Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default);
     Task RemoveAsync(Guid id, CancellationToken cancellationToken = default);
 
-    /// <summary>Corrects the description and category; the category is then kept when rules are re-applied.</summary>
+    /// <summary>Corrects the description and category; a changed category is then kept when rules are re-applied.</summary>
     Task<Transaction> UpdateAsync(Guid id, string description, Category category, CancellationToken cancellationToken = default);
 
     /// <summary>Re-runs the current category rules over stored transactions.</summary>

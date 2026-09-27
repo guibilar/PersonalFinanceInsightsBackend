@@ -74,6 +74,37 @@ public class ImportTests
     }
 
     [Fact]
+    public void Parser_CreditCardRefundsAreCredits_InThePurchaseCategory_ButCardPaymentsAreSkipped()
+    {
+        var parsed = Parse("""
+            2026-01-03,WAL-MART #3059,120.00,
+            2026-01-10,WAL-MART #3059,,120.00
+            2026-01-12,PAYMENT THANK YOU/PAIEMENT MERCI,,500.00
+            2026-01-13,payment thank you,,50.00
+            2026-01-14,Internet Banking INTERNET TRANSFER 01,,20.00
+            """, AccountType.CreditCard);
+
+        Assert.Equal(
+            [(TransactionType.Debit, 120m, Category.Groceries), (TransactionType.Credit, 120m, Category.Groceries)],
+            parsed.Select(t => (t.TransactionType!.Value, t.Amount, t.Category)));
+    }
+
+    [Fact]
+    public void Parser_ChequingMoneyInIsOnlyKnownIncome()
+    {
+        var parsed = Parse("""
+            2026-01-15,E-TRANSFER FROM A FRIEND,,40.00
+            2026-01-16,METRO,,5.00
+            """, AccountType.Chequing, new ImportOptions
+            {
+                IncomeKeywords = Rules.IncomeKeywords, ExcludedDescriptions = Rules.ExcludedDescriptions,
+                CategoryRules = Rules.CategoryRules, MonthlyRent = null
+            });
+
+        Assert.Empty(parsed);
+    }
+
+    [Fact]
     public void Parser_ChequingImportsKnownIncomeAndOneRentPerMonth()
     {
         var parsed = Parse("""
@@ -156,6 +187,25 @@ public class ImportTests
         Assert.Equal((3, 3, 0), (first.Read, first.Added, first.Skipped));
         Assert.Equal((3, 0, 3), (again.Read, again.Added, again.Skipped));
         Assert.Equal(2, await factory.QueryAsync(db => db.Transactions.CountAsync(t => t.Description == "TIM HORTONS #55")));
+    }
+
+    [Fact]
+    public async Task Import_SameDayRefundOfAPurchase_IsKept_AndReimportAddsNothing()
+    {
+        await using var factory = new FinanceApiFactory();
+        var client = factory.CreateClient();
+        const string csv = """
+            2026-01-03,WAL-MART #3059,45.10,
+            2026-01-03,WAL-MART #3059,,45.10
+            """;
+
+        var first = await (await client.PostAsync("/api/Transaction/Import", Statement(csv))).ReadAsync<ImportResultDto>();
+        var again = await (await client.PostAsync("/api/Transaction/Import", Statement(csv))).ReadAsync<ImportResultDto>();
+
+        Assert.Equal((2, 2), (first.Read, first.Added));
+        Assert.Equal((0, 2), (again.Added, again.Skipped));
+        Assert.Equal([TransactionType.Credit, TransactionType.Debit], await factory.QueryAsync(db =>
+            db.Transactions.Select(t => t.TransactionType!.Value).OrderBy(t => t).ToListAsync()));
     }
 
     [Fact]

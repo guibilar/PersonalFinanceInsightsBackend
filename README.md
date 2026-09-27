@@ -59,9 +59,13 @@ curl -F file=@cibc_credit.csv -F account=CreditCard http://localhost:5096/api/Tr
 ```
 
 Re-importing a statement, or an overlapping one, only adds rows that aren't stored yet; identical
-purchases on the same day are kept. Categories, excluded descriptions, income sources and the fixed
-monthly rent are configured in `Finance.Infrastructure/Import/import-rules.json` (override with
+purchases on the same day are kept. Categories, excluded descriptions, income sources, card payments and
+the fixed monthly rent are configured in `Finance.Infrastructure/Import/import-rules.json` (override with
 `Import__...` environment variables).
+
+Money in on a credit card statement is imported as a refund (a credit in the purchase's category), except
+the card's own payments, recognised by `CardPaymentKeywords`. Refunds reduce spending in the reports and
+in budgets. On chequing, money in only counts as income when it matches `IncomeKeywords`.
 
 Statements are read as UTF-8, or as Windows-1252 when the file isn't valid UTF-8 (e.g. re-saved in Excel).
 Transactions are duplicates only within the same account.

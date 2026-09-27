@@ -80,7 +80,8 @@ namespace Finance.Cli.Charts{
                     foreach (var g in descGroups)
                     {
                         ws.Cell(detailRow, 1).Value = g.Key.Description;
-                        ws.Cell(detailRow, 2).Value = g.Sum(r => r.Amount);
+                        // Refunds (credits) reduce the description's total, as in the monthly totals.
+                        ws.Cell(detailRow, 2).Value = g.Sum(r => r.TransactionType == TransactionType.Credit ? -r.Amount : r.Amount);
                         ws.Cell(detailRow, 2).Style.NumberFormat.Format = "$#,##0.00";
                         ws.Cell(detailRow, 3).Value = g.Key.Category.ToString();
 

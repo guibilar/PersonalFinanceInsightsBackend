@@ -5,6 +5,10 @@
       "Internet Banking FULFILL REQUEST",
       "UBER* PENDING"
     ],
+    "CardPaymentKeywords": [
+      "PAYMENT THANK YOU",
+      "PAIEMENT MERCI"
+    ],
     "IncomeKeywords": [
       "Deel Canada",
       "DEPOSIT TrupCAN"
