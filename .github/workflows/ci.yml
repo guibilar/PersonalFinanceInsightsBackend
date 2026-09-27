@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - run: dotnet restore
+      - run: dotnet build --no-restore
+      - run: dotnet tool restore
+
+      - name: Migrations match the model
+        run: dotnet ef migrations has-pending-model-changes --project Finance.Infrastructure --startup-project FinanceApi --no-build
+
+      - name: Tests (in-memory database)
+        run: dotnet test --no-build
+
+      - name: Tests (PostgreSQL, migrated from scratch)
+        run: dotnet test --no-build
+        env:
+          FINANCE_TEST_POSTGRES: Host=localhost;Port=5432;Username=postgres;Password=postgres
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the API image
+        run: docker build -t finance-api .

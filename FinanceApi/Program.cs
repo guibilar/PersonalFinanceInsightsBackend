@@ -35,6 +35,12 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
+{
+    app.Logger.LogInformation("Applying database migrations");
+    await app.Services.MigrateDatabaseAsync();
+}
+
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 

@@ -1,0 +1,12 @@
+**/bin
+**/obj
+**/Files
+**/Results
+.git
+.github
+.idea
+.vs
+.env
+*.md
+FinanceTests
+Finance.Cli
