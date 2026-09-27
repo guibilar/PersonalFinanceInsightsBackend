@@ -112,8 +112,14 @@ the in-memory and container modes, plus a check that the migrations match the mo
 
 ```bash
 cp .env.example .env        # set POSTGRES_PASSWORD and FINANCE_USERNAME / FINANCE_PASSWORD
-docker compose up --build   # API on http://localhost:5096, migrations applied on start
+docker compose up --build   # API on http://localhost:5096 (this machine only), migrations applied on start
 ```
+
+Start this project before the frontend's: it creates the `finance` Docker network that the frontend
+joins. Browsers never talk to the API directly: they reach the frontend over HTTPS (Tailscale, see the
+frontend README), and its nginx calls the API as `http://personal-finance-api:8080` on that network.
+The API port is published on `127.0.0.1:5096` only, so nothing on your LAN can reach it, and in
+particular no password crosses the network unencrypted.
 
 `POSTGRES_PASSWORD` only takes effect when the database volume is first created; for an existing
 volume, use the password it was created with.
