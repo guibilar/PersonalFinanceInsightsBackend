@@ -6,6 +6,7 @@ using Finance.Infrastructure.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Infrastructure;
 
 namespace Finance.Infrastructure;
 
@@ -17,13 +18,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDbContext<FinanceDbContext>(options =>
-            options.UseNpgsql(GetConnectionString(configuration), npgsqlOptions =>
-            {
-                npgsqlOptions.EnableRetryOnFailure(
-                    maxRetryCount: 5,
-                    maxRetryDelay: TimeSpan.FromSeconds(10),
-                    errorCodesToAdd: null);
-            }));
+            options.UseNpgsql(GetConnectionString(configuration), ConfigureNpgsql));
 
         services.Configure<ImportOptions>(configuration.GetSection(ImportOptions.SectionName));
 
@@ -31,6 +26,15 @@ public static class DependencyInjection
         services.AddScoped<IBudgetRepository, BudgetRepository>();
         services.AddScoped<IStatementParser, CibcCsvParser>();
         return services;
+    }
+
+    /// <summary>PostgreSQL settings, shared with the tests so they run against the same configuration.</summary>
+    public static void ConfigureNpgsql(NpgsqlDbContextOptionsBuilder npgsqlOptions)
+    {
+        npgsqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(10),
+            errorCodesToAdd: null);
     }
 
     private static string GetConnectionString(IConfiguration configuration) =>

@@ -3,6 +3,7 @@ using Finance.Application.Models;
 using Finance.Contracts.Inputs;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
+using Finance.Domain.Enums;
 using Finance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -29,12 +30,14 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
         return PaginateAsync(ToSummaries(FilterQuery(filter)), filter.Page, filter.PageSize, cancellationToken);
     }
 
-    // Totals are summed in SQL instead of loading every linked transaction.
+    // Totals are summed in SQL instead of loading every linked transaction. Amounts are stored positive,
+    // so credits (refunds) linked to a budget give money back instead of counting as spending.
     private static IQueryable<BudgetSummary> ToSummaries(IQueryable<Budget> budgets)
     {
         return budgets
             .AsNoTracking()
-            .Select(b => new BudgetSummary(b, b.Transactions.Sum(t => t.Amount)));
+            .Select(b => new BudgetSummary(b, b.Transactions.Sum(t =>
+                t.TransactionType == TransactionType.Credit ? -t.Amount : t.Amount)));
     }
 
     private IQueryable<Budget> FilterQuery(BudgetFilterDto filter)

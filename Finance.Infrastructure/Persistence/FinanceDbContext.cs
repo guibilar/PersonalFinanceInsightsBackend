@@ -30,6 +30,8 @@ public class FinanceDbContext : DbContext
         {
             entity.HasKey(t => t.Id);
             entity.Property(t => t.Date).IsRequired();
+            // The hash identifies a statement row, so the same purchase may exist once per account.
+            entity.HasIndex(t => new { t.Account, t.Hash }).IsUnique();
         });
 
         modelBuilder.Entity<Budget>(entity =>
