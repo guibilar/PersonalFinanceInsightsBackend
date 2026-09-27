@@ -15,7 +15,7 @@ namespace FinanceTests;
 
 public class BudgetPeriodTests
 {
-    private static bool OnPostgres => Environment.GetEnvironmentVariable(FinanceApiFactory.PostgresVariable) is not null;
+    private static bool OnPostgres => TestDatabase.OnPostgres;
 
     // 02:00 UTC on April 1st is still March 31st in Toronto, so "this month" is March.
     private static FinanceApiFactory FactoryOnMarch31() => new(services =>
@@ -76,7 +76,7 @@ public class BudgetPeriodTests
     [Fact]
     public async Task Migration_ExistingBudgetsBecomeTotal()
     {
-        if (!OnPostgres) return;
+        Assert.SkipUnless(OnPostgres, "Needs PostgreSQL: set FINANCE_TEST_POSTGRES (e.g. to \"container\").");
         await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
         var budgetId = Guid.NewGuid();

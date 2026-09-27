@@ -12,7 +12,7 @@ public class TransactionSortTests : IAsyncLifetime
     private readonly FinanceApiFactory _factory = new();
     private HttpClient _client = null!;
 
-    public async Task InitializeAsync()
+    public async ValueTask InitializeAsync()
     {
         _client = _factory.CreateClient();
         Transaction Tx(string description, decimal amount, int day, Category category) => new()
@@ -28,7 +28,7 @@ public class TransactionSortTests : IAsyncLifetime
             Tx("Delta", 20, 4, Category.Utilities)));
     }
 
-    public async Task DisposeAsync() => await _factory.DisposeAsync();
+    public ValueTask DisposeAsync() => _factory.DisposeAsync();
 
     private async Task<List<string>> Descriptions(object filter)
     {

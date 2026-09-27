@@ -16,7 +16,7 @@ namespace FinanceTests;
 
 /// <summary>
 /// Runs the real API against a private database: in-memory by default, or a freshly migrated PostgreSQL
-/// database when FINANCE_TEST_POSTGRES holds a server connection string (as in CI).
+/// database on the server <see cref="TestDatabase"/> picked for the run.
 /// Requests count as signed in (see <see cref="TestSignIn"/>) unless <paramref name="signedIn"/> is false,
 /// which leaves the real cookie sign-in in charge.
 /// </summary>
@@ -25,9 +25,7 @@ public class FinanceApiFactory(
     bool signedIn = true,
     IReadOnlyDictionary<string, string?>? settings = null) : WebApplicationFactory<Program>
 {
-    public const string PostgresVariable = "FINANCE_TEST_POSTGRES";
-
-    private static readonly string? PostgresServer = Environment.GetEnvironmentVariable(PostgresVariable);
+    private static string? PostgresServer => TestDatabase.PostgresServer;
     private readonly string _databaseName = $"finance_test_{Guid.NewGuid():N}";
     private bool _createdDatabase;
 

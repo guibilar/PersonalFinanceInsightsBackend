@@ -14,7 +14,7 @@ namespace FinanceTests;
 /// <summary>Duplicate detection, budget totals and input validation.</summary>
 public class DataIntegrityTests
 {
-    private static bool OnPostgres => Environment.GetEnvironmentVariable(FinanceApiFactory.PostgresVariable) is not null;
+    private static bool OnPostgres => TestDatabase.OnPostgres;
 
     private static object ManualTransaction(
         string account = "CreditCard", string? transactionType = "Debit", string? category = "Dining",
@@ -66,7 +66,7 @@ public class DataIntegrityTests
     public async Task Import_ConcurrentUploadsOfTheSameStatement_StoreEachRowOnce()
     {
         // Only PostgreSQL enforces the unique index that settles the race.
-        if (!OnPostgres) return;
+        Assert.SkipUnless(OnPostgres, "Needs PostgreSQL: set FINANCE_TEST_POSTGRES (e.g. to \"container\").");
         await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
         var csv = string.Join('\n', Enumerable.Range(1, 150).Select(i => $"2026-01-{1 + i % 28:00},SHOP {i},{i}.00,"));
@@ -83,7 +83,7 @@ public class DataIntegrityTests
     [Fact]
     public async Task Migration_RemovesExistingDuplicates_KeepingTheBudgetLinkedCopy()
     {
-        if (!OnPostgres) return;
+        Assert.SkipUnless(OnPostgres, "Needs PostgreSQL: set FINANCE_TEST_POSTGRES (e.g. to \"container\").");
         await using var factory = new FinanceApiFactory();
         _ = factory.CreateClient();
         using var scope = factory.Services.CreateScope();

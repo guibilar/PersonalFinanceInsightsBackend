@@ -4,15 +4,15 @@ using Microsoft.EntityFrameworkCore;
 
 namespace FinanceTests;
 
-/// <summary>Checks that only mean something on PostgreSQL; they pass trivially in in-memory mode.</summary>
+/// <summary>Checks that only mean something on PostgreSQL; skipped on the in-memory provider.</summary>
 public class PostgresStorageTests
 {
-    private static bool OnPostgres => Environment.GetEnvironmentVariable(FinanceApiFactory.PostgresVariable) is not null;
+    private static bool OnPostgres => TestDatabase.OnPostgres;
 
     [Fact]
     public async Task Enums_AreStoredByName()
     {
-        if (!OnPostgres) return;
+        Assert.SkipUnless(OnPostgres, "Needs PostgreSQL: set FINANCE_TEST_POSTGRES (e.g. to \"container\").");
         await using var factory = new FinanceApiFactory();
         _ = factory.CreateClient();
         await factory.SeedAsync(db =>
