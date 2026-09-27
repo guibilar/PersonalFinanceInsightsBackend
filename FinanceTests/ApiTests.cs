@@ -164,6 +164,9 @@ public class ApiTests : IAsyncLifetime
     [InlineData("/api/Budget/Filter", 1, 1001)]
     [InlineData("/api/Transaction/Filter", 0, 10)]
     [InlineData("/api/Transaction/Filter", 1, 0)]
+    // Beyond any real data; used to overflow the offset calculation and return 500.
+    [InlineData("/api/Transaction/Filter", 1_000_001, 1000)]
+    [InlineData("/api/Budget/Filter", int.MaxValue, 1000)]
     public async Task Filter_InvalidPaging_Returns400(string url, int page, int pageSize)
     {
         var response = await _client.PostAsJsonAsync(url, new { page, pageSize });
@@ -171,7 +174,46 @@ public class ApiTests : IAsyncLifetime
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
+    [Theory]
+    [InlineData("/api/Transaction/Filter")]
+    [InlineData("/api/Budget/Filter")]
+    public async Task Filter_LastAllowedPage_IsJustEmpty(string url)
+    {
+        var response = await _client.PostAsJsonAsync(url, new { page = 1_000_000, pageSize = 1000 });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
     // ---- Transactions
+
+    [Fact]
+    public async Task FilterTransactions_EndDateOnTheLastRepresentableDay_MeansNoUpperBound()
+    {
+        await _factory.SeedAsync(db => db.Transactions.Add(NewTransaction("Coffee", 5, new DateTime(2026, 3, 10))));
+
+        var response = await _client.PostAsJsonAsync("/api/Transaction/Filter", new { endDate = "9999-12-31" });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Single((await response.ReadAsync<PaginatedList<TransactionOutputDto>>()).Items);
+    }
+
+    [Theory]
+    [InlineData("2026-09-01")]
+    [InlineData("2026-09-01T00:00:00Z")]
+    // Late evening in Toronto is already the next day in UTC; the date as written is the one that counts.
+    [InlineData("2026-09-01T23:30:00-04:00")]
+    [InlineData("2026-09-01T00:30:00+09:00")]
+    public async Task CreateTransaction_KeepsTheCalendarDateAsWritten(string date)
+    {
+        var response = await _client.PostAsJsonAsync("/api/Transaction", new
+        {
+            date, description = "COFFEE", amount = 5, category = "Dining", transactionType = "Debit", account = "CreditCard"
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var stored = await _factory.QueryAsync(db => db.Transactions.Select(t => t.Date).SingleAsync());
+        Assert.Equal(new DateTime(2026, 9, 1), stored);
+    }
 
     [Fact]
     public async Task FilterTransactions_DescriptionMatchesPartiallyAndIgnoresCase()

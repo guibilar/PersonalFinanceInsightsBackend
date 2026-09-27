@@ -9,7 +9,7 @@ public class BudgetFilterDto
     public string? Description { get; set; }
     public Status? Status { get; set; }
 
-    [Range(1, int.MaxValue)]
+    [Range(1, PagingLimits.MaxPage)]
     public int Page { get; set; } = 1;
 
     [Range(1, PagingLimits.MaxPageSize)]

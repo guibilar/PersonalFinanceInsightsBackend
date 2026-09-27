@@ -56,7 +56,11 @@ public class TransactionController(ITransactionService transactionService) : Con
         if (filter.EndDate.HasValue)
         {
             // The repository compares with "<", so move to the next day to include the whole end date.
-            filter.EndDate = DateTime.SpecifyKind(filter.EndDate.Value.Date.AddDays(1), DateTimeKind.Utc);
+            // The last representable day has no next day: it means no upper bound.
+            var endDate = filter.EndDate.Value.Date;
+            filter.EndDate = endDate < DateTime.MaxValue.Date
+                ? DateTime.SpecifyKind(endDate.AddDays(1), DateTimeKind.Utc)
+                : null;
         }
 
         var result = await transactionService.FilterAsync(filter, cancellationToken);

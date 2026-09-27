@@ -175,7 +175,51 @@ public class ApiBehaviourTests
 
         Assert.Equal(("Feb 2026", 30m), (Assert.Single(month.MonthlyData).Month, month.MonthlyData[0].Total));
         Assert.Equal(["Jan 2026", "Feb 2026", "Mar 2026"], year.MonthlyData.Select(m => m.Month));
-        Assert.Equal(30, year.AverageMonthlyTotal);
+        // Only finished months count: February is still running and March hasn't started.
+        Assert.Equal(20, year.AverageMonthlyTotal);
+    }
+
+    [Theory]
+    // On March 5th: February 1-5. The refund on the 3rd gives money back; the 6th is past that point.
+    [InlineData("2026-03-05T17:00:00Z", 1947.5 + 40 - 15)]
+    // On March 30th: February has only 28 days, so all of it.
+    [InlineData("2026-03-30T17:00:00Z", 1947.5 + 40 - 15 + 60)]
+    // 01:30 UTC on March 1st is still February 28th in Toronto: January 1-28.
+    [InlineData("2026-03-01T01:30:00Z", 100)]
+    public async Task CurrentMonthReport_ComparesWithThePreviousMonthUpToTheSameDay(string utcNow, double expected)
+    {
+        await using var factory = FactoryAt(utcNow);
+        await factory.SeedAsync(db =>
+        {
+            db.Transactions.Add(NewTransaction("January", 100, new DateTime(2026, 1, 20)));
+            db.Transactions.Add(NewTransaction("Rent", 1947.5m, new DateTime(2026, 2, 1)));
+            db.Transactions.Add(NewTransaction("Groceries", 40, new DateTime(2026, 2, 2)));
+            var refund = NewTransaction("Refund", 15, new DateTime(2026, 2, 3));
+            refund.TransactionType = TransactionType.Credit;
+            db.Transactions.Add(refund);
+            db.Transactions.Add(NewTransaction("Later in February", 60, new DateTime(2026, 2, 6)));
+            db.Transactions.Add(NewTransaction("March", 70, new DateTime(2026, 3, 2)));
+        });
+
+        var month = await (await factory.CreateClient().GetAsync("/api/Reports/current-month-categorized-graph"))
+            .ReadAsync<MonthlyCategorizedGraphData>();
+        var year = await (await factory.CreateClient().GetAsync("/api/Reports/monthly-categorized-graph"))
+            .ReadAsync<MonthlyCategorizedGraphData>();
+
+        Assert.Equal((decimal)expected, month.PreviousMonthToDateTotal);
+        Assert.Null(year.PreviousMonthToDateTotal);
+    }
+
+    [Fact]
+    public async Task YearReport_InItsFirstMonth_AveragesThatMonth()
+    {
+        await using var factory = FactoryAt("2026-01-20T12:00:00Z");
+        await factory.SeedAsync(db => db.Transactions.Add(NewTransaction("January", 20, new DateTime(2026, 1, 5))));
+
+        var year = await (await factory.CreateClient().GetAsync("/api/Reports/monthly-categorized-graph"))
+            .ReadAsync<MonthlyCategorizedGraphData>();
+
+        Assert.Equal(20, year.AverageMonthlyTotal);
     }
 
     private static FinanceApiFactory FactoryAt(string utcNow) => new(services =>

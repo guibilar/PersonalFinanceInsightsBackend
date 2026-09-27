@@ -3,6 +3,7 @@ using Finance.Cli.Charts;
 using Finance.Domain.Enums;
 using Finance.Application.Import;
 using Finance.Domain.Entities;
+using Finance.Domain.Exceptions;
 using Finance.Infrastructure;
 using Finance.Infrastructure.Import;
 using Microsoft.Extensions.Configuration;
@@ -24,7 +25,16 @@ class Program
         List<Transaction> Read(string file, AccountType account)
         {
             using var stream = File.OpenRead(FileHelper.GetInputPathForFile(file, "CIBC", "csv"));
-            return parser.Parse(stream, account);
+            try
+            {
+                return parser.Parse(stream, account);
+            }
+            catch (InvalidStatementException ex)
+            {
+                // An empty export for one account shouldn't stop the report for the others.
+                Console.WriteLine($"{file}.csv: {ex.Message}");
+                return [];
+            }
         }
 
         var creditCard = Read("cibc_credit", AccountType.CreditCard);

@@ -4,8 +4,10 @@ using Finance.Application.Import;
 using Finance.Contracts.Outputs;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
+using Finance.Domain.Exceptions;
 using Finance.Domain.Helpers;
 using Finance.Infrastructure.Import;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Options;
@@ -161,6 +163,43 @@ public class ImportTests
         Assert.Equal("CAFÉ DÉPANNEUR – MONTRÉAL", Assert.Single(parsed).Description);
     }
 
+    [Fact]
+    public void Parser_ShortRows_AreSkipped_NotAnError()
+    {
+        // A trimmed money-in column, and a row with only a date.
+        var parsed = Parse("""
+            2026-01-03,METRO,8.00
+            2026-01-04
+            2026-01-05,NETFLIX.COM,16.99,
+            """, AccountType.CreditCard);
+
+        Assert.Equal(["METRO", "NETFLIX.COM"], parsed.Select(t => t.Description));
+    }
+
+    public static TheoryData<string> FilesWithoutTransactionRows => new()
+    {
+        "Date,Description,Amount",                        // a header and nothing else
+        "Transaction Date;Amount\n03/01/2026 x;12,50",    // another bank's layout
+        "{\"not\": \"a csv\"}",
+        "\"unterminated quote,1.00,\n",
+    };
+
+    [Theory]
+    [MemberData(nameof(FilesWithoutTransactionRows))]
+    public void Parser_FileWithoutAnyTransactionRow_IsRejected(string content)
+    {
+        var ex = Assert.Throws<InvalidStatementException>(() => Parse(content, AccountType.CreditCard));
+
+        Assert.Contains("CIBC", ex.Message);
+    }
+
+    [Fact]
+    public void Parser_StatementWhoseRowsAreAllSkipped_IsNotAnError()
+    {
+        // Still a statement: this month only has a card payment.
+        Assert.Empty(Parse("2026-01-05,PAYMENT THANK YOU,,500.00", AccountType.CreditCard));
+    }
+
     // ---- Endpoint
 
     internal static MultipartFormDataContent Statement(string csv, string? account = "CreditCard")
@@ -241,6 +280,41 @@ public class ImportTests
             Statement("2026-01-03, METRO #123 OSHAWA ,45.10,"))).ReadAsync<ImportResultDto>();
 
         Assert.Equal(0, result.Added);
+    }
+
+    public static TheoryData<byte[]> UnreadableFiles => new()
+    {
+        Encoding.UTF8.GetBytes("Posted Date,Payee,Amount\n"),
+        new byte[] { 0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0xFF, 0xFE, 0x0A, 0x01 }, // a zip (e.g. an .xlsx) renamed to .csv
+    };
+
+    [Theory]
+    [MemberData(nameof(UnreadableFiles))]
+    public async Task Import_UnreadableFile_Returns400WithAMessageForTheFileField(byte[] content)
+    {
+        await using var factory = new FinanceApiFactory();
+        var form = new MultipartFormDataContent { { new ByteArrayContent(content), "file", "statement.csv" } };
+        form.Add(new StringContent("CreditCard"), "account");
+
+        var response = await factory.CreateClient().PostAsync("/api/Transaction/Import", form);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        var problem = await response.ReadAsync<HttpValidationProblemDetails>();
+        Assert.Contains("CIBC", Assert.Single(problem.Errors["file"]));
+        Assert.Equal(0, await factory.QueryAsync(db => db.Transactions.CountAsync()));
+    }
+
+    [Fact]
+    public async Task Import_RowsWithFewerColumns_AreImported()
+    {
+        await using var factory = new FinanceApiFactory();
+
+        // Three columns: used to fail with a missing-field error (500).
+        var response = await factory.CreateClient().PostAsync("/api/Transaction/Import",
+            Statement("2026-01-03,COFFEE,4.50\n2026-01-04,TEA,3.00"));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(2, (await response.ReadAsync<ImportResultDto>()).Added);
     }
 
     [Theory]

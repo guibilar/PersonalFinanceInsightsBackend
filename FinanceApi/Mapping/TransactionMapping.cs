@@ -10,7 +10,8 @@ public static class TransactionMapping
     // Called after model validation, which guarantees the required values are present.
     public static Transaction ToModel(this TransactionInputDto dto)
     {
-        var date = DateTime.SpecifyKind(dto.Date!.Value, DateTimeKind.Utc);
+        // Stored like imported rows: the calendar date at midnight UTC.
+        var date = DateTime.SpecifyKind(dto.Date!.Value.Date, DateTimeKind.Utc);
         return new Transaction
         {
             Date = date,

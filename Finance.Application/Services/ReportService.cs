@@ -17,14 +17,21 @@ public class ReportService(ITransactionRepository transactionRepository, Reporti
         var today = calendar.Today();
         var yearStart = new DateTime(today.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var transactions = await SpendingAsync(yearStart, yearStart.AddYears(1), cancellationToken);
-        return GenerateMonthlyGraphDataFromTransactions(transactions);
+        return GenerateMonthlyGraphDataFromTransactions(transactions, averageBefore: calendar.CurrentMonthStart());
     }
 
     public async Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraphDataAsync(CancellationToken cancellationToken = default)
     {
         var monthStart = calendar.CurrentMonthStart();
         var transactions = await SpendingAsync(monthStart, monthStart.AddMonths(1), cancellationToken);
-        return GenerateMonthlyGraphDataFromTransactions(transactions);
+        var report = GenerateMonthlyGraphDataFromTransactions(transactions);
+
+        // Days 1..today of the previous month; on the 30th, February has only 28 of them.
+        var previousStart = monthStart.AddMonths(-1);
+        var days = Math.Min(calendar.Today().Day, DateTime.DaysInMonth(previousStart.Year, previousStart.Month));
+        var previous = await SpendingAsync(previousStart, previousStart.AddDays(days), cancellationToken);
+        report.PreviousMonthToDateTotal = previous.Sum(t => t.TransactionType == TransactionType.Credit ? -t.Amount : t.Amount);
+        return report;
     }
 
     /// <summary>
@@ -46,9 +53,18 @@ public class ReportService(ITransactionRepository transactionRepository, Reporti
             .ToList();
     }
 
-    private static MonthlyCategorizedGraphData GenerateMonthlyGraphDataFromTransactions(List<Transaction> transactions)
+    /// <param name="averageBefore">
+    /// Only months before this one count towards the average: the current month isn't over, and its partial
+    /// total would pull the average down. When there are no earlier months (January), every month counts.
+    /// </param>
+    private static MonthlyCategorizedGraphData GenerateMonthlyGraphDataFromTransactions(
+        List<Transaction> transactions, DateTime? averageBefore = null)
     {
         var monthlyRecords = MonthlyRecordsCalculator.GenerateSpendingRecords(transactions);
+        var completeMonths = averageBefore is { } before
+            ? monthlyRecords.Where(m => m.YearMonth < before).ToList()
+            : [];
+        var averaged = completeMonths.Count > 0 ? completeMonths : monthlyRecords;
         var categories = transactions
             .Select(t => t.Category)
             .Distinct()
@@ -59,7 +75,7 @@ public class ReportService(ITransactionRepository transactionRepository, Reporti
         {
             Categories = categories,
             // No transactions yet (e.g. the 1st of the month) is a valid, empty report.
-            AverageMonthlyTotal = monthlyRecords.Count > 0 ? monthlyRecords.Average(m => m.Total) : 0,
+            AverageMonthlyTotal = averaged.Count > 0 ? averaged.Average(m => m.Total) : 0,
             MonthlyData = monthlyRecords.Select(m => new MonthDataPoint
             {
                 Month = m.YearMonth.ToString("MMM yyyy", CultureInfo.InvariantCulture),
