@@ -20,6 +20,7 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
     public DbSet<Transaction> Transactions { get; set; } = null!;
     public DbSet<Budget> Budgets { get; set; } = null!;
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
+    public DbSet<UserSession> UserSessions { get; set; } = null!;
 
     // Enums are stored by name, so reordering or inserting enum members never changes stored data.
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
@@ -46,6 +47,14 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
             // Hidden (deleted) transactions exist only for duplicate detection unless a query asks for them
             // with IgnoreQueryFilters.
             entity.HasQueryFilter(t => !t.Hidden);
+        });
+
+        modelBuilder.Entity<UserSession>(entity =>
+        {
+            entity.HasKey(s => s.Id);
+            entity.Property(s => s.Id).HasMaxLength(64);
+            // Deleting the account ends its sessions.
+            entity.HasOne<IdentityUser>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Budget>(entity =>

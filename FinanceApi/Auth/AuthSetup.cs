@@ -1,4 +1,5 @@
 using Finance.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
@@ -50,6 +51,12 @@ public static class AuthSetup
             options.Events.OnRedirectToLogin = context => StatusCode(context.Response, StatusCodes.Status401Unauthorized);
             options.Events.OnRedirectToAccessDenied = context => StatusCode(context.Response, StatusCodes.Status403Forbidden);
         });
+
+        // Sessions live in the database, so signing out, a password change or "sign out other devices" really
+        // ends them; the cookie only carries the session key.
+        services.AddSingleton<DbTicketStore>();
+        services.AddOptions<CookieAuthenticationOptions>(IdentityConstants.ApplicationScheme)
+            .Configure<DbTicketStore>((options, store) => options.SessionStore = store);
 
         services.AddDataProtection()
             .SetApplicationName("PersonalFinanceInsights")

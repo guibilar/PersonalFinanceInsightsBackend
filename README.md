@@ -45,9 +45,14 @@ frontend reaches the API on the same origin (nginx in production, the dev-server
   then remove it. It sets the configured password and clears a lockout.
 - **Lockout:** 5 wrong passwords lock the account for 15 minutes.
 - **Data:** everyone who can sign in sees the same transactions and budgets.
+- **Sessions:** kept in the database (`UserSessions`); the cookie only carries the session's key. Signing out
+  ends the session on the server, so a copy of the cookie stops working too. Changing the password signs
+  out every other session at once, and `POST /api/Auth/sign-out-others` does the same on demand
+  (answering how many ended).
 - Other endpoints: `GET /api/Auth/me`, `POST /api/Auth/change-password`.
 
-The keys that encrypt the cookie are stored in the database, so sessions survive a container restart.
+The keys that encrypt the cookie and the sessions are stored in the database, so sessions survive a
+container restart.
 
 **Behind a reverse proxy:** the API believes `X-Forwarded-Proto` / `X-Forwarded-For` only from proxies on
 `ReverseProxy:TrustedNetworks` (loopback plus the private ranges by default, which covers the frontend's

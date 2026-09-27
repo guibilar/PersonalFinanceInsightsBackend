@@ -1,5 +1,6 @@
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
+using FinanceApi.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -9,7 +10,8 @@ namespace FinanceApi.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Produces("application/json")]
-public class AuthController(SignInManager<IdentityUser> signInManager, UserManager<IdentityUser> userManager) : ControllerBase
+public class AuthController(
+    SignInManager<IdentityUser> signInManager, UserManager<IdentityUser> userManager, DbTicketStore sessions) : ControllerBase
 {
     /// <summary>Signs in and sets the session cookie.</summary>
     [HttpPost("login")]
@@ -36,7 +38,7 @@ public class AuthController(SignInManager<IdentityUser> signInManager, UserManag
             detail: "Incorrect username or password.");
     }
 
-    /// <summary>Ends the session. Harmless when already signed out.</summary>
+    /// <summary>Ends the session (on the server too: a copy of the cookie stops working). Harmless when already signed out.</summary>
     [HttpPost("logout")]
     [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -77,8 +79,17 @@ public class AuthController(SignInManager<IdentityUser> signInManager, UserManag
             return ValidationProblem(ModelState);
         }
 
-        // New security stamp: keep this session, other sessions end when they are next validated.
+        // Whoever else was signed in (possibly with the old password) is signed out now; this session goes on.
+        await sessions.RemoveOtherSessionsAsync(User);
         await signInManager.RefreshSignInAsync(user);
         return NoContent();
+    }
+
+    /// <summary>Ends every other session of this account (other browsers and devices); this one stays signed in.</summary>
+    [HttpPost("sign-out-others")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<SignedOutSessionsDto>> SignOutOthers()
+    {
+        return new SignedOutSessionsDto { Count = await sessions.RemoveOtherSessionsAsync(User) };
     }
 }
