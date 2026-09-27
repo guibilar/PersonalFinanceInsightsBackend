@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FinanceTests;
@@ -147,6 +148,92 @@ public class AuthTests
         var other = factory.CreateClient();
         Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(other)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await LoginAsync(other, newPassword)).StatusCode);
+    }
+
+    // ---- Sessions are stored on the server, so they can be ended
+
+    /// <summary>Signs in on a fresh "device" and returns its session cookie ("finance_session=...").</summary>
+    private static async Task<string> SignInElsewhereAsync(FinanceApiFactory factory, string password = Password)
+    {
+        var login = await LoginAsync(factory.CreateClient(), password);
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        return login.Headers.GetValues("Set-Cookie").Single(c => c.StartsWith("finance_session=")).Split(';')[0];
+    }
+
+    /// <summary>The status /api/Auth/me answers for a request carrying exactly this cookie.</summary>
+    private static async Task<HttpStatusCode> WhoAmIAsync(FinanceApiFactory factory, string cookie)
+    {
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/Auth/me");
+        request.Headers.Add("Cookie", cookie);
+        return (await client.SendAsync(request)).StatusCode;
+    }
+
+    [Fact]
+    public async Task Logout_EndsTheSessionOnTheServer_SoACopyOfTheCookieStopsWorking()
+    {
+        await using var factory = await WithAccountAsync();
+        var cookie = await SignInElsewhereAsync(factory);
+        var copy = cookie;
+        Assert.Equal(HttpStatusCode.OK, await WhoAmIAsync(factory, copy));
+
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions { HandleCookies = false });
+        var logout = new HttpRequestMessage(HttpMethod.Post, "/api/Auth/logout");
+        logout.Headers.Add("Cookie", cookie);
+        Assert.Equal(HttpStatusCode.NoContent, (await client.SendAsync(logout)).StatusCode);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(factory, copy));
+        Assert.Equal(0, await factory.QueryAsync(db => db.UserSessions.CountAsync()));
+    }
+
+    [Fact]
+    public async Task TheCookieCarriesOnlyASessionKey_TheSignInIsStoredOnTheServer()
+    {
+        await using var factory = await WithAccountAsync();
+
+        await SignInElsewhereAsync(factory);
+        await SignInElsewhereAsync(factory);
+
+        var sessions = await factory.QueryAsync(db => db.UserSessions.ToListAsync());
+        Assert.Equal(2, sessions.Count);
+        Assert.All(sessions, s => Assert.Equal(64, s.Id.Length));
+        Assert.Single(sessions.Select(s => s.UserId).Distinct());
+    }
+
+    [Fact]
+    public async Task ChangePassword_SignsOutEveryOtherSessionAtOnce_AndKeepsThisOne()
+    {
+        await using var factory = await WithAccountAsync();
+        var laptop = factory.CreateClient();
+        await LoginAsync(laptop);
+        var phone = await SignInElsewhereAsync(factory);
+        Assert.Equal(HttpStatusCode.OK, await WhoAmIAsync(factory, phone));
+
+        var changed = await laptop.PostAsJsonAsync("/api/Auth/change-password",
+            new { currentPassword = Password, newPassword = "a much longer passphrase" });
+
+        Assert.Equal(HttpStatusCode.NoContent, changed.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(factory, phone));
+        Assert.Equal(HttpStatusCode.OK, (await laptop.GetAsync("/api/Auth/me")).StatusCode);
+        Assert.Equal(1, await factory.QueryAsync(db => db.UserSessions.CountAsync()));
+    }
+
+    [Fact]
+    public async Task SignOutOthers_EndsTheOtherSessions_AndSaysHowMany()
+    {
+        await using var factory = await WithAccountAsync();
+        var laptop = factory.CreateClient();
+        await LoginAsync(laptop);
+        var phone = await SignInElsewhereAsync(factory);
+        var tablet = await SignInElsewhereAsync(factory);
+
+        var first = await (await laptop.PostAsync("/api/Auth/sign-out-others", null)).ReadAsync<SignedOutSessionsDto>();
+        var again = await (await laptop.PostAsync("/api/Auth/sign-out-others", null)).ReadAsync<SignedOutSessionsDto>();
+
+        Assert.Equal((2, 0), (first.Count, again.Count));
+        Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(factory, phone));
+        Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(factory, tablet));
+        Assert.Equal(HttpStatusCode.OK, (await laptop.GetAsync("/api/Auth/me")).StatusCode);
     }
 
     [Fact]
