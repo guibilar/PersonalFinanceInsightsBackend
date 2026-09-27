@@ -1,9 +1,25 @@
 @FinanceApi_HostAddress = http://localhost:5096
 
-POST {{FinanceApi_HostAddress}}/api/Transaction/SyncTransactionsByFile
-Accept: application/json
+### Import a CIBC statement (account: CreditCard, Chequing or Savings)
+POST {{FinanceApi_HostAddress}}/api/Transaction/Import
+Content-Type: multipart/form-data; boundary=statement
+
+--statement
+Content-Disposition: form-data; name="account"
+
+CreditCard
+--statement
+Content-Disposition: form-data; name="file"; filename="cibc_credit.csv"
+Content-Type: text/csv
+
+< ../Finance.Cli/Files/CIBC/cibc_credit.csv
+--statement--
 
 ###
 
 GET {{FinanceApi_HostAddress}}/api/Transaction/GetAll
 Accept: application/json
+
+###
+
+GET {{FinanceApi_HostAddress}}/health

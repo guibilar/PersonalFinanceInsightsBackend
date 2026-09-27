@@ -12,6 +12,8 @@ namespace FinanceApi.Controllers;
 [Produces("application/json")]
 public class TransactionController(ITransactionService transactionService) : ControllerBase
 {
+    private const long MaxStatementBytes = 5 * 1024 * 1024;
+
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -22,12 +24,23 @@ public class TransactionController(ITransactionService transactionService) : Con
         return StatusCode(StatusCodes.Status201Created, result.ToOutput());
     }
 
-    [HttpPost("SyncTransactionsByFile")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> SyncTransactionsByFile(CancellationToken cancellationToken)
+    /// <summary>Imports a CIBC CSV export. Re-importing an overlapping statement only adds new rows.</summary>
+    [HttpPost("Import")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxStatementBytes)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<ImportResultDto>> Import(IFormFile file, [FromForm] StatementImportDto import, CancellationToken cancellationToken)
     {
-        await transactionService.SyncTransactionsByFileAsync(cancellationToken);
-        return NoContent();
+        if (file.Length == 0)
+        {
+            ModelState.AddModelError(nameof(file), "The statement file is empty.");
+            return ValidationProblem(ModelState);
+        }
+
+        await using var stream = file.OpenReadStream();
+        var result = await transactionService.ImportAsync(stream, import.Account!.Value, cancellationToken);
+        return new ImportResultDto { Read = result.Read, Added = result.Added, Skipped = result.Skipped };
     }
 
     [HttpGet("GetAll")]

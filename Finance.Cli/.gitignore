@@ -55,3 +55,6 @@ CodeCoverage/
 *.VisualState.xml
 TestResult.xml
 nunit-*.xml
+# Personal bank statements and generated charts: never commit.
+Files/
+Results/

@@ -6,7 +6,15 @@
 
   <ItemGroup>
     <PackageReference Include="ClosedXML" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" />
     <PackageReference Include="ScottPlot" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Bank exports to chart (not committed): cibc_credit.csv, cibc_debit.csv, cibc_savings.csv. -->
+    <None Update="Files\CIBC\*.csv">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
   <ItemGroup>
