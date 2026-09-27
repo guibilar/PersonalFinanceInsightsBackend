@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Finance.Application;
 using Finance.Application.Reports;
 using Finance.Infrastructure;
+using FinanceApi.Auth;
 using FinanceApi.Errors;
 using FinanceApi.Health;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -27,6 +28,7 @@ builder.Services.AddOptions<ReportOptions>()
 builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration);
+builder.Services.AddLogin(builder.Configuration);
 
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database", tags: [ReadyTag]);
@@ -46,6 +48,7 @@ if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
     app.Logger.LogInformation("Applying database migrations");
     await app.Services.MigrateDatabaseAsync();
 }
+await app.Services.EnsureInitialUserAsync(app.Logger);
 
 app.UseExceptionHandler();
 app.UseStatusCodePages();
@@ -61,11 +64,14 @@ if (app.Environment.IsDevelopment())
     app.UseCors();
 }
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 // Liveness: the process answers (no dependencies, so a database outage doesn't get the API restarted).
-app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();
 // Readiness: the API can serve requests. /health is kept as an alias for existing monitors.
-app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(ReadyTag) });
-app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = check => check.Tags.Contains(ReadyTag) });
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(ReadyTag) }).AllowAnonymous();
+app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = check => check.Tags.Contains(ReadyTag) }).AllowAnonymous();
 app.MapControllers();
 app.Run();
 

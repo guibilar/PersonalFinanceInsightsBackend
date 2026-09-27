@@ -1,10 +1,17 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 
 namespace Finance.Infrastructure.Persistence;
 
-public class FinanceDbContext : DbContext
+/// <summary>
+/// Finance data plus the sign-in tables: ASP.NET Core Identity users, and the keys that encrypt session
+/// cookies (kept in the database so sessions survive the API container being recreated).
+/// </summary>
+public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtectionKeyContext
 {
     public FinanceDbContext(DbContextOptions<FinanceDbContext> options) : base(options)
     {
@@ -12,6 +19,7 @@ public class FinanceDbContext : DbContext
 
     public DbSet<Transaction> Transactions { get; set; } = null!;
     public DbSet<Budget> Budgets { get; set; } = null!;
+    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
 
     // Enums are stored by name, so reordering or inserting enum members never changes stored data.
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
