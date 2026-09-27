@@ -81,7 +81,25 @@ public class TransactionRepository(FinanceDbContext dbContext)
             query = query.Where(x => x.BudgetId == filter.BudgetId.Value);
         }
 
-        query = query.OrderByDescending(x => x.Date).ThenBy(x => x.Id);
-        return query;
+        return Sort(query, filter.SortBy, filter.SortDirection);
+    }
+
+    private static IQueryable<Transaction> Sort(IQueryable<Transaction> query, TransactionSortField field, SortDirection direction)
+    {
+        var ascending = direction == SortDirection.Ascending;
+        IOrderedQueryable<Transaction> ordered = field switch
+        {
+            TransactionSortField.Description => ascending ? query.OrderBy(x => x.Description) : query.OrderByDescending(x => x.Description),
+            TransactionSortField.Amount => ascending ? query.OrderBy(x => x.Amount) : query.OrderByDescending(x => x.Amount),
+            // Stored as text, so this sorts by category name.
+            TransactionSortField.Category => ascending ? query.OrderBy(x => x.Category) : query.OrderByDescending(x => x.Category),
+            _ => ascending ? query.OrderBy(x => x.Date) : query.OrderByDescending(x => x.Date),
+        };
+
+        if (field != TransactionSortField.Date)
+        {
+            ordered = ordered.ThenByDescending(x => x.Date);
+        }
+        return ordered.ThenBy(x => x.Id);
     }
 }
