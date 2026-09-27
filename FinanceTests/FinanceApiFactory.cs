@@ -14,7 +14,7 @@ using Finance.Infrastructure.Persistence;
 namespace FinanceTests;
 
 /// <summary>Runs the real API against an in-memory database private to each factory.</summary>
-public class FinanceApiFactory : WebApplicationFactory<Program>
+public class FinanceApiFactory(Action<IServiceCollection>? configureServices = null) : WebApplicationFactory<Program>
 {
     private readonly string _databaseName = Guid.NewGuid().ToString();
 
@@ -30,6 +30,7 @@ public class FinanceApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<DbContextOptions<FinanceDbContext>>();
             services.RemoveAll(typeof(IDbContextOptionsConfiguration<FinanceDbContext>));
             services.AddDbContext<FinanceDbContext>(options => options.UseInMemoryDatabase(_databaseName));
+            configureServices?.Invoke(services);
         });
     }
 

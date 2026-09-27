@@ -1,67 +1,50 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 using Finance.Application;
 using Finance.Infrastructure;
-using Finance.Infrastructure.Persistence;
+using FinanceApi.Errors;
+using FinanceApi.Health;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
-    });
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration.GetConnectionString("DefaultConnection"));
 
-builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database");
 
+builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// In production the frontend calls the API through its own nginx proxy (same origin),
+// so CORS is only opened for local development.
 builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-            .AllowAnyHeader()
-            .AllowAnyMethod();
-    });
-});
-
+    options.AddDefaultPolicy(policy => policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();
 
-// Fail fast when the database is unreachable (CanConnect returns false rather than throwing).
-using (var scope = app.Services.CreateScope())
+app.UseExceptionHandler();
+app.UseStatusCodePages();
+
+if (app.Environment.IsDevelopment())
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
-    if (!dbContext.Database.CanConnect())
+    app.UseSwagger();
+    app.UseSwaggerUI(options =>
     {
-        throw new InvalidOperationException("Cannot connect to the database. Check ConnectionStrings:DefaultConnection.");
-    }
-    app.Logger.LogInformation("Database connectivity verified.");
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "Finance API V1");
+        options.RoutePrefix = string.Empty;
+    });
+    app.UseCors();
 }
 
-app.UseRouting();
-Console.WriteLine("Starting application...");
-
-// Enable Swagger in all environments
-app.UseSwagger();
-app.UseSwaggerUI(c =>
-{
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Finance API V1");
-    c.RoutePrefix = string.Empty; // Serve Swagger at the root
-});
-
-Console.WriteLine("Swagger is configured. Visit /swagger/index.html to access the API documentation.");
-
-app.UseCors();
-
-app.UseAuthorization();
-
+app.MapHealthChecks("/health");
 app.MapControllers();
 app.Run();
 

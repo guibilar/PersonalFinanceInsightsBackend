@@ -1,50 +1,45 @@
-using Microsoft.EntityFrameworkCore;
 using Finance.Application.Abstractions;
+using Finance.Application.Models;
 using Finance.Contracts.Inputs;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
-using Finance.Domain.Enums;
 using Finance.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace Finance.Infrastructure.Repositories;
 
 public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budget>(dbContext), IBudgetRepository
 {
-    // Totals are computed from the linked transactions, so always load them.
-    public override async Task<Budget?> GetByIdAsync(Guid id)
+    // Tracked, with transactions, for updates and deletes (which unlink them).
+    public override Task<Budget?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await DbContext.Budgets
+        return DbContext.Budgets
             .Include(x => x.Transactions)
-            .SingleOrDefaultAsync(x => x.Id == id);
+            .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
 
-    public async Task<PaginatedList<Budget>> FilterAsync(BudgetFilterDto? filter)
+    public Task<BudgetSummary?> GetSummaryAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        filter ??= new BudgetFilterDto();
+        return ToSummaries(DbContext.Budgets.Where(x => x.Id == id))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
 
-        var query = FilterQuery(filter);
+    public Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, CancellationToken cancellationToken = default)
+    {
+        return PaginateAsync(ToSummaries(FilterQuery(filter)), filter.Page, filter.PageSize, cancellationToken);
+    }
 
-        var totalCount = await query.CountAsync();
-
-        var items = await query
-            .Skip((filter.Page - 1) * filter.PageSize)
-            .Take(filter.PageSize)
-            .ToListAsync();
-
-        return new PaginatedList<Budget>
-        {
-            Items = items,
-            Page = filter.Page,
-            PageSize = filter.PageSize,
-            TotalCount = totalCount
-        };
+    // Totals are summed in SQL instead of loading every linked transaction.
+    private static IQueryable<BudgetSummary> ToSummaries(IQueryable<Budget> budgets)
+    {
+        return budgets
+            .AsNoTracking()
+            .Select(b => new BudgetSummary(b, b.Transactions.Sum(t => t.Amount)));
     }
 
     private IQueryable<Budget> FilterQuery(BudgetFilterDto filter)
     {
-        var query = DbContext.Budgets
-            .Include(x => x.Transactions)
-            .AsQueryable();
+        var query = DbContext.Budgets.AsQueryable();
 
         if (filter.Status.HasValue)
         {
@@ -61,7 +56,6 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
             query = query.Where(x => x.Description.ToLower().Contains(filter.Description.ToLower()));
         }
 
-        query = query.OrderBy(x => x.Name);
-        return query;
+        return query.OrderBy(x => x.Name);
     }
 }

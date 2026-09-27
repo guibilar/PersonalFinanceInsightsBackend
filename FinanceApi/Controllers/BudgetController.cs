@@ -1,90 +1,60 @@
-using Microsoft.AspNetCore.Mvc;
-using FinanceApi.Mapping;
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
+using Finance.Contracts.Outputs;
+using Finance.Domain.Common;
+using FinanceApi.Mapping;
+using Microsoft.AspNetCore.Mvc;
 
 namespace FinanceApi.Controllers;
 
 [Route("api/[controller]")]
 [ApiController]
+[Produces("application/json")]
 public class BudgetController(IBudgetService budgetService) : ControllerBase
 {
     [HttpPost]
-    public async Task<IActionResult> Add([FromBody] BudgetInputDto budget)
+    [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BudgetOutputDto>> Add(BudgetInputDto budget, CancellationToken cancellationToken)
     {
-        try
-        {
-            var budgetModel = BudgetMapping.ToModel(budget);
-            var result = await budgetService.AddAsync(budgetModel);
-            return Ok(BudgetMapping.ToOutput(result));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "An error occurred while creating the budget.", details = ex.Message });
-        }
+        var result = await budgetService.AddAsync(budget.ToModel(), cancellationToken);
+        return CreatedAtAction(nameof(GetById), new { id = result.Budget.Id }, result.ToOutput());
     }
 
     [HttpPut("{id:guid}")]
-    public async Task<IActionResult> Update(Guid id, [FromBody] BudgetInputDto budget)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BudgetOutputDto>> Update(Guid id, BudgetInputDto budget, CancellationToken cancellationToken)
     {
-        try
-        {
-            var budgetModel = BudgetMapping.ToModel(budget);
-            budgetModel.Id = id;
-            var result = await budgetService.UpdateAsync(budgetModel);
-            return Ok(BudgetMapping.ToOutput(result));
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound(new { message = "Budget not found." });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "An error occurred while updating the budget.", details = ex.Message });
-        }
+        var result = await budgetService.UpdateAsync(budget.ToModel(id), cancellationToken);
+        return result.ToOutput();
     }
 
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetById(Guid id)
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<BudgetOutputDto>> GetById(Guid id, CancellationToken cancellationToken)
     {
-        try
-        {
-            var budget = await budgetService.GetByIdAsync(id);
-            if (budget == null)
-            {
-                return NotFound(new { message = "Budget not found." });
-            }
-            return Ok(BudgetMapping.ToOutput(budget));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "An error occurred while retrieving the budget.", details = ex.Message });
-        }
+        var result = await budgetService.GetByIdAsync(id, cancellationToken);
+        return result.ToOutput();
     }
 
     [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> Remove(Guid id)
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Remove(Guid id, CancellationToken cancellationToken)
     {
-        try
-        {
-            await budgetService.RemoveAsync(id);
-            return Ok(new { message = "Budget deleted successfully." });
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound(new { message = "Budget not found." });
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, new { message = "An error occurred while deleting the budget.", details = ex.Message });
-        }
+        await budgetService.RemoveAsync(id, cancellationToken);
+        return NoContent();
     }
 
-    [Route("Filter")]
-    [HttpPost]
-    public async Task<IActionResult> Filter([FromBody] BudgetFilterDto? filter)
+    [HttpPost("Filter")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<PaginatedList<BudgetOutputDto>>> Filter(BudgetFilterDto? filter, CancellationToken cancellationToken)
     {
-        var filteredBudgets = await budgetService.FilterAsync(filter);
-        return Ok(BudgetMapping.ToOutputPaginatedList(filteredBudgets));
+        var result = await budgetService.FilterAsync(filter ?? new BudgetFilterDto(), cancellationToken);
+        return result.Map(BudgetMapping.ToOutput);
     }
 }

@@ -9,11 +9,11 @@ using Finance.Domain.Enums;
 
 namespace Finance.Application.Services;
 
-public class ReportService(ITransactionRepository transactionRepository) : IReportService
+public class ReportService(ITransactionRepository transactionRepository, TimeProvider timeProvider) : IReportService
 {
-    public async Task<MonthlyCategorizedGraphData> GenerateMonthlySpendCategorizedGraphDataAsync()
+    public async Task<MonthlyCategorizedGraphData> GenerateMonthlySpendCategorizedGraphDataAsync(CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow();
         var yearStart = new DateTime(now.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var filterForMonthlyCategorizedGraphy = new TransactionFilterDto()
         {
@@ -25,14 +25,14 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
             StartDate = yearStart,
             EndDate = yearStart.AddYears(1)
         };
-        var transactions = await transactionRepository.FilterNoPaginationAsync(filterForMonthlyCategorizedGraphy);
+        var transactions = await transactionRepository.FilterNoPaginationAsync(filterForMonthlyCategorizedGraphy, cancellationToken);
         var graphData = GenerateMonthlyGraphDataFromTransactions(transactions);
         return graphData;
     }
     
-    public async Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraphDataAsync()
+    public async Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraphDataAsync(CancellationToken cancellationToken = default)
     {
-        var now = DateTime.UtcNow;
+        var now = timeProvider.GetUtcNow();
         var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var filterForCurrentMonthCategorizedGraphy = new TransactionFilterDto()
         {
@@ -44,7 +44,7 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
             StartDate = monthStart,
             EndDate = monthStart.AddMonths(1)
         };
-        var transactions = await transactionRepository.FilterNoPaginationAsync(filterForCurrentMonthCategorizedGraphy);
+        var transactions = await transactionRepository.FilterNoPaginationAsync(filterForCurrentMonthCategorizedGraphy, cancellationToken);
         var graphData = GenerateMonthlyGraphDataFromTransactions(transactions);
         return graphData;
     }

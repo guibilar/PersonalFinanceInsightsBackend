@@ -1,6 +1,3 @@
-
-
-using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 
 namespace Finance.Contracts.Outputs;
@@ -14,6 +11,6 @@ public class TransactionOutputDto
     public Category Category { get; set; }
     public TransactionType? TransactionType { get; set; }
     public AccountType Account { get; set; }
-    public Guid BudgetId { get; set; }
-    public BudgetOutputDto? Budget { get; set; }
+    public Guid? BudgetId { get; set; }
+    public BudgetReferenceDto? Budget { get; set; }
 }

@@ -1,55 +1,43 @@
-using Microsoft.EntityFrameworkCore;
 using Finance.Application.Abstractions;
 using Finance.Contracts.Inputs;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
-using Finance.Domain.Enums;
 using Finance.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace Finance.Infrastructure.Repositories;
 
 public class TransactionRepository(FinanceDbContext dbContext)
     : BaseRepository<Transaction>(dbContext), ITransactionRepository
 {
-    public override async Task<List<Transaction>> GetAllAsync()
+    public Task<List<Transaction>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        return await DbContext.Transactions.OrderByDescending(x => x.Date).ToListAsync();
+        return DbContext.Transactions
+            .AsNoTracking()
+            .Include(x => x.Budget)
+            .OrderByDescending(x => x.Date)
+            .ToListAsync(cancellationToken);
     }
 
-    public async Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto? filter)
+    public Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default)
     {
-        filter ??= new TransactionFilterDto();
-
-        var query = FilterNoPaginationQuery(filter);
-
-        var totalCount = await query.CountAsync();
-
-        var items = await query
-            .Skip((filter.Page - 1) * filter.PageSize)
-            .Take(filter.PageSize)
-            .ToListAsync();
-
-        return new PaginatedList<Transaction>
-        {
-            Items = items,
-            Page = filter.Page,
-            PageSize = filter.PageSize,
-            TotalCount = totalCount
-        };
+        return PaginateAsync(FilterQuery(filter), filter.Page, filter.PageSize, cancellationToken);
     }
 
-    public async Task<List<Transaction>> FilterNoPaginationAsync(TransactionFilterDto? filter)
+    public Task<List<Transaction>> FilterNoPaginationAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default)
     {
-        filter ??= new TransactionFilterDto();
-
-        var query = FilterNoPaginationQuery(filter);
-
-        return await query.ToListAsync();
+        return FilterQuery(filter).ToListAsync(cancellationToken);
     }
 
-    private IQueryable<Transaction> FilterNoPaginationQuery(TransactionFilterDto filter)
+    public Task<bool> ExistsByHashAsync(string hash, CancellationToken cancellationToken = default)
+    {
+        return DbContext.Transactions.AnyAsync(t => t.Hash == hash, cancellationToken);
+    }
+
+    private IQueryable<Transaction> FilterQuery(TransactionFilterDto filter)
     {
         var query = DbContext.Transactions
+            .AsNoTracking()
             .Include(x => x.Budget)
             .AsQueryable();
 
@@ -95,10 +83,5 @@ public class TransactionRepository(FinanceDbContext dbContext)
 
         query = query.OrderByDescending(x => x.Date).ThenBy(x => x.Id);
         return query;
-    }
-
-    public async Task<Transaction?> GetByHashAsync(string hash)
-    {
-        return await DbContext.Transactions.SingleOrDefaultAsync(t => t.Hash == hash);
     }
 }

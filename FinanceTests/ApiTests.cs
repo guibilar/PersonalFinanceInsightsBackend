@@ -114,7 +114,7 @@ public class ApiTests : IDisposable
 
         var response = await _client.DeleteAsync($"/api/Budget/{budgetId}");
 
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.False(await _factory.QueryAsync(db => db.Budgets.AnyAsync()));
         Assert.Null(await _factory.QueryAsync(db => db.Transactions.Select(t => t.BudgetId).SingleAsync()));
     }
@@ -213,8 +213,8 @@ public class ApiTests : IDisposable
         var different = await _client.PostAsJsonAsync("/api/Transaction", Tx("GROCERIES"));
         var duplicate = await _client.PostAsJsonAsync("/api/Transaction", Tx("COFFEE"));
 
-        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, different.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, different.StatusCode);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
     }
 
@@ -257,9 +257,9 @@ public class ApiTests : IDisposable
         var unlinkUnknown = await _client.PostAsync($"/api/Transaction/UnlinkTransaction/{Guid.NewGuid()}", null);
 
         Assert.Equal(HttpStatusCode.NotFound, unknownBudget.StatusCode);
-        Assert.Equal(HttpStatusCode.OK, link.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, link.StatusCode);
         Assert.Equal(budgetId, linked);
-        Assert.Equal(HttpStatusCode.OK, unlink.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, unlink.StatusCode);
         Assert.Null(await _factory.QueryAsync(db => db.Transactions.Select(t => t.BudgetId).SingleAsync()));
         Assert.Equal(HttpStatusCode.NotFound, unlinkUnknown.StatusCode);
     }
