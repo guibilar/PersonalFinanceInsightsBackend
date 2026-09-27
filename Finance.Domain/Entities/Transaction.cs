@@ -16,6 +16,12 @@ public class Transaction : BaseEntity
 
     /// <summary>Set when someone picks the category by hand; re-applying the category rules leaves it alone.</summary>
     public bool CategoryLocked { get; set; }
+
+    /// <summary>
+    /// Deleted by the user. The row stays so re-importing a statement that contains it doesn't add it back;
+    /// it is left out of lists, reports and budget totals until restored.
+    /// </summary>
+    public bool Hidden { get; set; }
     public Guid? BudgetId { get; set; }
     public Budget? Budget { get; set; }
 }

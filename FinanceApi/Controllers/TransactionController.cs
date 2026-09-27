@@ -87,12 +87,26 @@ public class TransactionController(ITransactionService transactionService) : Con
         return new CategoryRulesResultDto { Checked = result.Checked, Updated = result.Updated };
     }
 
+    /// <summary>
+    /// Deletes a transaction from lists, reports and budgets. It is kept hidden rather than removed, so
+    /// re-importing a statement that contains it doesn't add it back; <see cref="Restore"/> undoes it.
+    /// </summary>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Remove(Guid id, CancellationToken cancellationToken)
     {
-        await transactionService.RemoveAsync(id, cancellationToken);
+        await transactionService.HideAsync(id, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>Brings back a deleted (hidden) transaction.</summary>
+    [HttpPost("{id:guid}/Restore")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Restore(Guid id, CancellationToken cancellationToken)
+    {
+        await transactionService.RestoreAsync(id, cancellationToken);
         return NoContent();
     }
 

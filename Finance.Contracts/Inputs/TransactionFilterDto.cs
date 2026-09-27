@@ -15,6 +15,8 @@ public class TransactionFilterDto
     public string? Description { get; set; }
     public Category? Category { get; set; }
     public Guid? BudgetId { get; set; }
+    /// <summary>True: only hidden (deleted) transactions, to restore one. False (the default): only visible ones.</summary>
+    public bool Hidden { get; set; }
 
     /// <summary>Defaults to newest first. Ties are ordered by date (newest first), then id, so paging is stable.</summary>
     public TransactionSortField SortBy { get; set; } = TransactionSortField.Date;

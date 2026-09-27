@@ -37,9 +37,16 @@ public class TransactionRepository(FinanceDbContext dbContext)
             .ToListAsync(cancellationToken);
     }
 
-    public Task<bool> ExistsByHashAsync(AccountType account, string hash, CancellationToken cancellationToken = default)
+    public Task<Transaction?> GetIncludingHiddenAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return DbContext.Transactions.AnyAsync(t => t.Account == account && t.Hash == hash, cancellationToken);
+        return DbContext.Transactions.IgnoreQueryFilters().Include(t => t.Budget)
+            .SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
+    }
+
+    public Task<Transaction?> FindByHashAsync(AccountType account, string hash, CancellationToken cancellationToken = default)
+    {
+        return DbContext.Transactions.IgnoreQueryFilters().AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Account == account && t.Hash == hash, cancellationToken);
     }
 
     public Task<int> AddMissingAsync(
@@ -61,7 +68,9 @@ public class TransactionRepository(FinanceDbContext dbContext)
             }
 
             var hashes = transactions.Select(t => t.Hash).ToList();
+            // Hidden rows count: they were deleted on purpose and must not come back.
             var existing = (await DbContext.Transactions
+                .IgnoreQueryFilters()
                 .Where(t => t.Account == account && hashes.Contains(t.Hash))
                 .Select(t => t.Hash)
                 .ToListAsync(ct)).ToHashSet();
@@ -76,10 +85,12 @@ public class TransactionRepository(FinanceDbContext dbContext)
 
     private IQueryable<Transaction> FilterQuery(TransactionFilterDto filter)
     {
-        var query = DbContext.Transactions
+        var query = filter.Hidden
+            ? DbContext.Transactions.IgnoreQueryFilters().Where(x => x.Hidden)
+            : DbContext.Transactions;
+        query = query
             .AsNoTracking()
-            .Include(x => x.Budget)
-            .AsQueryable();
+            .Include(x => x.Budget);
 
         if (filter.TransactionId.HasValue)
         {

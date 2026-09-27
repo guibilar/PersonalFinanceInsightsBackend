@@ -10,6 +10,7 @@ public class TransactionOutputDto
     public decimal Amount { get; set; }
     public Category Category { get; set; }
     public bool CategoryLocked { get; set; }
+    public bool Hidden { get; set; }
     public TransactionType? TransactionType { get; set; }
     public AccountType Account { get; set; }
     public Guid? BudgetId { get; set; }

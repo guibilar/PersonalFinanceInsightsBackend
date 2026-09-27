@@ -13,7 +13,9 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
 {
     public Task<Budget?> GetWithTransactionsAsync(Guid id, CancellationToken cancellationToken = default)
     {
+        // Hidden transactions too: deleting the budget has to unlink every one of them.
         return DbContext.Budgets
+            .IgnoreQueryFilters()
             .Include(x => x.Transactions)
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
     }

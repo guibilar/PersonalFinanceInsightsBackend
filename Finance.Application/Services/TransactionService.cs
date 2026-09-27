@@ -23,10 +23,13 @@ public class TransactionService(
 
     public async Task<Transaction> AddAsync(Transaction transaction, CancellationToken cancellationToken = default)
     {
-        if (await transactionRepository.ExistsByHashAsync(transaction.Account, transaction.Hash, cancellationToken))
+        var existing = await transactionRepository.FindByHashAsync(transaction.Account, transaction.Hash, cancellationToken);
+        if (existing is not null)
         {
             logger.LogWarning("Transaction with hash {Hash} already exists on {Account}", transaction.Hash, transaction.Account);
-            throw new ConflictException(DuplicateMessage);
+            throw new ConflictException(existing.Hidden
+                ? "An identical transaction was deleted earlier; restore it from the deleted transactions instead."
+                : DuplicateMessage);
         }
 
         try
@@ -66,12 +69,21 @@ public class TransactionService(
         return transactionRepository.FilterAsync(filter, cancellationToken);
     }
 
-    public async Task RemoveAsync(Guid id, CancellationToken cancellationToken = default)
+    // Never removed for good: the stored hash is what keeps a re-imported statement from adding it back.
+    public Task HideAsync(Guid id, CancellationToken cancellationToken = default) =>
+        SetHiddenAsync(id, hidden: true, cancellationToken);
+
+    public Task RestoreAsync(Guid id, CancellationToken cancellationToken = default) =>
+        SetHiddenAsync(id, hidden: false, cancellationToken);
+
+    // Idempotent: hiding a hidden transaction (or restoring a visible one) just succeeds.
+    private async Task SetHiddenAsync(Guid id, bool hidden, CancellationToken cancellationToken)
     {
-        var transaction = await transactionRepository.GetByIdAsync(id, cancellationToken)
+        var transaction = await transactionRepository.GetIncludingHiddenAsync(id, cancellationToken)
                           ?? throw new NotFoundException(nameof(Transaction), id);
 
-        await transactionRepository.RemoveAsync(transaction, cancellationToken);
+        transaction.Hidden = hidden;
+        await transactionRepository.SaveChangesAsync(cancellationToken);
     }
 
     public async Task<Transaction> UpdateAsync(Guid id, string description, Category category, CancellationToken cancellationToken = default)
