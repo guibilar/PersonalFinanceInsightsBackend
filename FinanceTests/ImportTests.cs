@@ -123,7 +123,7 @@ public class ImportTests
     [Fact]
     public async Task Import_KeepsIdenticalSameDayPurchases_AndReimportAddsNothing()
     {
-        using var factory = new FinanceApiFactory();
+        await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
         const string csv = """
             2026-01-03,TIM HORTONS #55,2.15,
@@ -142,7 +142,7 @@ public class ImportTests
     [Fact]
     public async Task Import_OverlappingStatement_AddsOnlyNewRows()
     {
-        using var factory = new FinanceApiFactory();
+        await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
         await client.PostAsync("/api/Transaction/Import", Statement("""
             2026-01-03,TIM HORTONS #55,2.15,
@@ -160,7 +160,7 @@ public class ImportTests
     [Fact]
     public async Task Import_MatchesTransactionsStoredWithTheOldHash()
     {
-        using var factory = new FinanceApiFactory();
+        await using var factory = new FinanceApiFactory();
         await factory.SeedAsync(db => db.Transactions.Add(new Transaction
         {
             Id = Guid.NewGuid(), Date = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc), Description = " METRO #123 OSHAWA ",
@@ -180,7 +180,7 @@ public class ImportTests
     [InlineData("2026-01-03,METRO,1.00,", "Bitcoin")]
     public async Task Import_InvalidRequest_Returns400(string csv, string? account)
     {
-        using var factory = new FinanceApiFactory();
+        await using var factory = new FinanceApiFactory();
 
         var response = await factory.CreateClient().PostAsync("/api/Transaction/Import", Statement(csv, account));
 

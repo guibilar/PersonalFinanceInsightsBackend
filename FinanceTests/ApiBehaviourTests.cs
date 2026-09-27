@@ -31,7 +31,7 @@ public class ApiBehaviourTests
     [Fact]
     public async Task NotFound_IsReturnedAsProblemDetails()
     {
-        using var factory = new FinanceApiFactory();
+        await using var factory = new FinanceApiFactory();
         var id = Guid.NewGuid();
 
         var response = await factory.CreateClient().GetAsync($"/api/Budget/{id}");
@@ -46,7 +46,7 @@ public class ApiBehaviourTests
     [Fact]
     public async Task UnexpectedErrors_Return500WithoutInternalDetails()
     {
-        using var factory = new FinanceApiFactory(services =>
+        await using var factory = new FinanceApiFactory(services =>
             services.Replace(ServiceDescriptor.Scoped<IStatementParser, ThrowingParser>()));
         var form = new MultipartFormDataContent
         {
@@ -65,7 +65,7 @@ public class ApiBehaviourTests
     [Fact]
     public async Task CreateBudget_Returns201WithLocation()
     {
-        using var factory = new FinanceApiFactory();
+        await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
 
         var response = await client.PostAsJsonAsync("/api/Budget",
@@ -81,7 +81,7 @@ public class ApiBehaviourTests
     [Fact]
     public async Task BudgetFilter_TotalsAreSummedPerBudget()
     {
-        using var factory = new FinanceApiFactory();
+        await using var factory = new FinanceApiFactory();
         var food = Guid.NewGuid();
         await factory.SeedAsync(db =>
         {
@@ -104,7 +104,7 @@ public class ApiBehaviourTests
     [Fact]
     public async Task Transactions_ExposeLinkedBudgetAsReference_AndNullWhenUnlinked()
     {
-        using var factory = new FinanceApiFactory();
+        await using var factory = new FinanceApiFactory();
         var budgetId = Guid.NewGuid();
         await factory.SeedAsync(db =>
         {
@@ -128,7 +128,7 @@ public class ApiBehaviourTests
     public async Task Reports_UseTheInjectedClock()
     {
         var now = new DateTimeOffset(2026, 2, 15, 12, 0, 0, TimeSpan.Zero);
-        using var factory = new FinanceApiFactory(services =>
+        await using var factory = new FinanceApiFactory(services =>
             services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FixedTimeProvider(now))));
         await factory.SeedAsync(db =>
         {
@@ -150,7 +150,7 @@ public class ApiBehaviourTests
     [Fact]
     public async Task Health_ReportsHealthyWhenTheDatabaseIsReachable()
     {
-        using var factory = new FinanceApiFactory();
+        await using var factory = new FinanceApiFactory();
 
         var response = await factory.CreateClient().GetAsync("/health");
 
