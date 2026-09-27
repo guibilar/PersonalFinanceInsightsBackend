@@ -123,6 +123,55 @@ public class ImportTests
     }
 
     [Fact]
+    public void Parser_MonthlyRent_UsesTheAmountThatAppliedThatMonth()
+    {
+        var options = new ImportOptions
+        {
+            CategoryRules = Rules.CategoryRules,
+            MonthlyRent = new MonthlyRentOptions
+            {
+                Amount = 1900, Description = "Monthly Rent",
+                // In any order.
+                Changes = [new RentChange { From = "2026-04", Amount = 2100 }, new RentChange { From = "2026-02", Amount = 2000 }]
+            }
+        };
+
+        var parsed = Parse("""
+            2026-01-10,BELL CANADA,85.00,
+            2026-02-10,BELL CANADA,85.00,
+            2026-03-10,BELL CANADA,85.00,
+            2026-04-10,BELL CANADA,85.00,
+            """, AccountType.Chequing, options);
+
+        Assert.Equal([1900m, 2000m, 2000m, 2100m], parsed.Where(t => t.Category == Category.Rent).Select(t => t.Amount));
+    }
+
+    [Theory]
+    [InlineData("2026/02", 2000)]
+    [InlineData("February 2026", 2000)]
+    [InlineData("2026-02", 0)]
+    public void RentChange_NeedsAMonthAsYearDashMonth_AndAPositiveAmount(string from, decimal amount)
+    {
+        var rent = new MonthlyRentOptions { Amount = 1900, Changes = [new RentChange { From = from, Amount = amount }] };
+
+        Assert.False(rent.IsValid());
+    }
+
+    [Fact]
+    public async Task InvalidRentChange_StopsTheApiAtStartup()
+    {
+        await using var factory = new FinanceApiFactory(settings: new Dictionary<string, string?>
+        {
+            ["Import:MonthlyRent:Changes:0:From"] = "2027/01",
+            ["Import:MonthlyRent:Changes:0:Amount"] = "2050",
+        });
+
+        var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+
+        Assert.Contains("Import:MonthlyRent:Changes", ex.ToString());
+    }
+
+    [Fact]
     public void Parser_WithoutMonthlyRent_KeepsRealRentPayments()
     {
         var options = new ImportOptions { CategoryRules = Rules.CategoryRules };
@@ -263,6 +312,54 @@ public class ImportTests
             """))).ReadAsync<ImportResultDto>();
 
         Assert.Equal((2, 1, 1), (result.Read, result.Added, result.Skipped));
+    }
+
+    private static Transaction StoredRent(DateTime month, decimal amount, bool hidden = false) => new()
+    {
+        Id = Guid.NewGuid(), Date = DateTime.SpecifyKind(month, DateTimeKind.Utc), Description = "Monthly Rent", Amount = amount,
+        Category = Category.Rent, TransactionType = TransactionType.Debit, Account = AccountType.Chequing,
+        Hash = TransactionHashHelper.GenerateTransactionHash(amount, month, "Monthly Rent"), Hidden = hidden
+    };
+
+    [Fact]
+    public async Task Import_AMonthThatAlreadyHasRent_GetsNoSecondOne_AndItsAmountFollowsTheRules()
+    {
+        // The rules: 1947.50, and 2050 from February. January and February were imported before that change.
+        await using var factory = new FinanceApiFactory(settings: new Dictionary<string, string?>
+        {
+            ["Import:MonthlyRent:Changes:0:From"] = "2026-02",
+            ["Import:MonthlyRent:Changes:0:Amount"] = "2050",
+        });
+        await factory.SeedAsync(db =>
+        {
+            db.Transactions.Add(StoredRent(new DateTime(2026, 1, 1), 1947.50m));
+            db.Transactions.Add(StoredRent(new DateTime(2026, 2, 1), 1947.50m));
+        });
+
+        var result = await (await factory.CreateClient().PostAsync("/api/Transaction/Import", Statement("""
+            2026-01-10,BELL CANADA,85.00,
+            2026-02-10,BELL CANADA,85.00,
+            2026-03-10,BELL CANADA,85.00,
+            """, "Chequing"))).ReadAsync<ImportResultDto>();
+
+        // Read: three bills and three rents; January's and February's rents are already there.
+        Assert.Equal((6, 4, 2), (result.Read, result.Added, result.Skipped));
+        var rents = await factory.QueryAsync(db => db.Transactions.Where(t => t.Category == Category.Rent)
+            .OrderBy(t => t.Date).Select(t => t.Amount).ToListAsync());
+        Assert.Equal([1947.50m, 2050m, 2050m], rents);
+    }
+
+    [Fact]
+    public async Task Import_DeletedRent_StaysDeleted()
+    {
+        await using var factory = new FinanceApiFactory();
+        await factory.SeedAsync(db => db.Transactions.Add(StoredRent(new DateTime(2026, 1, 1), 1800, hidden: true)));
+
+        var result = await (await factory.CreateClient().PostAsync("/api/Transaction/Import",
+            Statement("2026-01-10,BELL CANADA,85.00,", "Chequing"))).ReadAsync<ImportResultDto>();
+
+        Assert.Equal((2, 1, 1), (result.Read, result.Added, result.Skipped));
+        Assert.Equal(0, await factory.QueryAsync(db => db.Transactions.CountAsync(t => t.Category == Category.Rent)));
     }
 
     [Fact]

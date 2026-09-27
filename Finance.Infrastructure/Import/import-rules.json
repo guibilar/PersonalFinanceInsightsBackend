@@ -15,7 +15,8 @@
     ],
     "MonthlyRent": {
       "Amount": 1947.5,
-      "Description": "Monthly Rent"
+      "Description": "Monthly Rent",
+      "Changes": []
     },
     "CategoryRules": [
       {

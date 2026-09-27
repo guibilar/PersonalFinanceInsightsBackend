@@ -57,11 +57,41 @@ public class TransactionService(
                 transaction.Amount, transaction.Date, transaction.Description, occurrence);
         }
 
+        var toImport = await SettleMonthlyRentAsync(account, parsed, cancellationToken);
+
         // The statement is imported completely or not at all.
-        var added = await transactionRepository.AddMissingAsync(account, parsed, cancellationToken);
+        var added = await transactionRepository.AddMissingAsync(account, toImport, cancellationToken);
 
         logger.LogInformation("Imported {Account} statement: {Read} read, {Added} added", account, parsed.Count, added);
         return new ImportResult(parsed.Count, added, parsed.Count - added);
+    }
+
+    /// <summary>
+    /// The fixed rent is one per month, generated from the rules. A month that already has it gets no second one
+    /// (its hash includes the amount, so after a rent change it would look new), and its stored amount follows the
+    /// rules, so adding a rent change and re-importing corrects the months it covers. Deleted rents stay deleted.
+    /// </summary>
+    private async Task<List<Transaction>> SettleMonthlyRentAsync(AccountType account, List<Transaction> parsed,
+        CancellationToken cancellationToken)
+    {
+        var rents = parsed.Where(t => IsFixedMonthlyRent(t, importOptions.Value)).ToList();
+        if (rents.Count == 0) return parsed;
+
+        var stored = await transactionRepository.GetRentsAsync(
+            account, importOptions.Value.MonthlyRent!.Description, rents.Select(t => t.Date).ToList(), cancellationToken);
+        var corrected = 0;
+        foreach (var rent in stored.Where(t => !t.Hidden))
+        {
+            var amount = rents.First(t => t.Date == rent.Date).Amount;
+            if (rent.Amount == amount) continue;
+            logger.LogInformation("Rent for {Month:yyyy-MM} corrected from {Old} to {New}", rent.Date, rent.Amount, amount);
+            rent.Amount = amount;
+            corrected++;
+        }
+        if (corrected > 0) await transactionRepository.SaveChangesAsync(cancellationToken);
+
+        var paidMonths = stored.Select(t => t.Date).ToHashSet();
+        return parsed.Where(t => !rents.Contains(t) || !paidMonths.Contains(t.Date)).ToList();
     }
 
     public Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default)

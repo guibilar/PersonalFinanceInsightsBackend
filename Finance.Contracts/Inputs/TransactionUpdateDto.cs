@@ -9,7 +9,7 @@ namespace Finance.Contracts.Inputs;
 /// </summary>
 public class TransactionUpdateDto
 {
-    [Required(AllowEmptyStrings = false)]
+    [Required(AllowEmptyStrings = false), MaxLength(TextLimits.TransactionDescription)]
     public required string Description { get; set; }
 
     [Required, EnumDataType(typeof(Category))]

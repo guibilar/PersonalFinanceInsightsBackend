@@ -5,10 +5,10 @@ namespace Finance.Contracts.Inputs;
 
 public class BudgetInputDto
 {
-    [Required]
+    [Required, MaxLength(TextLimits.BudgetName)]
     public string Name { get; set; } = string.Empty;
 
-    [Required]
+    [Required, MaxLength(TextLimits.BudgetDescription)]
     public string Description { get; set; } = string.Empty;
 
     public Status Status { get; set; }

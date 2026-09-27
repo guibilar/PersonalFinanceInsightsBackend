@@ -136,11 +136,36 @@ public class ApiTests : IAsyncLifetime
     [InlineData("Food", "", 100)]
     [InlineData("Food", "Groceries", 0)]
     [InlineData("Food", "Groceries", -5)]
+    [InlineData("101 characters", "Groceries", 100)]
+    [InlineData("Food", "501 characters", 100)]
     public async Task CreateBudget_Invalid_Returns400(string name, string description, decimal amount)
     {
+        static string Expand(string value) => value.EndsWith(" characters")
+            ? new string('x', int.Parse(value.Split(' ')[0]))
+            : value;
+        (name, description) = (Expand(name), Expand(description));
         var response = await _client.PostAsJsonAsync("/api/Budget", new { name, description, status = "Active", amount });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task TextAtTheLimit_IsAccepted_AndOneCharacterMoreIsNot()
+    {
+        var atLimit = await _client.PostAsJsonAsync("/api/Budget",
+            new { name = new string('n', 100), description = new string('d', 500), status = "Active", amount = 10 });
+        var created = await _client.PostAsJsonAsync("/api/Transaction", new
+        {
+            date = "2026-09-10", description = new string('t', 200), amount = 5, category = "Dining",
+            transactionType = "Debit", account = "CreditCard"
+        });
+        var id = (await created.ReadAsync<TransactionOutputDto>()).Id;
+        var tooLong = await _client.PutAsJsonAsync($"/api/Transaction/{id}",
+            new { description = new string('t', 201), category = "Dining" });
+
+        Assert.Equal(HttpStatusCode.Created, atLimit.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
     }
 
     [Fact]

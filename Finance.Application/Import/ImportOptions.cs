@@ -1,3 +1,4 @@
+using System.Globalization;
 using Finance.Domain.Enums;
 
 namespace Finance.Application.Import;
@@ -40,6 +41,34 @@ public class CategoryRule
 
 public class MonthlyRentOptions
 {
+    /// <summary>The rent before the first of <see cref="Changes"/> (or always, without changes).</summary>
     public decimal Amount { get; set; }
     public string Description { get; set; } = "Monthly Rent";
+
+    /// <summary>
+    /// Rent changes, each from a month on ("yyyy-MM"), in any order. Add one when the rent goes up instead of
+    /// editing <see cref="Amount"/>, so months before the change keep the amount that was actually paid.
+    /// </summary>
+    public List<RentChange> Changes { get; set; } = [];
+
+    /// <summary>The rent for the month starting on <paramref name="month"/>.</summary>
+    public decimal AmountFor(DateTime month) =>
+        Changes.Where(change => change.FromMonth <= month)
+            .OrderBy(change => change.FromMonth)
+            .Select(change => (decimal?)change.Amount)
+            .LastOrDefault() ?? Amount;
+
+    public bool IsValid() => Changes.All(change => change.IsValid());
+}
+
+public class RentChange
+{
+    /// <summary>First month with this amount, as "yyyy-MM".</summary>
+    public string From { get; set; } = string.Empty;
+    public decimal Amount { get; set; }
+
+    public DateTime FromMonth => DateTime.ParseExact(From, "yyyy-MM", CultureInfo.InvariantCulture);
+
+    public bool IsValid() =>
+        Amount > 0 && DateTime.TryParseExact(From, "yyyy-MM", CultureInfo.InvariantCulture, DateTimeStyles.None, out _);
 }

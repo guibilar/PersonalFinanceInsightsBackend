@@ -73,6 +73,22 @@ Money in on a credit card statement is imported as a refund (a credit in the pur
 the card's own payments, recognised by `CardPaymentKeywords`. Refunds reduce spending in the reports and
 in budgets. On chequing, money in only counts as income when it matches `IncomeKeywords`.
 
+With `MonthlyRent` set, rent payments found on chequing statements are replaced by one fixed rent per
+month the statement covers. When the rent changes, add an entry to `Changes` instead of editing `Amount`,
+so earlier months keep what was actually paid:
+
+```json
+"MonthlyRent": {
+  "Amount": 1947.5,
+  "Description": "Monthly Rent",
+  "Changes": [ { "From": "2027-01", "Amount": 2050 } ]
+}
+```
+
+A month never gets a second rent, whatever the amount, and re-importing a statement sets its months' rent to
+the configured amount (a deleted rent stays deleted). So after adding a change late, re-import the statements
+of the months it covers. A malformed entry stops the API at startup with a message naming the setting.
+
 Statements are read as UTF-8, or as Windows-1252 when the file isn't valid UTF-8 (e.g. re-saved in Excel).
 Transactions are duplicates only within the same account.
 
