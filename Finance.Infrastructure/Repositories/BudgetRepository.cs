@@ -11,8 +11,7 @@ namespace Finance.Infrastructure.Repositories;
 
 public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budget>(dbContext), IBudgetRepository
 {
-    // Tracked, with transactions, for updates and deletes (which unlink them).
-    public override Task<Budget?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    public Task<Budget?> GetWithTransactionsAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return DbContext.Budgets
             .Include(x => x.Transactions)

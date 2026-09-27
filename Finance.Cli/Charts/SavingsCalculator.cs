@@ -68,7 +68,7 @@ namespace Finance.Cli.Charts{
             plt1.ShowLegend();
 
             // Save higher resolution for readability
-            plt1.SavePng($"./Results/{fileName}.png", 1200, 800);
+            plt1.SavePng(FileHelper.GetResultsPathForFile(fileName, "png"), 1200, 800);
             Console.WriteLine($"{fileName}.png saved (line chart).");
         }
 

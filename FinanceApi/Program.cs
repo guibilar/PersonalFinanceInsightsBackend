@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Finance.Application;
+using Finance.Application.Reports;
 using Finance.Infrastructure;
 using FinanceApi.Errors;
 using FinanceApi.Health;
@@ -18,6 +19,10 @@ builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddOptions<ReportOptions>()
+    .Bind(builder.Configuration.GetSection(ReportOptions.SectionName))
+    .Validate(options => options.IsValid(), $"{ReportOptions.SectionName}:TimeZone is not a known time zone id.")
+    .ValidateOnStart();
 builder.Services
     .AddApplication()
     .AddInfrastructure(builder.Configuration);

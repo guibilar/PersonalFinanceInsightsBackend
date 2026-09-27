@@ -111,6 +111,25 @@ public class ImportTests
             parsed.Select(t => (t.TransactionType!.Value, t.Amount)));
     }
 
+    [Theory]
+    [InlineData("utf-8")]
+    [InlineData("utf-8-bom")]
+    [InlineData("windows-1252")]
+    public void Parser_ReadsUtf8AndWindows1252(string encoding)
+    {
+        const string csv = "2026-01-03,CAFÉ DÉPANNEUR – MONTRÉAL,4.50,";
+        var bytes = encoding switch
+        {
+            "utf-8" => Encoding.UTF8.GetBytes(csv),
+            "utf-8-bom" => [.. Encoding.UTF8.Preamble, .. Encoding.UTF8.GetBytes(csv)],
+            _ => CodePagesEncodingProvider.Instance.GetEncoding(1252)!.GetBytes(csv)
+        };
+
+        var parsed = new CibcCsvParser(Options.Create(Rules)).Parse(new MemoryStream(bytes), AccountType.CreditCard);
+
+        Assert.Equal("CAFÉ DÉPANNEUR – MONTRÉAL", Assert.Single(parsed).Description);
+    }
+
     // ---- Endpoint
 
     internal static MultipartFormDataContent Statement(string csv, string? account = "CreditCard")

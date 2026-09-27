@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using CsvHelper;
 using CsvHelper.Configuration;
 using Finance.Application.Abstractions;
@@ -11,6 +12,7 @@ namespace Finance.Infrastructure.Import;
 
 /// <summary>
 /// CIBC CSV exports: no header; columns are date (yyyy-MM-dd), description, money out, money in.
+/// Read as UTF-8, or as Windows-1252 when the file is not valid UTF-8 (as saved by Excel on Windows).
 /// </summary>
 public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
 {
@@ -19,13 +21,16 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
     private const int MoneyOutColumn = 2;
     private const int MoneyInColumn = 3;
 
+    private static readonly Encoding StrictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    private static readonly Encoding Windows1252 = CodePagesEncodingProvider.Instance.GetEncoding(1252)!;
+
     private readonly ImportOptions _options = options.Value;
 
     public List<Transaction> Parse(Stream statement, AccountType account)
     {
         var transactions = new List<Transaction>();
         var statementMonths = new HashSet<DateTime>();
-        using var reader = new StreamReader(statement);
+        using var reader = new StringReader(ReadText(statement));
         using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture) { HasHeaderRecord = false });
 
         while (csv.Read())
@@ -68,6 +73,24 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
         }
 
         return transactions;
+    }
+
+    private static string ReadText(Stream statement)
+    {
+        using var buffer = new MemoryStream();
+        statement.CopyTo(buffer);
+        var bytes = buffer.GetBuffer().AsSpan(0, (int)buffer.Length);
+        if (bytes.StartsWith(Encoding.UTF8.Preamble)) bytes = bytes[Encoding.UTF8.Preamble.Length..];
+
+        try
+        {
+            return StrictUtf8.GetString(bytes);
+        }
+        catch (DecoderFallbackException)
+        {
+            // Plain UTF-8 decoding would turn accented characters into U+FFFD instead.
+            return Windows1252.GetString(bytes);
+        }
     }
 
     private bool IsExcluded(string description) =>

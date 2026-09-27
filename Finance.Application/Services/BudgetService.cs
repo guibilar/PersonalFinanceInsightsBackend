@@ -38,7 +38,7 @@ public class BudgetService(IBudgetRepository budgetRepository) : IBudgetService
 
     public async Task RemoveAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var budget = await budgetRepository.GetByIdAsync(id, cancellationToken)
+        var budget = await budgetRepository.GetWithTransactionsAsync(id, cancellationToken)
                      ?? throw new NotFoundException(nameof(Budget), id);
 
         // The foreign key has no ON DELETE action, so unlink transactions before deleting.

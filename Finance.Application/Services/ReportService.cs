@@ -6,15 +6,28 @@ using Finance.Contracts.Inputs;
 using Finance.Contracts.Reports;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
+using Microsoft.Extensions.Options;
 
 namespace Finance.Application.Services;
 
-public class ReportService(ITransactionRepository transactionRepository, TimeProvider timeProvider) : IReportService
+public class ReportService(
+    ITransactionRepository transactionRepository,
+    TimeProvider timeProvider,
+    IOptions<ReportOptions> options) : IReportService
 {
+    private readonly TimeZoneInfo _timeZone = options.Value.GetTimeZone();
+
+    // Transactions are stored as calendar dates (midnight UTC), so "today" is the local date expressed the same way.
+    private DateTime Today()
+    {
+        var local = TimeZoneInfo.ConvertTime(timeProvider.GetUtcNow(), _timeZone);
+        return new DateTime(local.Year, local.Month, local.Day, 0, 0, 0, DateTimeKind.Utc);
+    }
+
     public async Task<MonthlyCategorizedGraphData> GenerateMonthlySpendCategorizedGraphDataAsync(CancellationToken cancellationToken = default)
     {
-        var now = timeProvider.GetUtcNow();
-        var yearStart = new DateTime(now.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var today = Today();
+        var yearStart = new DateTime(today.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var filterForMonthlyCategorizedGraphy = new TransactionFilterDto()
         {
             AccountType = [
@@ -32,8 +45,8 @@ public class ReportService(ITransactionRepository transactionRepository, TimePro
     
     public async Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraphDataAsync(CancellationToken cancellationToken = default)
     {
-        var now = timeProvider.GetUtcNow();
-        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var today = Today();
+        var monthStart = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var filterForCurrentMonthCategorizedGraphy = new TransactionFilterDto()
         {
             AccountType = [

@@ -1,6 +1,9 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using Finance.Application.Abstractions;
+using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Outputs;
 using Finance.Contracts.Reports;
 using Finance.Domain.Common;
@@ -9,6 +12,7 @@ using Finance.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace FinanceTests;
 
@@ -147,6 +151,72 @@ public class ApiBehaviourTests
         Assert.Equal(30, year.AverageMonthlyTotal);
     }
 
+    private static FinanceApiFactory FactoryAt(string utcNow) => new(services =>
+        services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FixedTimeProvider(DateTimeOffset.Parse(utcNow)))));
+
+    [Theory]
+    // 01:30 UTC on March 1st is still the evening of February 28th in Toronto (appsettings.json).
+    [InlineData("2026-03-01T01:30:00Z", "Feb 2026")]
+    [InlineData("2026-03-01T05:30:00Z", "Mar 2026")]
+    public async Task Reports_CurrentMonthFollowsTheConfiguredTimeZone(string utcNow, string expectedMonth)
+    {
+        await using var factory = FactoryAt(utcNow);
+        await factory.SeedAsync(db =>
+        {
+            db.Transactions.Add(NewTransaction("February", 30, new DateTime(2026, 2, 28)));
+            db.Transactions.Add(NewTransaction("March", 40, new DateTime(2026, 3, 1)));
+        });
+
+        var month = await (await factory.CreateClient().GetAsync("/api/Reports/current-month-categorized-graph"))
+            .ReadAsync<MonthlyCategorizedGraphData>();
+
+        Assert.Equal(expectedMonth, Assert.Single(month.MonthlyData).Month);
+    }
+
+    [Fact]
+    public async Task Reports_YearFollowsTheConfiguredTimeZone()
+    {
+        // 03:00 UTC on January 1st is still New Year's Eve in Toronto.
+        await using var factory = FactoryAt("2027-01-01T03:00:00Z");
+        await factory.SeedAsync(db => db.Transactions.Add(NewTransaction("December", 30, new DateTime(2026, 12, 31))));
+
+        var year = await (await factory.CreateClient().GetAsync("/api/Reports/monthly-categorized-graph"))
+            .ReadAsync<MonthlyCategorizedGraphData>();
+
+        Assert.Equal("Dec 2026", Assert.Single(year.MonthlyData).Month);
+    }
+
+    [Fact]
+    public async Task CancelledRequests_AreNotLoggedAsErrors()
+    {
+        var logs = new CapturingLoggerProvider();
+        var reports = new BlockingReportService();
+        await using var factory = new FinanceApiFactory(services =>
+        {
+            services.AddLogging(logging => logging
+                .AddProvider(logs)
+                .AddFilter<CapturingLoggerProvider>(null, LogLevel.Trace));
+            services.Replace(ServiceDescriptor.Scoped<IReportService>(_ => reports));
+        });
+        var client = factory.CreateClient();
+        using var cancel = new CancellationTokenSource();
+
+        var request = client.GetAsync("/api/Reports/current-month-categorized-graph", cancel.Token);
+        await reports.Started.WaitAsync(TimeSpan.FromSeconds(10));
+        await cancel.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => request);
+        await reports.Cancelled.WaitAsync(TimeSpan.FromSeconds(10));
+
+        // ASP.NET Core recognises the abort itself (at Debug level) and never calls the exception handler.
+        bool Aborted() => logs.Entries.Any(e => e.Message == "The request was aborted by the client.");
+        for (var waited = 0; !Aborted() && waited < 5000; waited += 20) await Task.Delay(20);
+        Assert.True(Aborted());
+        // Where an unhandled exception would be logged (the Postgres test setup logs unrelated EF errors).
+        Assert.DoesNotContain(logs.Entries, e => e.Level >= LogLevel.Error &&
+            (e.Category.StartsWith("Microsoft.AspNetCore") || e.Category.StartsWith("FinanceApi")));
+    }
+
     [Fact]
     public async Task Health_ReportsHealthyWhenTheDatabaseIsReachable()
     {
@@ -156,6 +226,46 @@ public class ApiBehaviourTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
+    }
+
+    private class BlockingReportService : IReportService
+    {
+        private readonly TaskCompletionSource _started = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly TaskCompletionSource _cancelled = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task Started => _started.Task;
+        public Task Cancelled => _cancelled.Task;
+
+        public Task<MonthlyCategorizedGraphData> GenerateMonthlySpendCategorizedGraphDataAsync(CancellationToken cancellationToken = default) =>
+            GenerateCurrentMonthCategorizedGraphDataAsync(cancellationToken);
+
+        public async Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraphDataAsync(CancellationToken cancellationToken = default)
+        {
+            _started.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+                throw new UnreachableException();
+            }
+            finally
+            {
+                _cancelled.TrySetResult();
+            }
+        }
+    }
+
+    private class CapturingLoggerProvider : ILoggerProvider
+    {
+        public ConcurrentBag<(string Category, LogLevel Level, string Message)> Entries { get; } = [];
+        public ILogger CreateLogger(string categoryName) => new Logger(this, categoryName);
+        public void Dispose() { }
+
+        private class Logger(CapturingLoggerProvider provider, string category) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+            public bool IsEnabled(LogLevel logLevel) => true;
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+                provider.Entries.Add((category, logLevel, formatter(state, exception)));
+        }
     }
 
     private class ThrowingParser : IStatementParser
