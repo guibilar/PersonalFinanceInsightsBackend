@@ -1,12 +1,11 @@
-using Microsoft.Extensions.Logging;
-using System.Security.Cryptography;
-using System.Text;
 using Finance.Application.Abstractions;
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
+using Finance.Domain.Exceptions;
 using Finance.Domain.Helpers;
+using Microsoft.Extensions.Logging;
 
 namespace Finance.Application.Services;
 
@@ -16,94 +15,74 @@ public class TransactionService(
     IBudgetRepository budgetRepository,
     ITransactionFileReader fileReader) : ITransactionService
 {
-    public async Task<Transaction> AddAsync(Transaction transaction)
+    public async Task<Transaction> AddAsync(Transaction transaction, CancellationToken cancellationToken = default)
     {
-        var existingTransaction = await transactionRepository.GetByHashAsync(transaction.Hash);
-        if (existingTransaction == null) return await transactionRepository.AddAsync(transaction);
-        logger.LogWarning("Transaction with hash {Hash} already exists", transaction.Hash);
-        throw new InvalidOperationException($"Transaction already exists with hash: {transaction.Hash}");
+        if (await transactionRepository.ExistsByHashAsync(transaction.Hash, cancellationToken))
+        {
+            logger.LogWarning("Transaction with hash {Hash} already exists", transaction.Hash);
+            throw new ConflictException("An identical transaction (same date, amount and description) already exists.");
+        }
+
+        return await transactionRepository.AddAsync(transaction, cancellationToken);
     }
 
-    public async Task SyncTransactionsByFileAsync()
+    public async Task SyncTransactionsByFileAsync(CancellationToken cancellationToken = default)
     {
         var records = fileReader.ReadExpenses(includeRent: true);
-        GenerateTransactionHashForRecord(records);
-        await AddTransactionsIfNotExists(records);
+        records.AddRange(fileReader.ReadIncome());
 
-        var recordsIncome = fileReader.ReadIncome();
-        GenerateTransactionHashForRecord(recordsIncome);
-        await AddTransactionsIfNotExists(recordsIncome);
-    }
-
-    private async Task AddTransactionsIfNotExists(List<Transaction> records)
-    {
+        var added = 0;
         foreach (var record in records)
         {
-            var existingTransaction = await transactionRepository.GetByHashAsync(record.Hash);
-            if (existingTransaction == null) await transactionRepository.AddAsync(record);
+            record.Hash = TransactionHashHelper.GenerateTransactionHash(record.Amount, record.Date, record.Description);
+            if (await transactionRepository.ExistsByHashAsync(record.Hash, cancellationToken)) continue;
+
+            await transactionRepository.AddAsync(record, cancellationToken);
+            added++;
         }
+
+        logger.LogInformation("File sync read {Read} transactions and added {Added}", records.Count, added);
     }
 
-    private static void GenerateTransactionHashForRecord(List<Transaction> recordsIncome)
+    public Task<List<Transaction>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        foreach (var record in recordsIncome)
-        {
-            var hash = TransactionHashHelper.GenerateTransactionHash(record.Amount, record.Date, record.Description);
-            record.Hash = hash;
-        }
+        return transactionRepository.GetAllAsync(cancellationToken);
     }
 
-    public async Task<List<Transaction>> GetAllAsync()
+    public Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default)
     {
-        return await transactionRepository.GetAllAsync();
+        return transactionRepository.FilterAsync(filter, cancellationToken);
     }
 
-
-    public async Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto? filter)
+    public async Task RemoveAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await transactionRepository.FilterAsync(filter);
+        var transaction = await transactionRepository.GetByIdAsync(id, cancellationToken)
+                          ?? throw new NotFoundException(nameof(Transaction), id);
+
+        await transactionRepository.RemoveAsync(transaction, cancellationToken);
     }
 
-    public async Task<Transaction?> GetByHashAsync(string hash)
+    public async Task LinkTransactionToBudgetAsync(Guid budgetId, Guid transactionId, CancellationToken cancellationToken = default)
     {
-        return await transactionRepository.GetByHashAsync(hash);
-    }
-
-    public async Task RemoveAsync(Guid id)
-    {
-        _ = await transactionRepository.GetByIdAsync(id)
-            ?? throw new KeyNotFoundException($"Transaction with id {id} not found.");
-
-        await transactionRepository.RemoveAsync(id);
-    }
-
-    public async Task LinkTransactionToBudget(Guid budgetId, Guid transactionId)
-    {
-        var transaction = await transactionRepository.GetByIdAsync(transactionId);
-        
-        if (transaction == null)
-            throw new KeyNotFoundException($"Transaction with id {transactionId} not found.");
+        var transaction = await transactionRepository.GetByIdAsync(transactionId, cancellationToken)
+                          ?? throw new NotFoundException(nameof(Transaction), transactionId);
 
         if (transaction.BudgetId.HasValue)
-            throw new InvalidOperationException($"Transaction with id {transactionId} is already linked to a budget.");
+            throw new ConflictException($"Transaction with id {transactionId} is already linked to a budget.");
 
-        var budget = await budgetRepository.GetByIdAsync(budgetId);
+        _ = await budgetRepository.GetByIdAsync(budgetId, cancellationToken)
+            ?? throw new NotFoundException(nameof(Budget), budgetId);
 
-        if (budget == null)
-            throw new KeyNotFoundException($"Budget with id {budgetId} not found.");
-        
-        transaction.BudgetId = budget.Id;
-        await transactionRepository.UpdateAsync(transaction);
+        transaction.BudgetId = budgetId;
+        await transactionRepository.SaveChangesAsync(cancellationToken);
     }
-    
-    public async Task UnlinkTransactionFromBudget(Guid transactionId)
+
+    public async Task UnlinkTransactionFromBudgetAsync(Guid transactionId, CancellationToken cancellationToken = default)
     {
-        var transaction = await transactionRepository.GetByIdAsync(transactionId);
-        
-        if (transaction == null)
-            throw new KeyNotFoundException($"Transaction with id {transactionId} not found.");
+        var transaction = await transactionRepository.GetByIdAsync(transactionId, cancellationToken)
+                          ?? throw new NotFoundException(nameof(Transaction), transactionId);
 
         transaction.BudgetId = null;
-        await transactionRepository.UpdateAsync(transaction);
+        await transactionRepository.SaveChangesAsync(cancellationToken);
     }
 }

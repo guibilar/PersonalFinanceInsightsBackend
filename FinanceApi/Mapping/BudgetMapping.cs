@@ -1,58 +1,42 @@
-
-
+using Finance.Application.Models;
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
-using Finance.Domain.Common;
 using Finance.Domain.Entities;
-using Finance.Domain.Enums;
 
-namespace FinanceApi.Mapping{
-    public static class BudgetMapping
+namespace FinanceApi.Mapping;
+
+public static class BudgetMapping
+{
+    public static Budget ToModel(this BudgetInputDto dto, Guid id = default)
     {
-        public static Budget ToModel(BudgetInputDto dto)
+        return new Budget
         {
-            return new Budget
-            {
-                Name = dto.Name,
-                Description = dto.Description,
-                Status = dto.Status,
-                Amount = dto.Amount,
-            };
-        }
-        
-        public static BudgetOutputDto ToOutput(Budget budget)
-        {
-            var totalSpent = budget.Transactions != null ? budget.Transactions.Sum(t => t.Amount) : 0;
-            var percentageUsed = budget.Amount > 0 ? (totalSpent/budget.Amount)*100 : 0;
-            return new BudgetOutputDto
-            {
-                Id = budget.Id,
-                Name = budget.Name,
-                Description = budget.Description,
-                Status = budget.Status,
-                TotalAmount = budget.Amount,
-                TotalSpent = totalSpent,
-                TotalRemaining =  budget.Amount - totalSpent,
-                PercentageUsed = percentageUsed,
-            };
-        }
+            Id = id,
+            Name = dto.Name.Trim(),
+            Description = dto.Description.Trim(),
+            Status = dto.Status,
+            Amount = dto.Amount,
+        };
+    }
 
-        public static List<BudgetOutputDto> ToOutputList(List<Budget>? budgets)
+    public static BudgetOutputDto ToOutput(this BudgetSummary summary)
+    {
+        var (budget, totalSpent) = summary;
+        return new BudgetOutputDto
         {
-            return budgets == null ? [] : budgets.Select(ToOutput).ToList();
-        }
-        
-        public static PaginatedList<BudgetOutputDto> ToOutputPaginatedList(PaginatedList<Budget>? paginatedInput)
-        {
-            var toReturn = new PaginatedList<BudgetOutputDto>()
-            {
-                Items = ToOutputList(paginatedInput.Items),
-                Page = paginatedInput.Page,
-                PageSize = paginatedInput.PageSize,
-                TotalCount = paginatedInput.TotalCount,
-            };
-            
-            return toReturn;
-        }
+            Id = budget.Id,
+            Name = budget.Name,
+            Description = budget.Description,
+            Status = budget.Status,
+            TotalAmount = budget.Amount,
+            TotalSpent = totalSpent,
+            TotalRemaining = budget.Amount - totalSpent,
+            PercentageUsed = budget.Amount > 0 ? totalSpent / budget.Amount * 100 : 0,
+        };
+    }
+
+    public static BudgetReferenceDto ToReference(this Budget budget)
+    {
+        return new BudgetReferenceDto { Id = budget.Id, Name = budget.Name, Status = budget.Status };
     }
 }

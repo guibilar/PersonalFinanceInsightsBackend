@@ -1,7 +1,8 @@
-using Microsoft.EntityFrameworkCore;
 using Finance.Application.Abstractions;
+using Finance.Domain.Common;
 using Finance.Domain.Entities;
 using Finance.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 namespace Finance.Infrastructure.Repositories;
 
@@ -9,37 +10,44 @@ public class BaseRepository<T>(FinanceDbContext dbContext) : IBaseRepository<T> 
 {
     protected readonly FinanceDbContext DbContext = dbContext;
 
-    public async Task<T> AddAsync(T entity)
+    public async Task<T> AddAsync(T entity, CancellationToken cancellationToken = default)
     {
-        await DbContext.Set<T>().AddAsync(entity);
-        await DbContext.SaveChangesAsync();
+        await DbContext.Set<T>().AddAsync(entity, cancellationToken);
+        await DbContext.SaveChangesAsync(cancellationToken);
         return entity;
     }
 
-    public virtual async Task<T?> GetByIdAsync(Guid id)
+    public virtual Task<T?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await DbContext.Set<T>().SingleOrDefaultAsync(e => e.Id == id);
+        return DbContext.Set<T>().SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
     }
 
-    public virtual async Task<List<T>> GetAllAsync()
+    public async Task RemoveAsync(T entity, CancellationToken cancellationToken = default)
     {
-        return await DbContext.Set<T>().ToListAsync();
+        DbContext.Set<T>().Remove(entity);
+        await DbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<T> UpdateAsync(T entity)
+    public Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        DbContext.Set<T>().Update(entity);
-        await DbContext.SaveChangesAsync();
-        return entity;
+        return DbContext.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task RemoveAsync(Guid id)
+    protected static async Task<PaginatedList<TItem>> PaginateAsync<TItem>(
+        IQueryable<TItem> query, int page, int pageSize, CancellationToken cancellationToken)
     {
-        var entity = await DbContext.Set<T>().FindAsync(id);
-        if (entity != null)
+        var totalCount = await query.CountAsync(cancellationToken);
+        var items = await query
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(cancellationToken);
+
+        return new PaginatedList<TItem>
         {
-            DbContext.Set<T>().Remove(entity);
-            await DbContext.SaveChangesAsync();
-        }
+            Items = items,
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = totalCount
+        };
     }
 }

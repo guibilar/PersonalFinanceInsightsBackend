@@ -1,44 +1,45 @@
-
-
 using Finance.Application.Abstractions;
+using Finance.Application.Models;
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
-using Finance.Domain.Enums;
+using Finance.Domain.Exceptions;
 
 namespace Finance.Application.Services;
 
 public class BudgetService(IBudgetRepository budgetRepository) : IBudgetService
 {
-    public async Task<Budget> AddAsync(Budget budget)
+    public async Task<BudgetSummary> AddAsync(Budget budget, CancellationToken cancellationToken = default)
     {
-        return await budgetRepository.AddAsync(budget);
+        await budgetRepository.AddAsync(budget, cancellationToken);
+        return new BudgetSummary(budget, TotalSpent: 0);
     }
 
-    public async Task<Budget?> GetByIdAsync(Guid id)
+    public async Task<BudgetSummary> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await budgetRepository.GetByIdAsync(id);
+        return await budgetRepository.GetSummaryAsync(id, cancellationToken)
+               ?? throw new NotFoundException(nameof(Budget), id);
     }
 
-    public async Task<Budget> UpdateAsync(Budget budget)
+    public async Task<BudgetSummary> UpdateAsync(Budget budget, CancellationToken cancellationToken = default)
     {
-        var existing = await budgetRepository.GetByIdAsync(budget.Id)
-                       ?? throw new KeyNotFoundException($"Budget with id {budget.Id} not found.");
+        var existing = await budgetRepository.GetByIdAsync(budget.Id, cancellationToken)
+                       ?? throw new NotFoundException(nameof(Budget), budget.Id);
 
-        // Update the tracked entity so its linked transactions (and totals) are kept.
         existing.Name = budget.Name;
         existing.Description = budget.Description;
         existing.Status = budget.Status;
         existing.Amount = budget.Amount;
+        await budgetRepository.SaveChangesAsync(cancellationToken);
 
-        return await budgetRepository.UpdateAsync(existing);
+        return await GetByIdAsync(budget.Id, cancellationToken);
     }
 
-    public async Task RemoveAsync(Guid id)
+    public async Task RemoveAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        var budget = await budgetRepository.GetByIdAsync(id)
-                     ?? throw new KeyNotFoundException($"Budget with id {id} not found.");
+        var budget = await budgetRepository.GetByIdAsync(id, cancellationToken)
+                     ?? throw new NotFoundException(nameof(Budget), id);
 
         // The foreign key has no ON DELETE action, so unlink transactions before deleting.
         foreach (var transaction in budget.Transactions)
@@ -46,11 +47,11 @@ public class BudgetService(IBudgetRepository budgetRepository) : IBudgetService
             transaction.BudgetId = null;
         }
 
-        await budgetRepository.RemoveAsync(budget.Id);
+        await budgetRepository.RemoveAsync(budget, cancellationToken);
     }
 
-    public async Task<PaginatedList<Budget>> FilterAsync(BudgetFilterDto? filter)
+    public Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, CancellationToken cancellationToken = default)
     {
-        return await budgetRepository.FilterAsync(filter);
+        return budgetRepository.FilterAsync(filter, cancellationToken);
     }
 }
