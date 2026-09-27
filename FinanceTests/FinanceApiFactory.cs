@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Finance.Infrastructure;
 using Finance.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -44,7 +45,8 @@ public class FinanceApiFactory(Action<IServiceCollection>? configureServices = n
                 }
                 else
                 {
-                    options.UseNpgsql(new NpgsqlConnectionStringBuilder(PostgresServer) { Database = _databaseName }.ConnectionString);
+                    options.UseNpgsql(new NpgsqlConnectionStringBuilder(PostgresServer) { Database = _databaseName }.ConnectionString,
+                        DependencyInjection.ConfigureNpgsql);
                 }
             });
             configureServices?.Invoke(services);

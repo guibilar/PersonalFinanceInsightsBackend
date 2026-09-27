@@ -113,7 +113,7 @@ public class ImportTests
 
     // ---- Endpoint
 
-    private static MultipartFormDataContent Statement(string csv, string? account = "CreditCard")
+    internal static MultipartFormDataContent Statement(string csv, string? account = "CreditCard")
     {
         var form = new MultipartFormDataContent { { new ByteArrayContent(Encoding.UTF8.GetBytes(csv)), "file", "statement.csv" } };
         if (account != null) form.Add(new StringContent(account), "account");

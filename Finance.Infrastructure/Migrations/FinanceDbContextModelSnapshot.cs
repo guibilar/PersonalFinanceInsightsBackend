@@ -86,6 +86,9 @@ namespace Finance.Infrastructure.Migrations
 
                     b.HasIndex("BudgetId");
 
+                    b.HasIndex("Account", "Hash")
+                        .IsUnique();
+
                     b.ToTable("Transactions");
                 });
 

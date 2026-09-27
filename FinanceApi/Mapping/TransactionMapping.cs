@@ -7,16 +7,17 @@ namespace FinanceApi.Mapping;
 
 public static class TransactionMapping
 {
+    // Called after model validation, which guarantees the required values are present.
     public static Transaction ToModel(this TransactionInputDto dto)
     {
-        var date = DateTime.SpecifyKind(dto.Date, DateTimeKind.Utc);
+        var date = DateTime.SpecifyKind(dto.Date!.Value, DateTimeKind.Utc);
         return new Transaction
         {
             Date = date,
             Description = dto.Description,
             Amount = dto.Amount,
-            Category = dto.Category,
-            TransactionType = dto.TransactionType,
+            Category = dto.Category!.Value,
+            TransactionType = dto.TransactionType!.Value,
             Account = dto.Account,
             // Computed server-side, same as the CSV sync, so duplicates are detected consistently.
             Hash = TransactionHashHelper.GenerateTransactionHash(dto.Amount, date, dto.Description),

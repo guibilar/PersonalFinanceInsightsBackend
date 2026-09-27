@@ -2,6 +2,7 @@ using Finance.Application.Abstractions;
 using Finance.Contracts.Inputs;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
+using Finance.Domain.Enums;
 using Finance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,6 +11,9 @@ namespace Finance.Infrastructure.Repositories;
 public class TransactionRepository(FinanceDbContext dbContext)
     : BaseRepository<Transaction>(dbContext), ITransactionRepository
 {
+    // First half of the advisory lock key for imports (the account is the second); any constant unique to this app.
+    private const int ImportLockKey = 0x46494e41; // "FINA"
+
     public Task<List<Transaction>> GetAllAsync(CancellationToken cancellationToken = default)
     {
         return DbContext.Transactions
@@ -29,9 +33,41 @@ public class TransactionRepository(FinanceDbContext dbContext)
         return FilterQuery(filter).ToListAsync(cancellationToken);
     }
 
-    public Task<bool> ExistsByHashAsync(string hash, CancellationToken cancellationToken = default)
+    public Task<bool> ExistsByHashAsync(AccountType account, string hash, CancellationToken cancellationToken = default)
     {
-        return DbContext.Transactions.AnyAsync(t => t.Hash == hash, cancellationToken);
+        return DbContext.Transactions.AnyAsync(t => t.Account == account && t.Hash == hash, cancellationToken);
+    }
+
+    public Task<int> AddMissingAsync(
+        AccountType account, IReadOnlyCollection<Transaction> transactions, CancellationToken cancellationToken = default)
+    {
+        // The retrying execution strategy only allows an explicit transaction when it can replay all of it.
+        return DbContext.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
+        {
+            DbContext.ChangeTracker.Clear();
+            // The in-memory test provider has no transactions; it runs the same steps without isolation.
+            await using var dbTransaction = DbContext.Database.IsRelational()
+                ? await DbContext.Database.BeginTransactionAsync(ct)
+                : null;
+            if (DbContext.Database.IsNpgsql())
+            {
+                // Held until commit: a concurrent import for the same account waits, then sees these rows as existing.
+                // Without it, both would insert the same rows and fail on the unique index (or deadlock on it).
+                await DbContext.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock({ImportLockKey}, {(int)account})", ct);
+            }
+
+            var hashes = transactions.Select(t => t.Hash).ToList();
+            var existing = (await DbContext.Transactions
+                .Where(t => t.Account == account && hashes.Contains(t.Hash))
+                .Select(t => t.Hash)
+                .ToListAsync(ct)).ToHashSet();
+            var toAdd = transactions.Where(t => !existing.Contains(t.Hash)).ToList();
+
+            DbContext.Transactions.AddRange(toAdd);
+            await SaveChangesAsync(ct);
+            if (dbTransaction is not null) await dbTransaction.CommitAsync(ct);
+            return toAdd.Count;
+        }, cancellationToken);
     }
 
     private IQueryable<Transaction> FilterQuery(TransactionFilterDto filter)

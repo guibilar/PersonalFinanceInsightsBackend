@@ -1,8 +1,10 @@
 using Finance.Application.Abstractions;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
+using Finance.Domain.Exceptions;
 using Finance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Finance.Infrastructure.Repositories;
 
@@ -13,7 +15,7 @@ public class BaseRepository<T>(FinanceDbContext dbContext) : IBaseRepository<T> 
     public async Task<T> AddAsync(T entity, CancellationToken cancellationToken = default)
     {
         await DbContext.Set<T>().AddAsync(entity, cancellationToken);
-        await DbContext.SaveChangesAsync(cancellationToken);
+        await SaveChangesAsync(cancellationToken);
         return entity;
     }
 
@@ -25,13 +27,25 @@ public class BaseRepository<T>(FinanceDbContext dbContext) : IBaseRepository<T> 
     public async Task RemoveAsync(T entity, CancellationToken cancellationToken = default)
     {
         DbContext.Set<T>().Remove(entity);
-        await DbContext.SaveChangesAsync(cancellationToken);
+        await SaveChangesAsync(cancellationToken);
     }
 
-    public Task SaveChangesAsync(CancellationToken cancellationToken = default)
+    public async Task SaveChangesAsync(CancellationToken cancellationToken = default)
     {
-        return DbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await DbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex) when (IsUniqueViolation(ex))
+        {
+            // A concurrent request stored the same record first; the failed entities stay tracked, so drop them.
+            DbContext.ChangeTracker.Clear();
+            throw new DuplicateEntityException($"An identical {typeof(T).Name.ToLowerInvariant()} already exists.");
+        }
     }
+
+    private static bool IsUniqueViolation(DbUpdateException ex) =>
+        ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
     protected static async Task<PaginatedList<TItem>> PaginateAsync<TItem>(
         IQueryable<TItem> query, int page, int pageSize, CancellationToken cancellationToken)
