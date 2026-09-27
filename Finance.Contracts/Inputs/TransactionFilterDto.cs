@@ -16,6 +16,10 @@ public class TransactionFilterDto
     public Category? Category { get; set; }
     public Guid? BudgetId { get; set; }
 
+    /// <summary>Defaults to newest first. Ties are ordered by date (newest first), then id, so paging is stable.</summary>
+    public TransactionSortField SortBy { get; set; } = TransactionSortField.Date;
+    public SortDirection SortDirection { get; set; } = SortDirection.Descending;
+
     [Range(1, int.MaxValue)]
     public int Page { get; set; } = 1;
 
