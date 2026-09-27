@@ -49,6 +49,12 @@ frontend reaches the API on the same origin (nginx in production, the dev-server
 
 The keys that encrypt the cookie are stored in the database, so sessions survive a container restart.
 
+**Behind a reverse proxy:** the API believes `X-Forwarded-Proto` / `X-Forwarded-For` only from proxies on
+`ReverseProxy:TrustedNetworks` (loopback plus the private ranges by default, which covers the frontend's
+nginx container). When the browser connects over HTTPS somewhere in front, the session cookie is marked
+`Secure`. Narrow the list (e.g. `ReverseProxy__TrustedNetworks__0=172.18.0.0/16`) if other machines on
+your network can reach the API directly.
+
 ## Import bank statements
 
 Upload a CIBC CSV export with the account it belongs to (`CreditCard`, `Chequing` or `Savings`):
