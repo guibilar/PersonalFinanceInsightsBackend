@@ -16,11 +16,11 @@ public class ApiTests : IAsyncLifetime
 
     public ApiTests() => _client = _factory.CreateClient();
 
-    public Task InitializeAsync() => Task.CompletedTask;
+    public ValueTask InitializeAsync() => ValueTask.CompletedTask;
 
     // Async disposal: a synchronous Dispose() blocks on the factory's async cleanup and can deadlock
     // xUnit's limited worker threads on machines with few cores (as on CI runners).
-    public async Task DisposeAsync() => await _factory.DisposeAsync();
+    public ValueTask DisposeAsync() => _factory.DisposeAsync();
 
     private static Transaction NewTransaction(string description, decimal amount, DateTime date, Guid? budgetId = null) => new()
     {

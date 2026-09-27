@@ -85,13 +85,18 @@ The dashboard's current month and year follow `Reports:TimeZone` in `appsettings
 
 ## Tests
 
+xUnit v3 on Microsoft Testing Platform (enabled in `global.json`), so `dotnet test` runs the test project
+as an executable.
+
 ```bash
-dotnet test                                                          # in-memory database
-FINANCE_TEST_POSTGRES="Host=localhost;Username=postgres;Password=postgres" dotnet test
+dotnet test                                    # in-memory database (fast; 4 PostgreSQL-only tests are skipped)
+FINANCE_TEST_POSTGRES=container dotnet test    # starts PostgreSQL 15 in Docker (Testcontainers), removes it afterwards
+FINANCE_TEST_POSTGRES="Host=localhost;Username=postgres;Password=postgres" dotnet test   # your own server
+dotnet test -- --filter-class FinanceTests.AuthTests                                  # one class
 ```
 
-With `FINANCE_TEST_POSTGRES` set, every test class gets its own freshly migrated PostgreSQL database
-(dropped afterwards). CI runs both, plus a check that the migrations match the model and a Docker build.
+On PostgreSQL every test factory gets its own freshly migrated database, dropped afterwards. CI runs
+the in-memory and container modes, plus a check that the migrations match the model and a Docker build.
 
 ## Docker
 

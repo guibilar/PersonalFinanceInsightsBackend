@@ -9,19 +9,6 @@ jobs:
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -38,10 +25,11 @@ jobs:
       - name: Tests (in-memory database)
         run: dotnet test --no-build
 
+      # The tests start PostgreSQL themselves in Docker (Testcontainers) and remove it afterwards.
       - name: Tests (PostgreSQL, migrated from scratch)
         run: dotnet test --no-build
         env:
-          FINANCE_TEST_POSTGRES: Host=localhost;Port=5432;Username=postgres;Password=postgres
+          FINANCE_TEST_POSTGRES: container
 
   docker:
     runs-on: ubuntu-latest
