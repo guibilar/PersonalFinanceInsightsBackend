@@ -1,12 +1,9 @@
-using CrossCutting.Services;
-using CrossCutting.Services.Interfaces;
-using FinanceApi.Converters;
-using FinanceDto.Inputs;
 using Microsoft.AspNetCore.Mvc;
-using TransactionInputDto = FinanceDto.Inputs.TransactionInputDto;
+using FinanceApi.Mapping;
+using Finance.Application.Services.Interfaces;
+using Finance.Contracts.Inputs;
 
-namespace FinanceApi.Controllers
-{
+namespace FinanceApi.Controllers{
     [Route("api/[controller]")]
     [ApiController]
     public class TransactionController(ITransactionService transactionService) : ControllerBase
