@@ -86,6 +86,8 @@ namespace Finance.Infrastructure.Migrations
 
                     b.HasIndex("BudgetId");
 
+                    b.HasIndex("Date");
+
                     b.HasIndex("Account", "Hash")
                         .IsUnique();
 

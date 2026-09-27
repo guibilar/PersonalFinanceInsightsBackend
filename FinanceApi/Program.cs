@@ -4,6 +4,7 @@ using Finance.Application.Reports;
 using Finance.Infrastructure;
 using FinanceApi.Errors;
 using FinanceApi.Health;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,7 +29,7 @@ builder.Services
     .AddInfrastructure(builder.Configuration);
 
 builder.Services.AddHealthChecks()
-    .AddCheck<DatabaseHealthCheck>("database");
+    .AddCheck<DatabaseHealthCheck>("database", tags: [ReadyTag]);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -60,9 +61,16 @@ if (app.Environment.IsDevelopment())
     app.UseCors();
 }
 
-app.MapHealthChecks("/health");
+// Liveness: the process answers (no dependencies, so a database outage doesn't get the API restarted).
+app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false });
+// Readiness: the API can serve requests. /health is kept as an alias for existing monitors.
+app.MapHealthChecks("/health/ready", new HealthCheckOptions { Predicate = check => check.Tags.Contains(ReadyTag) });
+app.MapHealthChecks("/health", new HealthCheckOptions { Predicate = check => check.Tags.Contains(ReadyTag) });
 app.MapControllers();
 app.Run();
 
 // Exposed for WebApplicationFactory in the integration tests.
-public partial class Program;
+public partial class Program
+{
+    private const string ReadyTag = "ready";
+}

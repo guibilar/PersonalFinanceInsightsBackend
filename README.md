@@ -12,7 +12,7 @@ PostgreSQL via EF Core.
 | `Finance.Contracts` | Request/response DTOs, report models | Domain |
 | `Finance.Application` | Services, repository/parser interfaces, import rules | Domain, Contracts |
 | `Finance.Infrastructure` | EF Core `DbContext`, migrations, repositories, CIBC CSV parser | Application |
-| `FinanceApi` | Controllers, mapping, error handling, `/health` | Infrastructure |
+| `FinanceApi` | Controllers, mapping, error handling, health checks | Infrastructure |
 | `Finance.Cli` | Console tool: charts and Excel export from local statements | Infrastructure |
 | `FinanceTests` | API tests (xUnit + `WebApplicationFactory`) | FinanceApi |
 
@@ -73,6 +73,12 @@ docker compose up --build   # API on http://localhost:5096, migrations applied o
 
 `POSTGRES_PASSWORD` only takes effect when the database volume is first created; for an existing
 volume, use the password it was created with.
+
+PostgreSQL is published on `127.0.0.1:5432` only: reachable from this machine (psql, `dotnet run`),
+not from the rest of the network.
+
+Health checks: `/health/live` answers while the process runs (use it for restarts);
+`/health/ready` (and its alias `/health`) also checks the database.
 
 Outside Development the connection string must come from the environment
 (`ConnectionStrings__DefaultConnection`); the API refuses to start without it.

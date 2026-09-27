@@ -14,15 +14,6 @@ public class TransactionRepository(FinanceDbContext dbContext)
     // First half of the advisory lock key for imports (the account is the second); any constant unique to this app.
     private const int ImportLockKey = 0x46494e41; // "FINA"
 
-    public Task<List<Transaction>> GetAllAsync(CancellationToken cancellationToken = default)
-    {
-        return DbContext.Transactions
-            .AsNoTracking()
-            .Include(x => x.Budget)
-            .OrderByDescending(x => x.Date)
-            .ToListAsync(cancellationToken);
-    }
-
     public Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default)
     {
         return PaginateAsync(FilterQuery(filter), filter.Page, filter.PageSize, cancellationToken);
