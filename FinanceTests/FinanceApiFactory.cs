@@ -70,9 +70,12 @@ public class FinanceApiFactory(Action<IServiceCollection>? configureServices = n
         {
             _createdDatabase = false;
             using var scope = Services.CreateScope();
-            await scope.ServiceProvider.GetRequiredService<FinanceDbContext>().Database.EnsureDeletedAsync();
+            // ConfigureAwait(false): never resume on xUnit's context, so even a synchronous Dispose() of
+            // the factory cannot deadlock on this cleanup.
+            await scope.ServiceProvider.GetRequiredService<FinanceDbContext>().Database.EnsureDeletedAsync()
+                .ConfigureAwait(false);
         }
-        await base.DisposeAsync();
+        await base.DisposeAsync().ConfigureAwait(false);
     }
 
     public async Task SeedAsync(Action<FinanceDbContext> seed)

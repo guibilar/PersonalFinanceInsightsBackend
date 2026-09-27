@@ -9,14 +9,18 @@ using Finance.Domain.Enums;
 
 namespace FinanceTests;
 
-public class ApiTests : IDisposable
+public class ApiTests : IAsyncLifetime
 {
     private readonly FinanceApiFactory _factory = new();
     private readonly HttpClient _client;
 
     public ApiTests() => _client = _factory.CreateClient();
 
-    public void Dispose() => _factory.Dispose();
+    public Task InitializeAsync() => Task.CompletedTask;
+
+    // Async disposal: a synchronous Dispose() blocks on the factory's async cleanup and can deadlock
+    // xUnit's limited worker threads on machines with few cores (as on CI runners).
+    public async Task DisposeAsync() => await _factory.DisposeAsync();
 
     private static Transaction NewTransaction(string description, decimal amount, DateTime date, Guid? budgetId = null) => new()
     {
