@@ -21,13 +21,15 @@ class Program
             .Build();
         var options = configuration.GetSection(ImportOptions.SectionName).Get<ImportOptions>() ?? new ImportOptions();
         var parser = new CibcCsvParser(Options.Create(options));
+        // No database here: the rules in import-rules.json, not the ones edited in the app.
+        var categoryRules = new CategoryMatcher(options.ToCategoryRules());
 
         List<Transaction> Read(string file, AccountType account)
         {
             using var stream = File.OpenRead(FileHelper.GetInputPathForFile(file, "CIBC", "csv"));
             try
             {
-                return parser.Parse(stream, account);
+                return parser.Parse(stream, account, categoryRules);
             }
             catch (InvalidStatementException ex)
             {

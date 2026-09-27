@@ -8,4 +8,6 @@ public static class TextLimits
 
     // Bank descriptions are well under this; room for a note added by hand.
     public const int TransactionDescription = 200;
+
+    public const int CategoryRuleKeyword = 100;
 }

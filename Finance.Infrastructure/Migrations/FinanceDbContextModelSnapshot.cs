@@ -52,6 +52,34 @@ namespace Finance.Infrastructure.Migrations
                     b.ToTable("Budgets");
                 });
 
+            modelBuilder.Entity("Finance.Domain.Entities.CategoryRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Keyword")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Keyword")
+                        .IsUnique();
+
+                    b.HasIndex("Position");
+
+                    b.ToTable("CategoryRules");
+                });
+
             modelBuilder.Entity("Finance.Domain.Entities.Transaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -102,6 +130,20 @@ namespace Finance.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("Transactions");
+                });
+
+            modelBuilder.Entity("Finance.Infrastructure.Persistence.SeedMarker", b =>
+                {
+                    b.Property<string>("Name")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("SeededUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Name");
+
+                    b.ToTable("SeedMarkers");
                 });
 
             modelBuilder.Entity("Finance.Infrastructure.Persistence.UserSession", b =>

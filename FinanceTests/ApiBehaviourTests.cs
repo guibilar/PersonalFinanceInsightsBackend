@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Http.Json;
 using Finance.Application.Abstractions;
+using Finance.Application.Import;
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Outputs;
 using Finance.Contracts.Reports;
@@ -370,7 +371,7 @@ public class ApiBehaviourTests
 
     private class ThrowingParser : IStatementParser
     {
-        public List<Transaction> Parse(Stream statement, AccountType account) =>
+        public List<Transaction> Parse(Stream statement, AccountType account, CategoryMatcher categories) =>
             throw new InvalidDataException("Bad row in '/secret-path/cibc_credit.csv'");
     }
 }

@@ -27,7 +27,7 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
 
     private readonly ImportOptions _options = options.Value;
 
-    public List<Transaction> Parse(Stream statement, AccountType account)
+    public List<Transaction> Parse(Stream statement, AccountType account, CategoryMatcher categories)
     {
         var transactions = new List<Transaction>();
         var statementMonths = new HashSet<DateTime>();
@@ -60,7 +60,7 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
                 continue;
             }
 
-            var category = TransactionCategorizer.Categorize(description, _options);
+            var category = categories.Categorize(description);
 
             // Income is matched by keyword only; the exclusion list applies to spending.
             if (account == AccountType.Chequing && IsIncome(description))

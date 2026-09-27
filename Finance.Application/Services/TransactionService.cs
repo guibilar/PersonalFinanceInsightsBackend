@@ -16,6 +16,7 @@ public class TransactionService(
     ILogger<TransactionService> logger,
     ITransactionRepository transactionRepository,
     IBudgetRepository budgetRepository,
+    ICategoryRuleRepository categoryRuleRepository,
     IStatementParser statementParser,
     IOptions<ImportOptions> importOptions) : ITransactionService
 {
@@ -44,7 +45,7 @@ public class TransactionService(
 
     public async Task<ImportResult> ImportAsync(Stream statement, AccountType account, CancellationToken cancellationToken = default)
     {
-        var parsed = statementParser.Parse(statement, account);
+        var parsed = statementParser.Parse(statement, account, await GetCategoryMatcherAsync(cancellationToken));
 
         // Number identical rows (same day, amount and description) so repeated purchases get distinct
         // hashes, while re-importing the same statement produces the same hashes and adds nothing.
@@ -74,7 +75,7 @@ public class TransactionService(
     private async Task<List<Transaction>> SettleMonthlyRentAsync(AccountType account, List<Transaction> parsed,
         CancellationToken cancellationToken)
     {
-        var rents = parsed.Where(t => IsFixedMonthlyRent(t, importOptions.Value)).ToList();
+        var rents = parsed.Where(importOptions.Value.IsFixedMonthlyRent).ToList();
         if (rents.Count == 0) return parsed;
 
         var stored = await transactionRepository.GetRentsAsync(
@@ -135,15 +136,15 @@ public class TransactionService(
 
     public async Task<CategoryRulesResult> ApplyCategoryRulesAsync(CancellationToken cancellationToken = default)
     {
-        var options = importOptions.Value;
+        var categories = await GetCategoryMatcherAsync(cancellationToken);
         var transactions = (await transactionRepository.GetRuleCategorizedAsync(cancellationToken))
-            .Where(t => !IsFixedMonthlyRent(t, options))
+            .Where(t => !importOptions.Value.IsFixedMonthlyRent(t))
             .ToList();
 
         var updated = 0;
         foreach (var transaction in transactions)
         {
-            var category = TransactionCategorizer.Categorize(transaction.Description, options);
+            var category = categories.Categorize(transaction.Description);
             if (category == transaction.Category) continue;
             transaction.Category = category;
             updated++;
@@ -154,11 +155,8 @@ public class TransactionService(
         return new CategoryRulesResult(transactions.Count, updated);
     }
 
-    // The rent the importer adds each month is Rent by definition, whatever its description says to the rules.
-    private static bool IsFixedMonthlyRent(Transaction transaction, ImportOptions options) =>
-        options.MonthlyRent is { } rent &&
-        transaction is { Account: AccountType.Chequing, Category: Category.Rent } &&
-        transaction.Description == rent.Description;
+    private async Task<CategoryMatcher> GetCategoryMatcherAsync(CancellationToken cancellationToken) =>
+        new(await categoryRuleRepository.GetAllAsync(cancellationToken));
 
     public async Task LinkTransactionToBudgetAsync(Guid budgetId, Guid transactionId, CancellationToken cancellationToken = default)
     {

@@ -20,7 +20,10 @@ public interface ITransactionService
     /// <summary>Corrects the description and category; a changed category is then kept when rules are re-applied.</summary>
     Task<Transaction> UpdateAsync(Guid id, string description, Category category, CancellationToken cancellationToken = default);
 
-    /// <summary>Re-runs the current category rules over stored transactions.</summary>
+    /// <summary>
+    /// Re-runs the current category rules over stored transactions, except hand-picked categories, savings and the
+    /// fixed monthly rent.
+    /// </summary>
     Task<CategoryRulesResult> ApplyCategoryRulesAsync(CancellationToken cancellationToken = default);
     Task LinkTransactionToBudgetAsync(Guid budgetId, Guid transactionId, CancellationToken cancellationToken = default);
     Task UnlinkTransactionFromBudgetAsync(Guid transactionId, CancellationToken cancellationToken = default);

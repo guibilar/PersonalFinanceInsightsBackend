@@ -70,9 +70,10 @@ curl -F file=@cibc_credit.csv -F account=CreditCard http://localhost:5096/api/Tr
 ```
 
 Re-importing a statement, or an overlapping one, only adds rows that aren't stored yet; identical
-purchases on the same day are kept. Categories, excluded descriptions, income sources, card payments and
-the fixed monthly rent are configured in `Finance.Infrastructure/Import/import-rules.json` (override with
-`Import__...` environment variables).
+purchases on the same day are kept. Excluded descriptions, income sources, card payments and the fixed
+monthly rent are configured in `Finance.Infrastructure/Import/import-rules.json` (override with
+`Import__...` environment variables). Categories come from the category rules stored in the database
+(see [Category rules](#category-rules)).
 
 Money in on a credit card statement is imported as a refund (a credit in the purchase's category), except
 the card's own payments, recognised by `CardPaymentKeywords`. Refunds reduce spending in the reports and
@@ -100,9 +101,31 @@ Transactions are duplicates only within the same account.
 ## Correcting categories
 
 `PUT /api/Transaction/{id}` changes a transaction's description and category. A category picked by hand is
-locked: `POST /api/Transaction/ApplyCategoryRules` re-runs the current rules from `import-rules.json` over
-everything else (savings rows and the fixed monthly rent are left alone). Editing never changes the duplicate
+locked: `POST /api/Transaction/ApplyCategoryRules` re-runs the current category rules over everything else
+(savings rows, deleted rows and the fixed monthly rent are left alone). Editing never changes the duplicate
 hash, so re-importing the statement still skips the row.
+
+## Category rules
+
+A rule is a keyword and a category: a transaction whose description contains the keyword (ignoring case)
+gets the category. Rules are checked in order and the first match wins; no match means `Other`. With
+`MonthlyRent` set, a chequing payment whose rule says `Rent` is replaced by the fixed rent.
+
+The rules live in the database and are edited in the app (the frontend's Rules page), so a new merchant
+needs no redeploy:
+
+- `GET /api/CategoryRules`: all rules in order, as `{id, keyword, category, position}` (positions run 0..n-1).
+- `POST /api/CategoryRules` `{keyword, category, position?}`: adds a rule at the end, or inserts it at
+  `position`. Keywords are stored trimmed and upper-case, up to 100 characters, and unique (409 otherwise).
+- `PUT /api/CategoryRules/{id}` `{keyword, category}`, `DELETE /api/CategoryRules/{id}`.
+- `POST /api/CategoryRules/{id}/Move` `{position}`: moves a rule (past the end means last); returns all rules.
+- `POST /api/CategoryRules/Preview` `{keyword, category, excludeTransactionId?}`: how many stored transactions
+  would change category if the rule were added first and the rules re-applied, with up to five examples.
+
+Changed rules apply to later imports; `POST /api/Transaction/ApplyCategoryRules` applies them to stored
+transactions. `CategoryRules` in `import-rules.json` is only the initial set: the API copies it into the
+database (one rule per keyword, in order) the first time it starts on a database, and never again, even after
+every rule was deleted. The CLI has no database, so it still categorises with the file's rules.
 
 ## Budgets
 

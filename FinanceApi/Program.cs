@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Finance.Application;
 using Finance.Application.Reports;
 using Finance.Infrastructure;
+using Finance.Infrastructure.Persistence;
 using FinanceApi;
 using FinanceApi.Auth;
 using FinanceApi.Errors;
@@ -51,6 +52,7 @@ if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
     await app.Services.MigrateDatabaseAsync();
 }
 await app.Services.EnsureInitialUserAsync(app.Logger);
+await app.Services.SeedCategoryRulesAsync(app.Logger);
 
 // First, so everything after it (the auth cookie in particular) sees the scheme the browser used.
 app.UseForwardedHeaders();
