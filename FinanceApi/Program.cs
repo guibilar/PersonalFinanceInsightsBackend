@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Finance.Application;
 using Finance.Application.Reports;
 using Finance.Infrastructure;
+using FinanceApi;
 using FinanceApi.Auth;
 using FinanceApi.Errors;
 using FinanceApi.Health;
@@ -17,6 +18,7 @@ builder.Configuration
 builder.Services.AddControllers()
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
+builder.Services.AddReverseProxySupport(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 
@@ -50,6 +52,8 @@ if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
 }
 await app.Services.EnsureInitialUserAsync(app.Logger);
 
+// First, so everything after it (the auth cookie in particular) sees the scheme the browser used.
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
