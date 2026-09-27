@@ -1,4 +1,4 @@
-# Copy .env.example to .env and set POSTGRES_PASSWORD before `docker compose up --build`.
+# Copy .env.example to .env and set the passwords before `docker compose up --build`.
 services:
   app:
     build: .
@@ -8,6 +8,10 @@ services:
     environment:
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-FinanceDb};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
       Database__MigrateOnStartup: "true"
+      # The account to sign in with, created on first start (there is no public sign-up).
+      Auth__InitialUser__Username: "${FINANCE_USERNAME:?Set FINANCE_USERNAME in .env}"
+      Auth__InitialUser__Password: "${FINANCE_PASSWORD:?Set FINANCE_PASSWORD in .env}"
+      Auth__InitialUser__ResetPassword: "${FINANCE_RESET_PASSWORD:-false}"
     depends_on:
       db:
         condition: service_healthy

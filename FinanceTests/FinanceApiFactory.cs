@@ -17,8 +17,13 @@ namespace FinanceTests;
 /// <summary>
 /// Runs the real API against a private database: in-memory by default, or a freshly migrated PostgreSQL
 /// database when FINANCE_TEST_POSTGRES holds a server connection string (as in CI).
+/// Requests count as signed in (see <see cref="TestSignIn"/>) unless <paramref name="signedIn"/> is false,
+/// which leaves the real cookie sign-in in charge.
 /// </summary>
-public class FinanceApiFactory(Action<IServiceCollection>? configureServices = null) : WebApplicationFactory<Program>
+public class FinanceApiFactory(
+    Action<IServiceCollection>? configureServices = null,
+    bool signedIn = true,
+    IReadOnlyDictionary<string, string?>? settings = null) : WebApplicationFactory<Program>
 {
     public const string PostgresVariable = "FINANCE_TEST_POSTGRES";
 
@@ -33,6 +38,16 @@ public class FinanceApiFactory(Action<IServiceCollection>? configureServices = n
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
+        {
+            builder.UseSetting(key, value);
+        }
+        if (PostgresServer is not null)
+        {
+            // Migrated by the app itself, as in Docker, so startup work (the initial account) sees the tables.
+            builder.UseSetting("Database:MigrateOnStartup", "true");
+        }
+
         builder.ConfigureServices(services =>
         {
             services.RemoveAll<DbContextOptions<FinanceDbContext>>();
@@ -49,6 +64,10 @@ public class FinanceApiFactory(Action<IServiceCollection>? configureServices = n
                         DependencyInjection.ConfigureNpgsql);
                 }
             });
+            if (signedIn)
+            {
+                TestSignIn.Register(services);
+            }
             configureServices?.Invoke(services);
         });
     }
@@ -56,12 +75,7 @@ public class FinanceApiFactory(Action<IServiceCollection>? configureServices = n
     protected override IHost CreateHost(IHostBuilder builder)
     {
         var host = base.CreateHost(builder);
-        if (PostgresServer is not null)
-        {
-            using var scope = host.Services.CreateScope();
-            scope.ServiceProvider.GetRequiredService<FinanceDbContext>().Database.Migrate();
-            _createdDatabase = true;
-        }
+        _createdDatabase = PostgresServer is not null;
         return host;
     }
 

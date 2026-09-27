@@ -32,6 +32,23 @@ dotnet run --project FinanceApi          # http://localhost:5096, Swagger UI at 
 
 The frontend's dev server proxies `/api` to `http://localhost:5096`.
 
+## Signing in
+
+Every endpoint except `POST /api/Auth/login`, `POST /api/Auth/logout` and the health checks needs a
+signed-in user. Signing in sets an HttpOnly, SameSite=Strict session cookie (`finance_session`); the
+frontend reaches the API on the same origin (nginx in production, the dev-server proxy locally).
+
+- **Accounts:** there is no public sign-up. `Auth:InitialUser:Username` / `Password` create an account at
+  startup if it doesn't exist (Docker: `FINANCE_USERNAME` / `FINANCE_PASSWORD` in `.env`). In Development
+  the account is `dev` / `development-only`. Passwords need at least 12 characters.
+- **Forgotten password:** start once with `Auth:InitialUser:ResetPassword=true` (`FINANCE_RESET_PASSWORD=true`),
+  then remove it. It sets the configured password and clears a lockout.
+- **Lockout:** 5 wrong passwords lock the account for 15 minutes.
+- **Data:** everyone who can sign in sees the same transactions and budgets.
+- Other endpoints: `GET /api/Auth/me`, `POST /api/Auth/change-password`.
+
+The keys that encrypt the cookie are stored in the database, so sessions survive a container restart.
+
 ## Import bank statements
 
 Upload a CIBC CSV export with the account it belongs to (`CreditCard`, `Chequing` or `Savings`):
@@ -79,7 +96,7 @@ With `FINANCE_TEST_POSTGRES` set, every test class gets its own freshly migrated
 ## Docker
 
 ```bash
-cp .env.example .env        # set POSTGRES_PASSWORD
+cp .env.example .env        # set POSTGRES_PASSWORD and FINANCE_USERNAME / FINANCE_PASSWORD
 docker compose up --build   # API on http://localhost:5096, migrations applied on start
 ```
 
