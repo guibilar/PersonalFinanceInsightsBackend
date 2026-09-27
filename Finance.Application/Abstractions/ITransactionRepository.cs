@@ -9,6 +9,9 @@ public interface ITransactionRepository : IBaseRepository<Transaction>
 {
     Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default);
     Task<List<Transaction>> FilterNoPaginationAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default);
+    /// <summary>Tracked: every transaction whose category the rules decide (not hand-picked, not savings).</summary>
+    Task<List<Transaction>> GetRuleCategorizedAsync(CancellationToken cancellationToken = default);
+
     Task<bool> ExistsByHashAsync(AccountType account, string hash, CancellationToken cancellationToken = default);
 
     /// <summary>

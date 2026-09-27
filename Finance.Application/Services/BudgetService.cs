@@ -1,5 +1,6 @@
 using Finance.Application.Abstractions;
 using Finance.Application.Models;
+using Finance.Application.Reports;
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Domain.Common;
@@ -8,7 +9,7 @@ using Finance.Domain.Exceptions;
 
 namespace Finance.Application.Services;
 
-public class BudgetService(IBudgetRepository budgetRepository) : IBudgetService
+public class BudgetService(IBudgetRepository budgetRepository, ReportingCalendar calendar) : IBudgetService
 {
     public async Task<BudgetSummary> AddAsync(Budget budget, CancellationToken cancellationToken = default)
     {
@@ -18,7 +19,7 @@ public class BudgetService(IBudgetRepository budgetRepository) : IBudgetService
 
     public async Task<BudgetSummary> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await budgetRepository.GetSummaryAsync(id, cancellationToken)
+        return await budgetRepository.GetSummaryAsync(id, calendar.CurrentMonthStart(), cancellationToken)
                ?? throw new NotFoundException(nameof(Budget), id);
     }
 
@@ -31,6 +32,7 @@ public class BudgetService(IBudgetRepository budgetRepository) : IBudgetService
         existing.Description = budget.Description;
         existing.Status = budget.Status;
         existing.Amount = budget.Amount;
+        existing.Period = budget.Period;
         await budgetRepository.SaveChangesAsync(cancellationToken);
 
         return await GetByIdAsync(budget.Id, cancellationToken);
@@ -52,6 +54,6 @@ public class BudgetService(IBudgetRepository budgetRepository) : IBudgetService
 
     public Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, CancellationToken cancellationToken = default)
     {
-        return budgetRepository.FilterAsync(filter, cancellationToken);
+        return budgetRepository.FilterAsync(filter, calendar.CurrentMonthStart(), cancellationToken);
     }
 }

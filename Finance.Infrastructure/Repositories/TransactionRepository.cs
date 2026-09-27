@@ -24,6 +24,19 @@ public class TransactionRepository(FinanceDbContext dbContext)
         return FilterQuery(filter).ToListAsync(cancellationToken);
     }
 
+    // Tracked, with its budget so the response after an edit still shows the link.
+    public override Task<Transaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
+    {
+        return DbContext.Transactions.Include(t => t.Budget).SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
+    }
+
+    public Task<List<Transaction>> GetRuleCategorizedAsync(CancellationToken cancellationToken = default)
+    {
+        return DbContext.Transactions
+            .Where(t => !t.CategoryLocked && t.Account != AccountType.Savings)
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<bool> ExistsByHashAsync(AccountType account, string hash, CancellationToken cancellationToken = default)
     {
         return DbContext.Transactions.AnyAsync(t => t.Account == account && t.Hash == hash, cancellationToken);

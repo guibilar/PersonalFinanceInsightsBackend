@@ -63,6 +63,26 @@ public class TransactionController(ITransactionService transactionService) : Con
         return result.Map(TransactionMapping.ToOutput);
     }
 
+    /// <summary>Corrects a transaction's description and category (the category is then locked against rule changes).</summary>
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<TransactionOutputDto>> Update(Guid id, TransactionUpdateDto update, CancellationToken cancellationToken)
+    {
+        var transaction = await transactionService.UpdateAsync(id, update.Description, update.Category!.Value, cancellationToken);
+        return transaction.ToOutput();
+    }
+
+    /// <summary>Re-applies the current category rules (import-rules.json) to stored transactions.</summary>
+    [HttpPost("ApplyCategoryRules")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<ActionResult<CategoryRulesResultDto>> ApplyCategoryRules(CancellationToken cancellationToken)
+    {
+        var result = await transactionService.ApplyCategoryRulesAsync(cancellationToken);
+        return new CategoryRulesResultDto { Checked = result.Checked, Updated = result.Updated };
+    }
+
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]

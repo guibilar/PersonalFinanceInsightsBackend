@@ -8,6 +8,7 @@ using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
 using Finance.Domain.Helpers;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Finance.Application.Services;
 
@@ -15,7 +16,8 @@ public class TransactionService(
     ILogger<TransactionService> logger,
     ITransactionRepository transactionRepository,
     IBudgetRepository budgetRepository,
-    IStatementParser statementParser) : ITransactionService
+    IStatementParser statementParser,
+    IOptions<ImportOptions> importOptions) : ITransactionService
 {
     private const string DuplicateMessage = "An identical transaction (same account, date, amount and description) already exists.";
 
@@ -71,6 +73,46 @@ public class TransactionService(
 
         await transactionRepository.RemoveAsync(transaction, cancellationToken);
     }
+
+    public async Task<Transaction> UpdateAsync(Guid id, string description, Category category, CancellationToken cancellationToken = default)
+    {
+        var transaction = await transactionRepository.GetByIdAsync(id, cancellationToken)
+                          ?? throw new NotFoundException(nameof(Transaction), id);
+
+        // The hash is left as imported: it identifies the statement row, so a re-import still recognises it.
+        transaction.Description = description.Trim();
+        transaction.Category = category;
+        transaction.CategoryLocked = true;
+        await transactionRepository.SaveChangesAsync(cancellationToken);
+        return transaction;
+    }
+
+    public async Task<CategoryRulesResult> ApplyCategoryRulesAsync(CancellationToken cancellationToken = default)
+    {
+        var options = importOptions.Value;
+        var transactions = (await transactionRepository.GetRuleCategorizedAsync(cancellationToken))
+            .Where(t => !IsFixedMonthlyRent(t, options))
+            .ToList();
+
+        var updated = 0;
+        foreach (var transaction in transactions)
+        {
+            var category = TransactionCategorizer.Categorize(transaction.Description, options);
+            if (category == transaction.Category) continue;
+            transaction.Category = category;
+            updated++;
+        }
+
+        await transactionRepository.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Applied category rules: {Checked} checked, {Updated} updated", transactions.Count, updated);
+        return new CategoryRulesResult(transactions.Count, updated);
+    }
+
+    // The rent the importer adds each month is Rent by definition, whatever its description says to the rules.
+    private static bool IsFixedMonthlyRent(Transaction transaction, ImportOptions options) =>
+        options.MonthlyRent is { } rent &&
+        transaction is { Account: AccountType.Chequing, Category: Category.Rent } &&
+        transaction.Description == rent.Description;
 
     public async Task LinkTransactionToBudgetAsync(Guid budgetId, Guid transactionId, CancellationToken cancellationToken = default)
     {

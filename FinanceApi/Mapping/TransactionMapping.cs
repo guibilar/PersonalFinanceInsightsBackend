@@ -33,6 +33,7 @@ public static class TransactionMapping
             Description = transaction.Description,
             Amount = transaction.Amount,
             Category = transaction.Category,
+            CategoryLocked = transaction.CategoryLocked,
             TransactionType = transaction.TransactionType,
             Account = transaction.Account,
             BudgetId = transaction.BudgetId,

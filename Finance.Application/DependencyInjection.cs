@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Finance.Application.Reports;
 using Finance.Application.Services;
 using Finance.Application.Services.Interfaces;
 
@@ -11,6 +12,7 @@ public static class DependencyInjection
         services.AddScoped<ITransactionService, TransactionService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IBudgetService, BudgetService>();
+        services.AddSingleton<ReportingCalendar>();
         return services;
     }
 }

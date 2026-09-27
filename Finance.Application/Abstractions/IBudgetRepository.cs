@@ -10,6 +10,9 @@ public interface IBudgetRepository : IBaseRepository<Budget>
     /// <summary>Tracked, with its linked transactions (only deleting a budget needs them).</summary>
     Task<Budget?> GetWithTransactionsAsync(Guid id, CancellationToken cancellationToken = default);
 
-    Task<BudgetSummary?> GetSummaryAsync(Guid id, CancellationToken cancellationToken = default);
-    Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, CancellationToken cancellationToken = default);
+    /// <param name="monthStart">First day of the current month: monthly budgets only count spending from then on.</param>
+    Task<BudgetSummary?> GetSummaryAsync(Guid id, DateTime monthStart, CancellationToken cancellationToken = default);
+
+    /// <param name="monthStart">First day of the current month: monthly budgets only count spending from then on.</param>
+    Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, DateTime monthStart, CancellationToken cancellationToken = default);
 }

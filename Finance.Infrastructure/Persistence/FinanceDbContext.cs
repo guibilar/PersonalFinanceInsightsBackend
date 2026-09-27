@@ -20,6 +20,7 @@ public class FinanceDbContext : DbContext
         configurationBuilder.Properties<TransactionType>().HaveConversion<string>();
         configurationBuilder.Properties<AccountType>().HaveConversion<string>();
         configurationBuilder.Properties<Status>().HaveConversion<string>();
+        configurationBuilder.Properties<BudgetPeriod>().HaveConversion<string>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
