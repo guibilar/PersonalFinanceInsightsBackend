@@ -137,7 +137,8 @@ flags and a protected call. You can run the smoke test against your own deployme
 ## Docker
 
 ```bash
-cp .env.example .env        # set POSTGRES_PASSWORD and FINANCE_USERNAME / FINANCE_PASSWORD
+cp .env.example .env        # set POSTGRES_PASSWORD and FINANCE_USERNAME / FINANCE_PASSWORD (and BACKUP_UID/GID)
+mkdir -p backups            # before the first start, so it belongs to you (see Backups)
 docker compose up --build   # API on http://localhost:5096 (this machine only), migrations applied on start
 ```
 
@@ -166,8 +167,38 @@ than `BACKUP_KEEP_DAYS` (14) are deleted after each successful one. `docker comp
 container as unhealthy when the newest dump is more than 26 hours old, and `docker compose logs backup`
 says why.
 
+The container runs as your user (`BACKUP_UID`/`BACKUP_GID` in `.env`, from `id -u` and `id -g`), so the
+dumps belong to you and are readable by you alone (mode 600). Create the folder before the first start,
+or Docker creates it as root and the container can't write to it (`docker compose logs backup` then
+says how to fix it):
+
+```bash
+mkdir -p backups
+# Upgrading from dumps written by root: sudo chown -R "$(id -u):$(id -g)" backups && chmod 600 backups/*.dump
+```
+
+**The dumps are sensitive.** Each one is the whole database: every transaction and statement, the
+account's password hash, the keys that encrypt the session cookie, and the open sessions. Anyone with a
+dump can read your financial history, and the cookie keys and sessions in it can pass for a signed-in
+browser.
+
 **Copy the folder off this machine** (another disk, a NAS, cloud storage) on a schedule of your own:
-a backup on the same disk doesn't survive that disk.
+a backup on the same disk doesn't survive that disk. **Encrypt the copy.** With
+[age](https://age-encryption.org):
+
+```bash
+# Once: a key pair. Then move finance-backup-key.txt off this machine (a password manager, a USB key):
+# whoever has it can read the backups, and without it nobody can, you included.
+age-keygen -o finance-backup-key.txt          # prints the public key, age1...
+# Each copy: only the public key is needed here.
+for f in backups/*.dump; do age -r age1... -o "/mnt/offsite/$(basename "$f").age" "$f"; done
+# To restore: decrypt, then restore.sh
+(umask 077; age -d -i finance-backup-key.txt -o finance.dump /mnt/offsite/finance-2026-09-28_030000.dump.age)
+docker/restore.sh finance.dump
+```
+
+A destination that encrypts by itself works too: an rclone `crypt` remote, or an encrypted disk
+(LUKS, BitLocker, FileVault). An unencrypted cloud folder or NAS share is not enough.
 
 ```bash
 docker compose exec backup backup.sh once          # an extra dump right now
@@ -175,10 +206,10 @@ docker/restore.sh backups/finance-2026-09-28_030000.dump
 ```
 
 `docker/restore.sh` replaces the current database with the dump: it first saves the current database
-as `backups/before-restore-<time>.dump` (kept until you delete it), stops the API, restores in a single
-transaction (a failure leaves the database as it was) and starts the API again. The dumps include the
-account and the session-cookie keys, so you sign in as before. They are pg_dump's custom format;
-`pg_restore --list <file>` shows what one contains.
+as `backups/before-restore-<time>.dump` (mode 600, kept until you delete it), stops the API, restores in
+a single transaction (a failure leaves the database as it was) and starts the API again. The dumps
+include the account and the session-cookie keys, so you sign in as before. They are pg_dump's custom
+format; `pg_restore --list <file>` shows what one contains.
 
 Outside Development the connection string must come from the environment
 (`ConnectionStrings__DefaultConnection`); the API refuses to start without it.

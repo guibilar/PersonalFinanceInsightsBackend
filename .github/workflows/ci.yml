@@ -47,6 +47,12 @@ jobs:
       FINANCE_PASSWORD: ci-password-long-enough
     steps:
       - uses: actions/checkout@v5
+      # As on the server: the backup container runs as the user who owns ./backups.
+      - name: Backup folder owned by the runner's user
+        run: |
+          mkdir -p backups
+          echo "BACKUP_UID=$(id -u)" >> "$GITHUB_ENV"
+          echo "BACKUP_GID=$(id -g)" >> "$GITHUB_ENV"
       - name: Build and start the stack (API + PostgreSQL, as deployed)
         run: |
           docker compose up -d --build --wait
@@ -55,12 +61,14 @@ jobs:
         run: test "$(docker exec personal-finance-api id -u)" != 0
       - name: Smoke test (health, sign-in, session cookie, protected calls)
         run: docker/smoke-test.sh http://localhost:5096
-      - name: Backup written at start, and restore.sh restores it
+      - name: Backup written at start (owner-only, the runner's), and restore.sh restores it
         run: |
           dump=$(ls backups/finance-*.dump | head -n 1)
+          test "$(stat -c %a "$dump")" = 600
+          test "$(stat -c %u "$dump")" = "$(id -u)"
           echo "Restoring $dump"
           docker/restore.sh "$dump"
-          ls backups/before-restore-*.dump
+          test "$(stat -c %a backups/before-restore-*.dump)" = 600
           docker compose up -d --wait
           docker/smoke-test.sh http://localhost:5096
       - name: Container logs
