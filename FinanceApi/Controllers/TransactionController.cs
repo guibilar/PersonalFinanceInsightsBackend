@@ -51,7 +51,8 @@ namespace FinanceApi.Controllers
             }
             if (filter is { EndDate: not null })
             {
-                filter.EndDate = DateTime.SpecifyKind(filter.EndDate.Value.Date, DateTimeKind.Utc);
+                // The repository compares with "<", so move to the next day to include the whole end date.
+                filter.EndDate = DateTime.SpecifyKind(filter.EndDate.Value.Date.AddDays(1), DateTimeKind.Utc);
             }
             var filteredTransactions = await transactionService.FilterAsync(filter);
             return Ok(TransactionMapping.ToOutputPaginatedList(filteredTransactions));
@@ -84,6 +85,14 @@ namespace FinanceApi.Controllers
                 await transactionService.LinkTransactionToBudget(transactionLinkInputDto.BudgetId, transactionLinkInputDto.TransactionId);
                 return Ok();
             }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Conflict(new { message = ex.Message });
+            }
             catch (Exception ex)
             {
                 return StatusCode(500, new { message = "An error occurred while linking transaction.", details = ex.Message });
@@ -98,6 +107,10 @@ namespace FinanceApi.Controllers
             {
                 await transactionService.UnlinkTransactionFromBudget(id);
                 return Ok();
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
             }
             catch (Exception ex)
             {

@@ -47,7 +47,7 @@ public class TransactionRepository(FinanceDbContext dbContext)
 
     private IQueryable<Transaction> FilterNoPaginationQuery(TransactionFilterDto filter)
     {
-        var query = dbContext.Transactions
+        var query = DbContext.Transactions
             .Include(x => x.Budget)
             .AsQueryable();
 
@@ -73,13 +73,12 @@ public class TransactionRepository(FinanceDbContext dbContext)
 
         if (filter.EndDate.HasValue)
         {
-            query = query.Where(x => x.Date <= filter.EndDate.Value);
+            query = query.Where(x => x.Date < filter.EndDate.Value);
         }
 
         if (!string.IsNullOrEmpty(filter.Description))
         {
-            query = query.Where(x =>
-                x.Description.ToLower() == filter.Description.ToLower());
+            query = query.Where(x => x.Description.ToLower().Contains(filter.Description.ToLower()));
         }
 
         if (filter.Category.HasValue)
@@ -96,18 +95,8 @@ public class TransactionRepository(FinanceDbContext dbContext)
         return query;
     }
 
-    public async Task RemoveAsync(Guid id)
-    {
-        var transaction = await dbContext.Transactions.FindAsync(id);
-        if (transaction != null)
-        {
-            dbContext.Transactions.Remove(transaction);
-            await dbContext.SaveChangesAsync();
-        }
-    }
-
     public async Task<Transaction?> GetByHashAsync(string hash)
     {
-        return await dbContext.Transactions.SingleOrDefaultAsync(t => t.Hash == hash);
+        return await DbContext.Transactions.SingleOrDefaultAsync(t => t.Hash == hash);
     }
 }
