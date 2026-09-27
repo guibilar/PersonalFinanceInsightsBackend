@@ -55,6 +55,14 @@ jobs:
         run: test "$(docker exec personal-finance-api id -u)" != 0
       - name: Smoke test (health, sign-in, session cookie, protected calls)
         run: docker/smoke-test.sh http://localhost:5096
+      - name: Backup written at start, and restore.sh restores it
+        run: |
+          dump=$(ls backups/finance-*.dump | head -n 1)
+          echo "Restoring $dump"
+          docker/restore.sh "$dump"
+          ls backups/before-restore-*.dump
+          docker compose up -d --wait
+          docker/smoke-test.sh http://localhost:5096
       - name: Container logs
         if: failure()
         run: docker compose logs

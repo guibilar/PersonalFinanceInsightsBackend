@@ -43,6 +43,9 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
             entity.HasIndex(t => new { t.Account, t.Hash }).IsUnique();
             // Every list, filter and report is by date range and/or sorted by date.
             entity.HasIndex(t => t.Date);
+            // Hidden (deleted) transactions exist only for duplicate detection unless a query asks for them
+            // with IgnoreQueryFilters.
+            entity.HasQueryFilter(t => !t.Hidden);
         });
 
         modelBuilder.Entity<Budget>(entity =>

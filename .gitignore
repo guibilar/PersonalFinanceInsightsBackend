@@ -24,3 +24,6 @@ appsettings.*.local.json
 # Personal bank statements and generated charts: never commit.
 **/Files/
 **/Results/
+
+# Database dumps (docker/backup.sh): your data, never commit.
+/backups/

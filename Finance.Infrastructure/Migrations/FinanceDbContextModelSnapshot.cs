@@ -86,6 +86,9 @@ namespace Finance.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<bool>("Hidden")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("TransactionType")
                         .HasColumnType("text");
 
