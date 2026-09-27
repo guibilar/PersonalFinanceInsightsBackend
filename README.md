@@ -46,6 +46,14 @@ purchases on the same day are kept. Categories, excluded descriptions, income so
 monthly rent are configured in `Finance.Infrastructure/Import/import-rules.json` (override with
 `Import__...` environment variables).
 
+Statements are read as UTF-8, or as Windows-1252 when the file isn't valid UTF-8 (e.g. re-saved in Excel).
+Transactions are duplicates only within the same account.
+
+## Reports
+
+The dashboard's current month and year follow `Reports:TimeZone` in `appsettings.json`
+(IANA id, default `America/Toronto`; override with `Reports__TimeZone`). An unknown id stops the API at startup.
+
 ## Tests
 
 ```bash

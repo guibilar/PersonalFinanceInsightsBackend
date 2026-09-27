@@ -85,8 +85,12 @@ public class TransactionService(
         if (transaction.BudgetId.HasValue)
             throw new ConflictException($"Transaction with id {transactionId} is already linked to a budget.");
 
-        _ = await budgetRepository.GetByIdAsync(budgetId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Budget), budgetId);
+        var budget = await budgetRepository.GetByIdAsync(budgetId, cancellationToken)
+                     ?? throw new NotFoundException(nameof(Budget), budgetId);
+
+        // Inactive budgets are closed: they keep their transactions but take no new ones.
+        if (budget.Status != Status.Active)
+            throw new ConflictException($"Budget '{budget.Name}' is inactive; activate it before linking transactions.");
 
         transaction.BudgetId = budgetId;
         await transactionRepository.SaveChangesAsync(cancellationToken);

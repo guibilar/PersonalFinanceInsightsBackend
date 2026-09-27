@@ -223,6 +223,27 @@ public class ApiTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task LinkTransaction_ToInactiveBudget_IsRejectedUntilReactivated()
+    {
+        var budgetId = Guid.NewGuid();
+        var transaction = NewTransaction("Hotel", 80, new DateTime(2026, 3, 10));
+        await _factory.SeedAsync(db =>
+        {
+            db.Budgets.Add(new Budget { Id = budgetId, Name = "Trip", Description = "d", Amount = 500, Status = Status.Inactive });
+            db.Transactions.Add(transaction);
+        });
+        var link = new { transactionId = transaction.Id, budgetId };
+
+        var whileInactive = await _client.PostAsJsonAsync("/api/Transaction/LinkTransaction", link);
+        await _client.PutAsJsonAsync($"/api/Budget/{budgetId}", new { name = "Trip", description = "d", status = "Active", amount = 500 });
+        var afterReactivating = await _client.PostAsJsonAsync("/api/Transaction/LinkTransaction", link);
+
+        Assert.Equal(HttpStatusCode.Conflict, whileInactive.StatusCode);
+        Assert.Contains("inactive", (await whileInactive.Content.ReadAsStringAsync()).ToLowerInvariant());
+        Assert.Equal(HttpStatusCode.NoContent, afterReactivating.StatusCode);
+    }
+
+    [Fact]
     public async Task LinkTransaction_ReturnsNotFoundAndConflict()
     {
         var budgetId = await SeedBudgetWithTransactionAsync();

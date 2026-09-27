@@ -46,14 +46,15 @@ namespace Finance.Cli.Charts{
 
                 // Averages
                 totalsSheet.Cell(row, 1).Value = "Average";
-                for (int i = 0; i < categories.Count; i++)
+                // Same columns as the monthly rows above: one per Category value, then the total.
+                foreach (var category in categories)
                 {
-                    double avg = monthly.Average(m => m.Categories.TryGetValue(categories[i], out var v) ? (double)v : 0.0);
-                    totalsSheet.Cell(row, i + 2).Value = avg;
-                    totalsSheet.Cell(row, i + 2).Style.NumberFormat.Format = "$#,##0.00";
+                    double avg = monthly.Average(m => m.Categories.TryGetValue(category, out var v) ? (double)v : 0.0);
+                    totalsSheet.Cell(row, (int)category + 2).Value = avg;
+                    totalsSheet.Cell(row, (int)category + 2).Style.NumberFormat.Format = "$#,##0.00";
                 }
-                totalsSheet.Cell(row, categories.Count + 2).Value = monthly.Average(m => (double)m.Total);
-                totalsSheet.Cell(row, categories.Count + 2).Style.NumberFormat.Format = "$#,##0.00";
+                totalsSheet.Cell(row, Enum.GetValues(typeof(Category)).Length + 2).Value = monthly.Count > 0 ? monthly.Average(m => (double)m.Total) : 0;
+                totalsSheet.Cell(row, Enum.GetValues(typeof(Category)).Length + 2).Style.NumberFormat.Format = "$#,##0.00";
 
                 totalsSheet.Columns().AdjustToContents();
                 totalsSheet.Row(1).Style.Font.Bold = true;
@@ -155,7 +156,7 @@ namespace Finance.Cli.Charts{
                 plt2.Legend.ManualItems.Add(new ScottPlot.LegendItem()
                 {
                     LabelText = categories[i].ToString(),
-                    FillColor = palette.GetColor(i),
+                    FillColor = palette.GetColor((int)categories[i]),
                     LineWidth = 0
                 });
             }
@@ -206,7 +207,7 @@ namespace Finance.Cli.Charts{
             double[] xsIncome = [.. monthlyIncome.Select(m => m.YearMonth.ToOADate())];
             double[] ysIncome = [.. monthlyIncome.Select(m => (double)m.Total)];
 
-            for (int i = 0; i < xs.Length; i++)
+            for (int i = 0; i < xsIncome.Length; i++)
             {
                 plt1.Add.Text(
                     ysIncome[i].ToString("$0.00"),

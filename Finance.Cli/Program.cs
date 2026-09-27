@@ -30,6 +30,12 @@ class Program
         var creditCard = Read("cibc_credit", AccountType.CreditCard);
         var chequing = Read("cibc_debit", AccountType.Chequing);
 
+        if (creditCard.Count == 0 && chequing.Count == 0)
+        {
+            Console.WriteLine("No transactions found in cibc_credit.csv or cibc_debit.csv; nothing to report.");
+            return;
+        }
+
         var records = creditCard.Concat(chequing).Where(t => t.TransactionType == TransactionType.Debit).ToList();
         var recordsWithOutRent = records.Where(t => t.Category != Category.Rent).ToList();
         var recordsIncome = chequing.Where(t => t.TransactionType == TransactionType.Credit).ToList();
@@ -41,8 +47,9 @@ class Program
         var monthlySavings = SavingsCalculator.GenerateMonthlySavingsRecords(recordsSavings);
 
         // ================= Line Chart: Monthly Totals =================
-        var avgMonthlyTotal = monthly.Average(m => (double)m.Total);
-        var avgMonthlyTotalWithOutRent = monthlyWithOutRent.Average(m => (double)m.Total);
+        // Empty when a statement only has rent (or nothing but income).
+        var avgMonthlyTotal = monthly.Count > 0 ? monthly.Average(m => (double)m.Total) : 0;
+        var avgMonthlyTotalWithOutRent = monthlyWithOutRent.Count > 0 ? monthlyWithOutRent.Average(m => (double)m.Total) : 0;
 
         var income = MonthlyRecordsCalculator.GenerateMonthlyRecords(recordsIncome);
 
