@@ -106,7 +106,12 @@ dotnet test -- --filter-class FinanceTests.AuthTests                            
 ```
 
 On PostgreSQL every test factory gets its own freshly migrated database, dropped afterwards. CI runs
-the in-memory and container modes, plus a check that the migrations match the model and a Docker build.
+the in-memory and container modes, a check that the migrations match the model, and
+`scripts/check-vulnerable-packages.sh` (known advisories of moderate severity or worse in the packages
+the API and CLI ship with; it also runs weekly). It then starts the Docker stack with
+`docker compose` and runs `docker/smoke-test.sh` against it: health, sign-in, the session cookie's
+flags and a protected call. You can run the smoke test against your own deployment too, on the server:
+`FINANCE_USERNAME=... FINANCE_PASSWORD=... docker/smoke-test.sh` (it signs in and out once).
 
 ## Docker
 
