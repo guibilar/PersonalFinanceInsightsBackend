@@ -132,8 +132,32 @@ volume, use the password it was created with.
 PostgreSQL is published on `127.0.0.1:5432` only: reachable from this machine (psql, `dotnet run`),
 not from the rest of the network.
 
-Health checks: `/health/live` answers while the process runs (use it for restarts);
-`/health/ready` (and its alias `/health`) also checks the database.
+Health checks: `/health/live` answers while the process runs (Docker's health check for the API
+container uses it); `/health/ready` (and its alias `/health`) also checks the database.
+
+Container logs are capped at 3 files of 10 MB per service (Docker keeps them forever by default).
+
+### Backups
+
+The `backup` service dumps the database when the stack starts and then every night at `BACKUP_AT`
+(03:00, Toronto time), into `./backups` (`BACKUP_DIR`) as `finance-<date>_<time>.dump`. Dumps older
+than `BACKUP_KEEP_DAYS` (14) are deleted after each successful one. `docker compose ps` shows the
+container as unhealthy when the newest dump is more than 26 hours old, and `docker compose logs backup`
+says why.
+
+**Copy the folder off this machine** (another disk, a NAS, cloud storage) on a schedule of your own:
+a backup on the same disk doesn't survive that disk.
+
+```bash
+docker compose exec backup backup.sh once          # an extra dump right now
+docker/restore.sh backups/finance-2026-09-28_030000.dump
+```
+
+`docker/restore.sh` replaces the current database with the dump: it first saves the current database
+as `backups/before-restore-<time>.dump` (kept until you delete it), stops the API, restores in a single
+transaction (a failure leaves the database as it was) and starts the API again. The dumps include the
+account and the session-cookie keys, so you sign in as before. They are pg_dump's custom format;
+`pg_restore --list <file>` shows what one contains.
 
 Outside Development the connection string must come from the environment
 (`ConnectionStrings__DefaultConnection`); the API refuses to start without it.

@@ -1,4 +1,12 @@
 # Copy .env.example to .env and set the passwords before `docker compose up --build`.
+
+# Docker keeps container logs forever by default; cap each service at 3 files of 10 MB.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   app:
     build: .
@@ -21,6 +29,14 @@ services:
       db:
         condition: service_healthy
     restart: unless-stopped
+    logging: *logging
+    # The image has no curl: bash asks /health/live itself (the process answers; no database needed).
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/live HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q ' 200 '"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
   db:
     image: postgres:15
@@ -40,6 +56,38 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    logging: *logging
+
+  # Dumps the database when it starts and every night (docker/backup.sh), into ./backups on this machine.
+  # Copy that folder somewhere else too (another disk, cloud storage): a backup on the same disk doesn't
+  # survive the disk. Restore with docker/restore.sh.
+  backup:
+    # Same image as the database, so pg_dump always matches the server version.
+    image: postgres:15
+    container_name: postgres-backup
+    entrypoint: ["sh", "/usr/local/bin/backup.sh"]
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-postgres}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      PGDATABASE: ${POSTGRES_DB:-FinanceDb}
+      BACKUP_AT: ${BACKUP_AT:-03:00}
+      BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      TZ: ${TZ:-America/Toronto}
+    volumes:
+      - ${BACKUP_DIR:-./backups}:/backups
+      - ./docker/backup.sh:/usr/local/bin/backup.sh:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *logging
+    # Unhealthy when the newest dump is more than 26 hours old (a nightly run failed).
+    healthcheck:
+      test: ["CMD-SHELL", "find /backups -maxdepth 1 -name 'finance-*.dump' -mmin -1560 | grep -q ."]
+      interval: 5m
+      start_period: 2m
+      start_interval: 5s
 
 networks:
   # Shared with the frontend's docker compose project, which joins it as an external network:
