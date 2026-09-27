@@ -175,7 +175,20 @@ public class ApiBehaviourTests
 
         Assert.Equal(("Feb 2026", 30m), (Assert.Single(month.MonthlyData).Month, month.MonthlyData[0].Total));
         Assert.Equal(["Jan 2026", "Feb 2026", "Mar 2026"], year.MonthlyData.Select(m => m.Month));
-        Assert.Equal(30, year.AverageMonthlyTotal);
+        // Only finished months count: February is still running and March hasn't started.
+        Assert.Equal(20, year.AverageMonthlyTotal);
+    }
+
+    [Fact]
+    public async Task YearReport_InItsFirstMonth_AveragesThatMonth()
+    {
+        await using var factory = FactoryAt("2026-01-20T12:00:00Z");
+        await factory.SeedAsync(db => db.Transactions.Add(NewTransaction("January", 20, new DateTime(2026, 1, 5))));
+
+        var year = await (await factory.CreateClient().GetAsync("/api/Reports/monthly-categorized-graph"))
+            .ReadAsync<MonthlyCategorizedGraphData>();
+
+        Assert.Equal(20, year.AverageMonthlyTotal);
     }
 
     private static FinanceApiFactory FactoryAt(string utcNow) => new(services =>

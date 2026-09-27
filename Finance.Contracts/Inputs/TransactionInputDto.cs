@@ -9,8 +9,12 @@ namespace Finance.Contracts.Inputs;
 /// </summary>
 public class TransactionInputDto
 {
+    /// <summary>
+    /// The calendar date as the client wrote it: a time or offset is accepted but ignored, so
+    /// "2026-09-01T23:30-04:00" is September 1st, not September 2nd in UTC.
+    /// </summary>
     [Required]
-    public DateTime? Date { get; set; }
+    public DateTimeOffset? Date { get; set; }
 
     [Required]
     public required string Description { get; set; }

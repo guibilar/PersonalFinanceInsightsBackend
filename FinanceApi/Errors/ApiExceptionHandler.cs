@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace FinanceApi.Errors;
 
 /// <summary>
-/// Turns exceptions into RFC 9457 problem details. Domain exceptions become 404/409 with
+/// Turns exceptions into RFC 9457 problem details. Domain exceptions become 400/404/409 with
 /// their message; anything else is logged and returned as a generic 500.
 /// </summary>
 public class ApiExceptionHandler(IProblemDetailsService problemDetails, ILogger<ApiExceptionHandler> logger)
@@ -13,6 +13,22 @@ public class ApiExceptionHandler(IProblemDetailsService problemDetails, ILogger<
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
+        if (exception is InvalidStatementException)
+        {
+            // Shaped like model validation, so clients show it next to the file field like any other input error.
+            context.Response.StatusCode = StatusCodes.Status400BadRequest;
+            return await problemDetails.TryWriteAsync(new ProblemDetailsContext
+            {
+                HttpContext = context,
+                Exception = exception,
+                ProblemDetails = new HttpValidationProblemDetails(
+                    new Dictionary<string, string[]> { ["file"] = [exception.Message] })
+                {
+                    Status = StatusCodes.Status400BadRequest
+                }
+            });
+        }
+
         var (status, title, detail) = exception switch
         {
             NotFoundException => (StatusCodes.Status404NotFound, "Not found", exception.Message),

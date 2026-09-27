@@ -20,7 +20,7 @@ public class TransactionFilterDto
     public TransactionSortField SortBy { get; set; } = TransactionSortField.Date;
     public SortDirection SortDirection { get; set; } = SortDirection.Descending;
 
-    [Range(1, int.MaxValue)]
+    [Range(1, PagingLimits.MaxPage)]
     public int Page { get; set; } = 1;
 
     [Range(1, PagingLimits.MaxPageSize)]

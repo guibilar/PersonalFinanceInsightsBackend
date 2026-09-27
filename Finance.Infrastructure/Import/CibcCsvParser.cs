@@ -6,6 +6,7 @@ using Finance.Application.Abstractions;
 using Finance.Application.Import;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
+using Finance.Domain.Exceptions;
 using Microsoft.Extensions.Options;
 
 namespace Finance.Infrastructure.Import;
@@ -31,7 +32,14 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
         var transactions = new List<Transaction>();
         var statementMonths = new HashSet<DateTime>();
         using var reader = new StringReader(ReadText(statement));
-        using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture) { HasHeaderRecord = false });
+        // Short rows read as missing fields (null) and stray quotes as data, so any file gets row-by-row checks
+        // below instead of an exception halfway through.
+        using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
+        {
+            HasHeaderRecord = false,
+            MissingFieldFound = null,
+            BadDataFound = null
+        });
 
         while (csv.Read())
         {
@@ -71,6 +79,14 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
                     AddIfAmount(transactions, csv.GetField(MoneyInColumn), date, description, account, TransactionType.Credit, category);
                 }
             }
+        }
+
+        // Not a single dated row: another bank's export, a spreadsheet, or not a CSV at all. Saying "0 imported"
+        // would look like success.
+        if (statementMonths.Count == 0)
+        {
+            throw new InvalidStatementException(
+                "No transactions found in this file. Is it a CIBC CSV export (date, description, money out, money in)?");
         }
 
         if (account == AccountType.Chequing && _options.MonthlyRent is { } rent)
