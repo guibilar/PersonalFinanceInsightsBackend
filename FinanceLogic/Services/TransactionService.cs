@@ -72,6 +72,9 @@ public class TransactionService(
 
     public async Task RemoveAsync(Guid id)
     {
+        _ = await transactionRepository.GetByIdAsync(id)
+            ?? throw new KeyNotFoundException($"Transaction with id {id} not found.");
+
         await transactionRepository.RemoveAsync(id);
     }
 
@@ -80,15 +83,15 @@ public class TransactionService(
         var transaction = await transactionRepository.GetByIdAsync(transactionId);
         
         if (transaction == null)
-            throw new ArgumentException($"Transaction with id {transactionId} not found.");
-        
-        if(transaction.BudgetId.HasValue)
-            throw new ArgumentException($"Transaction with id {transactionId} already has a budget with id {transaction.BudgetId}.");
-        
+            throw new KeyNotFoundException($"Transaction with id {transactionId} not found.");
+
+        if (transaction.BudgetId.HasValue)
+            throw new InvalidOperationException($"Transaction with id {transactionId} is already linked to a budget.");
+
         var budget = await budgetRepository.GetByIdAsync(budgetId);
-        
+
         if (budget == null)
-            throw new ArgumentException($"Budget with id {budgetId} not found.");
+            throw new KeyNotFoundException($"Budget with id {budgetId} not found.");
         
         transaction.BudgetId = budget.Id;
         await transactionRepository.UpdateAsync(transaction);
@@ -99,7 +102,7 @@ public class TransactionService(
         var transaction = await transactionRepository.GetByIdAsync(transactionId);
         
         if (transaction == null)
-            throw new ArgumentException($"Transaction with id {transactionId} not found.");
+            throw new KeyNotFoundException($"Transaction with id {transactionId} not found.");
 
         transaction.BudgetId = null;
         await transactionRepository.UpdateAsync(transaction);

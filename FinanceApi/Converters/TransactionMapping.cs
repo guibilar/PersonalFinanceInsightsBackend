@@ -1,4 +1,5 @@
 using FinanceDomain.Models;
+using FinanceDto.Helper;
 using FinanceDto.Inputs;
 using FinanceDto.Models;
 using FinanceDto.Outputs;
@@ -9,15 +10,17 @@ namespace FinanceApi.Converters
     {
         public static Transaction ToModel(TransactionInputDto dto)
         {
+            var date = DateTime.SpecifyKind(dto.Date, DateTimeKind.Utc);
             return new Transaction
             {
-                Date = DateTime.SpecifyKind(dto.Date, DateTimeKind.Utc),
+                Date = date,
                 Description = dto.Description,
                 Amount = dto.Amount,
                 Category = dto.Category,
                 TransactionType = dto.TransactionType,
                 Account = dto.Account,
-                Hash = dto.Hash,
+                // Computed server-side, same as the CSV sync, so duplicates are detected consistently.
+                Hash = TransactionHashHelper.GenerateTransactionHash(dto.Amount, date, dto.Description),
             };
         }
 

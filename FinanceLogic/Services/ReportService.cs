@@ -1,3 +1,4 @@
+using System.Globalization;
 using CrossCutting.Calculators;
 using CrossCutting.Services.Interfaces;
 using FinanceDomain.Models;
@@ -12,6 +13,8 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
 {
     public async Task<MonthlyCategorizedGraphData> GenerateMonthlySpendCategorizedGraphDataAsync()
     {
+        var now = DateTime.UtcNow;
+        var yearStart = new DateTime(now.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var filterForMonthlyCategorizedGraphy = new TransactionFilterDto()
         {
             AccountType = [
@@ -19,8 +22,8 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
                 AccountType.CreditCard
             ],
             TransactionType = TransactionType.Debit,
-            StartDate = new DateTime(DateTime.Now.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-            EndDate = new DateTime(DateTime.Now.Year, 12, 31, 23, 59, 59, DateTimeKind.Utc)
+            StartDate = yearStart,
+            EndDate = yearStart.AddYears(1)
         };
         var transactions = await transactionRepository.FilterNoPaginationAsync(filterForMonthlyCategorizedGraphy);
         var graphData = GenerateMonthlyGraphDataFromTransactions(transactions);
@@ -29,6 +32,8 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
     
     public async Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraphDataAsync()
     {
+        var now = DateTime.UtcNow;
+        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var filterForCurrentMonthCategorizedGraphy = new TransactionFilterDto()
         {
             AccountType = [
@@ -36,8 +41,8 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
                 AccountType.CreditCard
             ],
             TransactionType = TransactionType.Debit,
-            StartDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1, 0, 0, 0, DateTimeKind.Utc),
-            EndDate = new DateTime(DateTime.Now.Year, DateTime.Now.Month, DateTime.DaysInMonth(DateTime.Now.Year, DateTime.Now.Month), 23, 59, 59, DateTimeKind.Utc)
+            StartDate = monthStart,
+            EndDate = monthStart.AddMonths(1)
         };
         var transactions = await transactionRepository.FilterNoPaginationAsync(filterForCurrentMonthCategorizedGraphy);
         var graphData = GenerateMonthlyGraphDataFromTransactions(transactions);
@@ -56,10 +61,11 @@ public class ReportService(ITransactionRepository transactionRepository) : IRepo
         var graphData = new MonthlyCategorizedGraphData
         {
             Categories = categories,
-            AverageMonthlyTotal = monthlyRecords.Average(m => m.Total),
+            // No transactions yet (e.g. the 1st of the month) is a valid, empty report.
+            AverageMonthlyTotal = monthlyRecords.Count > 0 ? monthlyRecords.Average(m => m.Total) : 0,
             MonthlyData = monthlyRecords.Select(m => new MonthDataPoint
             {
-                Month = m.YearMonth.ToString("MMM yyyy"),
+                Month = m.YearMonth.ToString("MMM yyyy", CultureInfo.InvariantCulture),
                 CategoryValues = m.Categories,
                 Total = m.Total
             }).ToList()

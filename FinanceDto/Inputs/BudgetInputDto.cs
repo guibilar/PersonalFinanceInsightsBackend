@@ -1,11 +1,18 @@
+using System.ComponentModel.DataAnnotations;
 using FinanceDto.Enums;
 
 namespace FinanceDto.Inputs;
 
 public class BudgetInputDto
 {
-    public string Name { get; set; }
-    public string Description { get; set; }
+    [Required]
+    public string Name { get; set; } = string.Empty;
+
+    [Required]
+    public string Description { get; set; } = string.Empty;
+
     public Status Status { get; set; }
+
+    [Range(typeof(decimal), "0.01", "79228162514264337593543950335")]
     public decimal Amount { get; set; }
 }

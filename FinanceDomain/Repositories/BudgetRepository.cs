@@ -8,6 +8,14 @@ namespace FinanceDomain.Repositories;
 
 public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budget>(dbContext), IBudgetRepository
 {
+    // Totals are computed from the linked transactions, so always load them.
+    public override async Task<Budget?> GetByIdAsync(Guid id)
+    {
+        return await DbContext.Budgets
+            .Include(x => x.Transactions)
+            .SingleOrDefaultAsync(x => x.Id == id);
+    }
+
     public async Task<PaginatedList<Budget>> FilterAsync(BudgetFilterDto? filter)
     {
         filter ??= new BudgetFilterDto();
@@ -32,7 +40,7 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
 
     private IQueryable<Budget> FilterQuery(BudgetFilterDto filter)
     {
-        var query = dbContext.Set<Budget>()
+        var query = DbContext.Budgets
             .Include(x => x.Transactions)
             .AsQueryable();
 
@@ -44,6 +52,11 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
         if (!string.IsNullOrEmpty(filter.Name))
         {
             query = query.Where(x => x.Name.ToLower().Contains(filter.Name.ToLower()));
+        }
+
+        if (!string.IsNullOrEmpty(filter.Description))
+        {
+            query = query.Where(x => x.Description.ToLower().Contains(filter.Description.ToLower()));
         }
 
         query = query.OrderBy(x => x.Name);

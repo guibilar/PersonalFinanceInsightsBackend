@@ -15,7 +15,7 @@ public class BaseRepository<T>(FinanceDbContext dbContext) : IBaseRepository<T> 
         return entity;
     }
 
-    public async Task<T?> GetByIdAsync(Guid id)
+    public virtual async Task<T?> GetByIdAsync(Guid id)
     {
         return await DbContext.Set<T>().SingleOrDefaultAsync(e => e.Id == id);
     }

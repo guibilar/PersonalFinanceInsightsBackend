@@ -37,22 +37,6 @@ builder.Services.AddScoped<IBudgetService, BudgetService>();
 
 builder.Services.AddEndpointsApiExplorer();
 
-// Validate database connection on startup
-using (var scope = builder.Services.BuildServiceProvider().CreateScope())
-{
-    var dbContext = scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
-    try
-    {
-        Console.WriteLine("Verifying database connectivity...");
-        dbContext.Database.CanConnect();
-        Console.WriteLine("Database connectivity verified successfully.");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Database connectivity test failed: {ex.Message}");
-        throw;
-    }
-}
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddCors(options =>
@@ -67,6 +51,18 @@ builder.Services.AddCors(options =>
 
 
 var app = builder.Build();
+
+// Fail fast when the database is unreachable (CanConnect returns false rather than throwing).
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
+    if (!dbContext.Database.CanConnect())
+    {
+        throw new InvalidOperationException("Cannot connect to the database. Check ConnectionStrings:DefaultConnection.");
+    }
+    app.Logger.LogInformation("Database connectivity verified.");
+}
+
 app.UseRouting();
 Console.WriteLine("Starting application...");
 
@@ -86,3 +82,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.Run();
+
+// Exposed for WebApplicationFactory in the integration tests.
+public partial class Program;
