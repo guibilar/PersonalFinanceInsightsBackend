@@ -3,8 +3,13 @@ services:
   app:
     build: .
     container_name: personal-finance-api
+    # Browsers reach the API only through the frontend (nginx behind Tailscale HTTPS), over the
+    # "finance" network. The port stays open on this machine alone, for curl and debugging.
     ports:
-      - "5096:8080"
+      - "127.0.0.1:5096:8080"
+    networks:
+      - default
+      - finance
     environment:
       ConnectionStrings__DefaultConnection: "Host=db;Port=5432;Database=${POSTGRES_DB:-FinanceDb};Username=${POSTGRES_USER:-postgres};Password=${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}"
       Database__MigrateOnStartup: "true"
@@ -35,6 +40,12 @@ services:
       - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+
+networks:
+  # Shared with the frontend's docker compose project, which joins it as an external network:
+  # start this project first. The database stays on this project's default network only.
+  finance:
+    name: finance
 
 volumes:
   postgres_data:
