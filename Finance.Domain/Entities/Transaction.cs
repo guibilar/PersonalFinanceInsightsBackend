@@ -13,6 +13,9 @@ public class Transaction : BaseEntity
     public TransactionType? TransactionType { get; set; }
     public required AccountType Account { get; set; }
     public string Hash { get; set; } = string.Empty;
+
+    /// <summary>Set when someone picks the category by hand; re-applying the category rules leaves it alone.</summary>
+    public bool CategoryLocked { get; set; }
     public Guid? BudgetId { get; set; }
     public Budget? Budget { get; set; }
 }

@@ -16,6 +16,7 @@ public static class BudgetMapping
             Description = dto.Description.Trim(),
             Status = dto.Status,
             Amount = dto.Amount,
+            Period = dto.Period,
         };
     }
 
@@ -28,6 +29,7 @@ public static class BudgetMapping
             Name = budget.Name,
             Description = budget.Description,
             Status = budget.Status,
+            Period = budget.Period,
             TotalAmount = budget.Amount,
             TotalSpent = totalSpent,
             TotalRemaining = budget.Amount - totalSpent,

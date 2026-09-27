@@ -18,25 +18,28 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
             .SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
 
-    public Task<BudgetSummary?> GetSummaryAsync(Guid id, CancellationToken cancellationToken = default)
+    public Task<BudgetSummary?> GetSummaryAsync(Guid id, DateTime monthStart, CancellationToken cancellationToken = default)
     {
-        return ToSummaries(DbContext.Budgets.Where(x => x.Id == id))
+        return ToSummaries(DbContext.Budgets.Where(x => x.Id == id), monthStart)
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, CancellationToken cancellationToken = default)
+    public Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, DateTime monthStart, CancellationToken cancellationToken = default)
     {
-        return PaginateAsync(ToSummaries(FilterQuery(filter)), filter.Page, filter.PageSize, cancellationToken);
+        return PaginateAsync(ToSummaries(FilterQuery(filter), monthStart), filter.Page, filter.PageSize, cancellationToken);
     }
 
     // Totals are summed in SQL instead of loading every linked transaction. Amounts are stored positive,
     // so credits (refunds) linked to a budget give money back instead of counting as spending.
-    private static IQueryable<BudgetSummary> ToSummaries(IQueryable<Budget> budgets)
+    // Monthly budgets only count this month's transactions; earlier months stay linked but no longer count.
+    private static IQueryable<BudgetSummary> ToSummaries(IQueryable<Budget> budgets, DateTime monthStart)
     {
+        var nextMonth = monthStart.AddMonths(1);
         return budgets
             .AsNoTracking()
-            .Select(b => new BudgetSummary(b, b.Transactions.Sum(t =>
-                t.TransactionType == TransactionType.Credit ? -t.Amount : t.Amount)));
+            .Select(b => new BudgetSummary(b, b.Transactions
+                .Where(t => b.Period == BudgetPeriod.Total || (t.Date >= monthStart && t.Date < nextMonth))
+                .Sum(t => t.TransactionType == TransactionType.Credit ? -t.Amount : t.Amount)));
     }
 
     private IQueryable<Budget> FilterQuery(BudgetFilterDto filter)

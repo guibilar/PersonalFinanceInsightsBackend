@@ -49,6 +49,18 @@ monthly rent are configured in `Finance.Infrastructure/Import/import-rules.json`
 Statements are read as UTF-8, or as Windows-1252 when the file isn't valid UTF-8 (e.g. re-saved in Excel).
 Transactions are duplicates only within the same account.
 
+## Correcting categories
+
+`PUT /api/Transaction/{id}` changes a transaction's description and category. A category picked by hand is
+locked: `POST /api/Transaction/ApplyCategoryRules` re-runs the current rules from `import-rules.json` over
+everything else (savings rows and the fixed monthly rent are left alone). Editing never changes the duplicate
+hash, so re-importing the statement still skips the row.
+
+## Budgets
+
+A budget's `period` is `Total` (everything linked counts, e.g. a trip) or `Monthly` (only transactions dated
+in the current month count, so it starts over every month).
+
 ## Reports
 
 The dashboard's current month and year follow `Reports:TimeZone` in `appsettings.json`
