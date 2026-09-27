@@ -59,11 +59,6 @@ public class TransactionService(
         return new ImportResult(parsed.Count, added, parsed.Count - added);
     }
 
-    public Task<List<Transaction>> GetAllAsync(CancellationToken cancellationToken = default)
-    {
-        return transactionRepository.GetAllAsync(cancellationToken);
-    }
-
     public Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default)
     {
         return transactionRepository.FilterAsync(filter, cancellationToken);

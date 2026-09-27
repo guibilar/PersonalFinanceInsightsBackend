@@ -12,6 +12,7 @@ using Finance.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 
 namespace FinanceTests;
@@ -217,15 +218,44 @@ public class ApiBehaviourTests
             (e.Category.StartsWith("Microsoft.AspNetCore") || e.Category.StartsWith("FinanceApi")));
     }
 
-    [Fact]
-    public async Task Health_ReportsHealthyWhenTheDatabaseIsReachable()
+    [Theory]
+    [InlineData("/health")]
+    [InlineData("/health/ready")]
+    [InlineData("/health/live")]
+    public async Task Health_ReportsHealthyWhenTheDatabaseIsReachable(string path)
     {
         await using var factory = new FinanceApiFactory();
 
-        var response = await factory.CreateClient().GetAsync("/health");
+        var response = await factory.CreateClient().GetAsync(path);
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task Health_DatabaseOutage_FailsReadinessButNotLiveness()
+    {
+        await using var factory = new FinanceApiFactory(services =>
+            services.Configure<HealthCheckServiceOptions>(options =>
+            {
+                var database = options.Registrations.Single(r => r.Name == "database");
+                database.Factory = _ => new UnreachableDatabase();
+            }));
+        var client = factory.CreateClient();
+
+        var ready = await client.GetAsync("/health/ready");
+        var legacy = await client.GetAsync("/health");
+        var live = await client.GetAsync("/health/live");
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, ready.StatusCode);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, legacy.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, live.StatusCode);
+    }
+
+    private class UnreachableDatabase : IHealthCheck
+    {
+        public Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default) =>
+            Task.FromResult(HealthCheckResult.Unhealthy("Cannot connect to the database."));
     }
 
     private class BlockingReportService : IReportService

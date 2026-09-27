@@ -43,14 +43,6 @@ public class TransactionController(ITransactionService transactionService) : Con
         return new ImportResultDto { Read = result.Read, Added = result.Added, Skipped = result.Skipped };
     }
 
-    [HttpGet("GetAll")]
-    [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<TransactionOutputDto>>> GetAll(CancellationToken cancellationToken)
-    {
-        var transactions = await transactionService.GetAllAsync(cancellationToken);
-        return transactions.Select(TransactionMapping.ToOutput).ToList();
-    }
-
     [HttpPost("Filter")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]

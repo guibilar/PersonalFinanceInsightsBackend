@@ -7,7 +7,6 @@ namespace Finance.Application.Abstractions;
 
 public interface ITransactionRepository : IBaseRepository<Transaction>
 {
-    Task<List<Transaction>> GetAllAsync(CancellationToken cancellationToken = default);
     Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default);
     Task<List<Transaction>> FilterNoPaginationAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default);
     Task<bool> ExistsByHashAsync(AccountType account, string hash, CancellationToken cancellationToken = default);
