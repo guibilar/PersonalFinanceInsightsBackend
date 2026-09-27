@@ -38,6 +38,22 @@ public class TransactionEditingTests
     }
 
     [Fact]
+    public async Task Update_OnlyADescriptionFix_LeavesTheCategoryToTheRules()
+    {
+        await using var factory = new FinanceApiFactory();
+        var transaction = Stored("WAL-MART #3059", Category.Other);
+        await factory.SeedAsync(db => db.Transactions.Add(transaction));
+        var client = factory.CreateClient();
+
+        var updated = await (await client.PutAsJsonAsync($"/api/Transaction/{transaction.Id}",
+            new { description = "WAL-MART #3059 (groceries run)", category = "Other" })).ReadAsync<TransactionOutputDto>();
+        await client.PostAsync("/api/Transaction/ApplyCategoryRules", null);
+
+        Assert.False(updated.CategoryLocked);
+        Assert.Equal(Category.Groceries, await factory.QueryAsync(db => db.Transactions.Select(t => t.Category).SingleAsync()));
+    }
+
+    [Fact]
     public async Task Update_KeepsTheBudgetInTheResponse()
     {
         await using var factory = new FinanceApiFactory();

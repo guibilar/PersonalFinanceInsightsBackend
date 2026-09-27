@@ -64,6 +64,12 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
             if (!replacedByMonthlyRent && !IsExcluded(description))
             {
                 AddIfAmount(transactions, csv.GetField(MoneyOutColumn), date, description, account, TransactionType.Debit, category);
+
+                // Refunds give money back in the purchase's category; paying the card off is not spending at all.
+                if (account == AccountType.CreditCard && !IsCardPayment(description))
+                {
+                    AddIfAmount(transactions, csv.GetField(MoneyInColumn), date, description, account, TransactionType.Credit, category);
+                }
             }
         }
 
@@ -95,6 +101,9 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
 
     private bool IsExcluded(string description) =>
         _options.ExcludedDescriptions.Any(excluded => description.Contains(excluded, StringComparison.Ordinal));
+
+    private bool IsCardPayment(string description) =>
+        _options.CardPaymentKeywords.Any(keyword => description.Contains(keyword, StringComparison.OrdinalIgnoreCase));
 
     private bool IsIncome(string description) =>
         _options.IncomeKeywords.Any(keyword => description.Contains(keyword, StringComparison.Ordinal));

@@ -130,6 +130,32 @@ public class ApiBehaviourTests
     }
 
     [Fact]
+    public async Task Reports_CardRefundsReduceSpending_ChequingIncomeDoesNot()
+    {
+        var now = new DateTimeOffset(2026, 2, 15, 17, 0, 0, TimeSpan.Zero);
+        await using var factory = new FinanceApiFactory(services =>
+            services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FixedTimeProvider(now))));
+        Transaction Tx(string description, decimal amount, TransactionType type, AccountType account, Category category) => new()
+        {
+            Id = Guid.NewGuid(), Description = description, Amount = amount, TransactionType = type, Account = account,
+            Category = category, Date = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc), Hash = Guid.NewGuid().ToString()
+        };
+        await factory.SeedAsync(db => db.Transactions.AddRange(
+            Tx("WAL-MART", 120, TransactionType.Debit, AccountType.CreditCard, Category.Groceries),
+            Tx("WAL-MART", 20, TransactionType.Credit, AccountType.CreditCard, Category.Groceries),
+            Tx("NETFLIX", 17, TransactionType.Debit, AccountType.CreditCard, Category.Subscriptions),
+            Tx("Deel Canada PAYROLL", 4200, TransactionType.Credit, AccountType.Chequing, Category.Other)));
+
+        var month = await (await factory.CreateClient().GetAsync("/api/Reports/current-month-categorized-graph"))
+            .ReadAsync<MonthlyCategorizedGraphData>();
+
+        var feb = Assert.Single(month.MonthlyData);
+        Assert.Equal(117m, feb.Total);
+        Assert.Equal(100m, feb.CategoryValues[Category.Groceries]);
+        Assert.DoesNotContain(Category.Other, month.Categories);
+    }
+
+    [Fact]
     public async Task Reports_UseTheInjectedClock()
     {
         var now = new DateTimeOffset(2026, 2, 15, 12, 0, 0, TimeSpan.Zero);

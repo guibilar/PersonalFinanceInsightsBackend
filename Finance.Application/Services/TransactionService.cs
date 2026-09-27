@@ -81,8 +81,12 @@ public class TransactionService(
 
         // The hash is left as imported: it identifies the statement row, so a re-import still recognises it.
         transaction.Description = description.Trim();
-        transaction.Category = category;
-        transaction.CategoryLocked = true;
+        // Only a category the user actually changed is locked; fixing just the description leaves it to the rules.
+        if (transaction.Category != category)
+        {
+            transaction.Category = category;
+            transaction.CategoryLocked = true;
+        }
         await transactionRepository.SaveChangesAsync(cancellationToken);
         return transaction;
     }

@@ -10,6 +10,12 @@ public class ImportOptions
     /// <summary>Rows whose description contains any of these (e.g. transfers between own accounts) are skipped.</summary>
     public List<string> ExcludedDescriptions { get; set; } = [];
 
+    /// <summary>
+    /// Money in on a credit card statement is a refund, except the card's own payments, which contain one of these
+    /// (case-insensitive) and are skipped: the money already left the chequing account as a transfer.
+    /// </summary>
+    public List<string> CardPaymentKeywords { get; set; } = [];
+
     /// <summary>Deposits on a chequing statement are imported as income only when they contain one of these.</summary>
     public List<string> IncomeKeywords { get; set; } = [];
 
