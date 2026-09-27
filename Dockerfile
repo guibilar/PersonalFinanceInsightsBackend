@@ -1,5 +1,5 @@
 # Build: restore first (cached until a project file changes), then publish.
-FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 COPY ["Directory.Build.props", "Directory.Packages.props", "./"]
@@ -13,8 +13,8 @@ RUN dotnet restore "FinanceApi/FinanceApi.csproj"
 COPY . .
 RUN dotnet publish "FinanceApi/FinanceApi.csproj" -c Release -o /app/publish --no-restore
 
-# Runtime: the .NET 8 image listens on 8080 and provides a non-root user.
-FROM mcr.microsoft.com/dotnet/aspnet:8.0
+# Runtime: the .NET image listens on 8080 and provides a non-root user.
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 COPY --from=build /app/publish .
 USER $APP_UID
