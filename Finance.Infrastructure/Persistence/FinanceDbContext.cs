@@ -13,6 +13,15 @@ public class FinanceDbContext : DbContext
     public DbSet<Transaction> Transactions { get; set; } = null!;
     public DbSet<Budget> Budgets { get; set; } = null!;
 
+    // Enums are stored by name, so reordering or inserting enum members never changes stored data.
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        configurationBuilder.Properties<Category>().HaveConversion<string>();
+        configurationBuilder.Properties<TransactionType>().HaveConversion<string>();
+        configurationBuilder.Properties<AccountType>().HaveConversion<string>();
+        configurationBuilder.Properties<Status>().HaveConversion<string>();
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
