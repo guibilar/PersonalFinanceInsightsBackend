@@ -1,26 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-    <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
-        <Nullable>enable</Nullable>
-        <ImplicitUsings>enable</ImplicitUsings>
-    </PropertyGroup>
+  <ItemGroup>
+    <!-- Needed at design time for `dotnet ef` (startup project). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Swashbuckle.AspNetCore.Swagger" />
+    <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" />
+    <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" />
+  </ItemGroup>
 
-    <ItemGroup>
-      <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.0">
-        <PrivateAssets>all</PrivateAssets>
-        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      </PackageReference>
-      <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="9.0.0" />
-      <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
-      <PackageReference Include="Swashbuckle.AspNetCore.Swagger" Version="9.0.4" />
-      <PackageReference Include="Swashbuckle.AspNetCore.SwaggerGen" Version="9.0.4" />
-      <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="9.0.4" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <ProjectReference Include="..\FinanceDto\FinanceDto.csproj" />
-      <ProjectReference Include="..\FinanceLogic\FinanceLogic.csproj" />
-    </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Finance.Infrastructure\Finance.Infrastructure.csproj" />
+  </ItemGroup>
 
 </Project>

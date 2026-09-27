@@ -1,10 +1,8 @@
-using CrossCutting.Services;
-using CrossCutting.Services.Interfaces;
-using FinanceDto.Models;
 using Microsoft.AspNetCore.Mvc;
+using Finance.Application.Services.Interfaces;
+using Finance.Contracts.Reports;
 
-namespace FinanceApi.Controllers
-{
+namespace FinanceApi.Controllers{
     [Route("api/[controller]")]
     [ApiController]
     public class ReportsController(IReportService reportService) : ControllerBase

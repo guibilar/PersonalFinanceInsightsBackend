@@ -1,7 +1,7 @@
-using CrossCutting.Services.Interfaces;
-using FinanceApi.Converters;
-using FinanceDto.Inputs;
 using Microsoft.AspNetCore.Mvc;
+using FinanceApi.Mapping;
+using Finance.Application.Services.Interfaces;
+using Finance.Contracts.Inputs;
 
 namespace FinanceApi.Controllers;
 

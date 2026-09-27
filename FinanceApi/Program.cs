@@ -1,11 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using CrossCutting.Services;
-using CrossCutting.Services.Interfaces;
-using FinanceDomain;
-using FinanceDomain.Repositories;
-using FinanceDomain.Repositories.Interfaces;
-using Microsoft.EntityFrameworkCore;
+using Finance.Application;
+using Finance.Infrastructure;
+using Finance.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,24 +13,9 @@ builder.Services.AddControllers()
         options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
     });
 
-builder.Services.AddDbContext<FinanceDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"), npgsqlOptions =>
-    {
-        npgsqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 5,
-            maxRetryDelay: TimeSpan.FromSeconds(10),
-            errorCodesToAdd: null
-        );
-    }));
-
-
-builder.Services.AddScoped<ITransactionRepository, TransactionRepository>();
-builder.Services.AddScoped<IBudgetRepository, BudgetRepository>();
-
-builder.Services.AddScoped<ITransactionService, TransactionService>();
-builder.Services.AddScoped<IReportService, ReportService>();
-builder.Services.AddScoped<IBudgetService, BudgetService>();
-
+builder.Services
+    .AddApplication()
+    .AddInfrastructure(builder.Configuration.GetConnectionString("DefaultConnection"));
 
 builder.Services.AddEndpointsApiExplorer();
 
