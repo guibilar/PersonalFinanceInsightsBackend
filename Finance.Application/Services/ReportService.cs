@@ -24,7 +24,14 @@ public class ReportService(ITransactionRepository transactionRepository, Reporti
     {
         var monthStart = calendar.CurrentMonthStart();
         var transactions = await SpendingAsync(monthStart, monthStart.AddMonths(1), cancellationToken);
-        return GenerateMonthlyGraphDataFromTransactions(transactions);
+        var report = GenerateMonthlyGraphDataFromTransactions(transactions);
+
+        // Days 1..today of the previous month; on the 30th, February has only 28 of them.
+        var previousStart = monthStart.AddMonths(-1);
+        var days = Math.Min(calendar.Today().Day, DateTime.DaysInMonth(previousStart.Year, previousStart.Month));
+        var previous = await SpendingAsync(previousStart, previousStart.AddDays(days), cancellationToken);
+        report.PreviousMonthToDateTotal = previous.Sum(t => t.TransactionType == TransactionType.Credit ? -t.Amount : t.Amount);
+        return report;
     }
 
     /// <summary>
