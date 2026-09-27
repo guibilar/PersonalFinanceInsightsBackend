@@ -6,6 +6,11 @@ using FinanceApi.Health;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Import rules ship as their own file; environment variables (Import__...) can still override them.
+builder.Configuration
+    .AddJsonFile(Path.Combine(AppContext.BaseDirectory, Finance.Infrastructure.DependencyInjection.ImportRulesFile), optional: false)
+    .AddEnvironmentVariables();
+
 builder.Services.AddControllers()
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
@@ -15,7 +20,7 @@ builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services
     .AddApplication()
-    .AddInfrastructure(builder.Configuration.GetConnectionString("DefaultConnection"));
+    .AddInfrastructure(builder.Configuration);
 
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database");

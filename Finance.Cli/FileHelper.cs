@@ -1,4 +1,4 @@
-namespace Finance.Infrastructure.Import;
+namespace Finance.Cli;
 
 public static class FileHelper
 {

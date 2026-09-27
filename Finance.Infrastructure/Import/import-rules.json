@@ -1,0 +1,142 @@
+{
+  "Import": {
+    "ExcludedDescriptions": [
+      "Internet Banking INTERNET TRANSFER",
+      "Internet Banking FULFILL REQUEST",
+      "UBER* PENDING"
+    ],
+    "IncomeKeywords": [
+      "Deel Canada",
+      "DEPOSIT TrupCAN"
+    ],
+    "MonthlyRent": {
+      "Amount": 1947.5,
+      "Description": "Monthly Rent"
+    },
+    "CategoryRules": [
+      {
+        "Category": "Groceries",
+        "Keywords": [
+          "METRO",
+          "GROCERY",
+          "SUPERMARKET",
+          "DYLAN'S NF",
+          "LOBLAWS",
+          "GIANT TIGER",
+          "FARM BOY",
+          "FRESHCO",
+          "WAL-MART",
+          "SOBEYS",
+          "HALENDA'S MEATS"
+        ]
+      },
+      {
+        "Category": "Dining",
+        "Keywords": [
+          "BURRITO",
+          "RESTAURANT",
+          "PIZZA",
+          "CAFE",
+          "SUBWAY",
+          "TIM HORTONS",
+          "MCDONALD",
+          "STARBUCKS",
+          "HALIBUT HOUSE",
+          "DIVINO CHURRASCO",
+          "SUSHI",
+          "SHANGHAI 360",
+          "FIVE GUYS",
+          "A&W",
+          "ARBYS",
+          "RIO 40 DEGREES",
+          "FIREHOUSE",
+          "SAMBA BRAZIL EATERY",
+          "POULET ROUGE",
+          "MONTANAS COOKHOUSE",
+          "PUB",
+          "THE PLAYERS BENCH SPORTS"
+        ]
+      },
+      {
+        "Category": "Utilities",
+        "Keywords": [
+          "WYSE METER",
+          "BELL",
+          "FIDO",
+          "COINAMATIC"
+        ]
+      },
+      {
+        "Category": "Rent",
+        "Keywords": [
+          "VALIANT"
+        ]
+      },
+      {
+        "Category": "Pet",
+        "Keywords": [
+          "PETSMART",
+          "SIMCOE ST. N ANIMAL HOSPI OSHAWA",
+          "PET VALU",
+          "DEBIT TRUPANION"
+        ]
+      },
+      {
+        "Category": "Transportation",
+        "Keywords": [
+          "UBER",
+          "LYFT",
+          "TAXI",
+          "PRESTO"
+        ]
+      },
+      {
+        "Category": "Shopping",
+        "Keywords": [
+          "AMAZON",
+          "WALMART",
+          "SHOPPERS",
+          "CANADIAN TIRE",
+          "DOLLARAMA",
+          "COSTCO",
+          "NEWEGG",
+          "BEST BUY",
+          "GAMESTOP",
+          "WINNERS",
+          "HOT TOPIC",
+          "VALUE VILLAGE",
+          "NOW AND THEN",
+          "JYSK",
+          "SHOE COMPANY",
+          "SPENCER GIFTS"
+        ]
+      },
+      {
+        "Category": "Entertainment",
+        "Keywords": [
+          "STEAMGAMES",
+          "TSO TORONTO",
+          "HYTTOOFO LOVENSE"
+        ]
+      },
+      {
+        "Category": "Health",
+        "Keywords": [
+          "DENTISTRY ON RO",
+          "LIFELABS",
+          "LA FITNESS"
+        ]
+      },
+      {
+        "Category": "Subscriptions",
+        "Keywords": [
+          "NETFLIX",
+          "SPOTIFY",
+          "DISNEY",
+          "SUBSCRIPTION",
+          "GOOGLE ONE"
+        ]
+      }
+    ]
+  }
+}

@@ -1,8 +1,10 @@
 using Finance.Application.Abstractions;
+using Finance.Application.Import;
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
+using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
 using Finance.Domain.Helpers;
 using Microsoft.Extensions.Logging;
@@ -13,7 +15,7 @@ public class TransactionService(
     ILogger<TransactionService> logger,
     ITransactionRepository transactionRepository,
     IBudgetRepository budgetRepository,
-    ITransactionFileReader fileReader) : ITransactionService
+    IStatementParser statementParser) : ITransactionService
 {
     public async Task<Transaction> AddAsync(Transaction transaction, CancellationToken cancellationToken = default)
     {
@@ -26,22 +28,29 @@ public class TransactionService(
         return await transactionRepository.AddAsync(transaction, cancellationToken);
     }
 
-    public async Task SyncTransactionsByFileAsync(CancellationToken cancellationToken = default)
+    public async Task<ImportResult> ImportAsync(Stream statement, AccountType account, CancellationToken cancellationToken = default)
     {
-        var records = fileReader.ReadExpenses(includeRent: true);
-        records.AddRange(fileReader.ReadIncome());
+        var parsed = statementParser.Parse(statement, account);
 
+        // Number identical rows (same day, amount and description) so repeated purchases get distinct
+        // hashes, while re-importing the same statement produces the same hashes and adds nothing.
+        var occurrences = new Dictionary<string, int>();
         var added = 0;
-        foreach (var record in records)
+        foreach (var transaction in parsed)
         {
-            record.Hash = TransactionHashHelper.GenerateTransactionHash(record.Amount, record.Date, record.Description);
-            if (await transactionRepository.ExistsByHashAsync(record.Hash, cancellationToken)) continue;
+            var key = $"{transaction.Date:yyyy-MM-dd}|{transaction.Amount:F2}|{transaction.Description.Trim().ToLowerInvariant()}";
+            var occurrence = occurrences[key] = occurrences.GetValueOrDefault(key) + 1;
+            transaction.Hash = TransactionHashHelper.GenerateTransactionHash(
+                transaction.Amount, transaction.Date, transaction.Description, occurrence);
 
-            await transactionRepository.AddAsync(record, cancellationToken);
+            if (await transactionRepository.ExistsByHashAsync(transaction.Hash, cancellationToken)) continue;
+
+            await transactionRepository.AddAsync(transaction, cancellationToken);
             added++;
         }
 
-        logger.LogInformation("File sync read {Read} transactions and added {Added}", records.Count, added);
+        logger.LogInformation("Imported {Account} statement: {Read} read, {Added} added", account, parsed.Count, added);
+        return new ImportResult(parsed.Count, added, parsed.Count - added);
     }
 
     public Task<List<Transaction>> GetAllAsync(CancellationToken cancellationToken = default)

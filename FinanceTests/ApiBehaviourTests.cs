@@ -47,9 +47,14 @@ public class ApiBehaviourTests
     public async Task UnexpectedErrors_Return500WithoutInternalDetails()
     {
         using var factory = new FinanceApiFactory(services =>
-            services.Replace(ServiceDescriptor.Scoped<ITransactionFileReader, ThrowingFileReader>()));
+            services.Replace(ServiceDescriptor.Scoped<IStatementParser, ThrowingParser>()));
+        var form = new MultipartFormDataContent
+        {
+            { new ByteArrayContent("x"u8.ToArray()), "file", "statement.csv" },
+            { new StringContent("Chequing"), "account" }
+        };
 
-        var response = await factory.CreateClient().PostAsync("/api/Transaction/SyncTransactionsByFile", null);
+        var response = await factory.CreateClient().PostAsync("/api/Transaction/Import", form);
 
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         var body = await response.Content.ReadAsStringAsync();
@@ -153,11 +158,9 @@ public class ApiBehaviourTests
         Assert.Equal("Healthy", await response.Content.ReadAsStringAsync());
     }
 
-    private class ThrowingFileReader : ITransactionFileReader
+    private class ThrowingParser : IStatementParser
     {
-        public List<Transaction> ReadExpenses(bool includeRent) =>
-            throw new FileNotFoundException("Could not find file '/secret-path/cibc_credit.csv'");
-
-        public List<Transaction> ReadIncome() => [];
+        public List<Transaction> Parse(Stream statement, AccountType account) =>
+            throw new InvalidDataException("Bad row in '/secret-path/cibc_credit.csv'");
     }
 }

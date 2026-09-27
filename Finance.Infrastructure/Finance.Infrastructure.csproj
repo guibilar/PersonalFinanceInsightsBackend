@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <PackageReference Include="CsvHelper" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <PrivateAssets>all</PrivateAssets>
@@ -13,9 +14,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Bank exports read by the CSV import (not committed). -->
-    <None Update="Files\CIBC\*.csv">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    <!-- Import rules, copied next to the API and the CLI (both reference this project). -->
+    <None Update="Import\import-rules.json" Link="import-rules.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
 
