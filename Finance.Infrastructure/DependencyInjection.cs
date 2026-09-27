@@ -17,7 +17,7 @@ public static class DependencyInjection
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddDbContext<FinanceDbContext>(options =>
-            options.UseNpgsql(configuration.GetConnectionString("DefaultConnection"), npgsqlOptions =>
+            options.UseNpgsql(GetConnectionString(configuration), npgsqlOptions =>
             {
                 npgsqlOptions.EnableRetryOnFailure(
                     maxRetryCount: 5,
@@ -31,5 +31,18 @@ public static class DependencyInjection
         services.AddScoped<IBudgetRepository, BudgetRepository>();
         services.AddScoped<IStatementParser, CibcCsvParser>();
         return services;
+    }
+
+    private static string GetConnectionString(IConfiguration configuration) =>
+        configuration.GetConnectionString("DefaultConnection")
+        ?? throw new InvalidOperationException(
+            "ConnectionStrings:DefaultConnection is not set. Outside Development, provide it through the " +
+            "ConnectionStrings__DefaultConnection environment variable.");
+
+    /// <summary>Applies pending EF Core migrations; enabled with Database:MigrateOnStartup (e.g. in Docker).</summary>
+    public static async Task MigrateDatabaseAsync(this IServiceProvider services)
+    {
+        await using var scope = services.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<FinanceDbContext>().Database.MigrateAsync();
     }
 }

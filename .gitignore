@@ -1,0 +1,26 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+publish/
+*.nupkg
+TestResults/
+coverage*.*
+
+# IDEs
+.idea/
+.vs/
+.vscode/*
+!.vscode/settings.json
+*.user
+*.suo
+*.DotSettings.user
+
+# Local configuration and secrets
+.env
+appsettings.*.local.json
+
+# Personal bank statements and generated charts: never commit.
+**/Files/
+**/Results/
