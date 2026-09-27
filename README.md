@@ -16,12 +16,12 @@ PostgreSQL via EF Core.
 | `Finance.Cli` | Console tool: charts and Excel export from local statements | Infrastructure |
 | `FinanceTests` | API tests (xUnit + `WebApplicationFactory`) | FinanceApi |
 
-Package versions live in `Directory.Packages.props`; shared build settings (net8.0, nullable,
+Package versions live in `Directory.Packages.props`; shared build settings (net10.0, nullable,
 warnings as errors) in `Directory.Build.props`.
 
 ## Run locally
 
-Requires the .NET 8 SDK and a PostgreSQL server on `localhost:5432` (user/password `postgres`,
+Requires the .NET 10 SDK and a PostgreSQL server on `localhost:5432` (user/password `postgres`,
 as in `appsettings.Development.json`).
 
 ```bash
