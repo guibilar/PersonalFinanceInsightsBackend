@@ -38,12 +38,18 @@ case "${1:-schedule}" in
     backup
     ;;
   schedule)
+    # As the container's main process, stop at once on `docker compose stop`/`down` (a foreground sleep
+    # would hold the signal until Docker's 10-second timeout kills the container).
+    sleeper=""
+    trap 'log "stopping"; [ -n "$sleeper" ] && kill "$sleeper" 2>/dev/null; exit 0' TERM INT
     mkdir -p "$dir"
     backup
     while true; do
       wait=$(seconds_until_next_run)
       log "next backup at $at (in $((wait / 60)) min)"
-      sleep "$wait"
+      sleep "$wait" &
+      sleeper=$!
+      wait "$sleeper"
       # A failure is logged and retried the next day; the health check flags a missing recent dump.
       backup || true
     done
