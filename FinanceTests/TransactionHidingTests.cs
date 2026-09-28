@@ -58,7 +58,7 @@ public class TransactionHidingTests
         Transaction Spent(string description, decimal amount, bool hidden) => new()
         {
             Id = Guid.NewGuid(), Date = DateTime.SpecifyKind(today, DateTimeKind.Utc), Description = description, Amount = amount,
-            Category = Category.Dining, TransactionType = TransactionType.Debit, Account = AccountType.CreditCard,
+            Category = Category.Dining, TransactionType = TransactionType.Debit, AccountId = Account.DefaultCreditCardId,
             Hash = Guid.NewGuid().ToString(), BudgetId = budgetId, Hidden = hidden
         };
         await factory.SeedAsync(db =>
@@ -120,7 +120,7 @@ public class TransactionHidingTests
         var transaction = new
         {
             date = "2026-01-04", description = "METRO", amount = 45.10, category = "Groceries",
-            transactionType = "Debit", account = "CreditCard"
+            transactionType = "Debit", accountId = Account.DefaultCreditCardId
         };
         var created = await (await client.PostAsJsonAsync("/api/Transaction", transaction)).ReadAsync<TransactionOutputDto>();
         await client.DeleteAsync($"/api/Transaction/{created.Id}");

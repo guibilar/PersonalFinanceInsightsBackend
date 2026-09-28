@@ -20,4 +20,11 @@ public class ReportsController(IReportService reportService) : ControllerBase
     {
         return reportService.GenerateCurrentMonthCategorizedGraphDataAsync(cancellationToken);
     }
+
+    /// <summary>Income, spending and money saved per month of the current year.</summary>
+    [HttpGet("cash-flow")]
+    public Task<CashFlowReport> GenerateCashFlowReport(CancellationToken cancellationToken)
+    {
+        return reportService.GenerateCashFlowReportAsync(cancellationToken);
+    }
 }

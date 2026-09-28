@@ -14,4 +14,8 @@ public class TransactionUpdateDto
 
     [Required, EnumDataType(typeof(Category))]
     public Category? Category { get; set; }
+
+    /// <summary>Unchanged when omitted. Spending only for money out, income and refunds only for money in.</summary>
+    [EnumDataType(typeof(Flow))]
+    public Flow? Flow { get; set; }
 }

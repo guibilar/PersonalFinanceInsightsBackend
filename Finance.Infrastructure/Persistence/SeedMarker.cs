@@ -6,6 +6,7 @@ namespace Finance.Infrastructure.Persistence;
 public class SeedMarker
 {
     public const string CategoryRules = "CategoryRules";
+    public const string FlowRules = "FlowRules";
 
     public string Name { get; set; } = string.Empty;
     public DateTimeOffset SeededUtc { get; set; }

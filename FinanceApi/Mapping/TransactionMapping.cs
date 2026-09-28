@@ -19,7 +19,7 @@ public static class TransactionMapping
             Amount = dto.Amount,
             Category = dto.Category!.Value,
             TransactionType = dto.TransactionType!.Value,
-            Account = dto.Account,
+            AccountId = dto.AccountId!.Value,
             // Computed server-side, same as the CSV sync, so duplicates are detected consistently.
             Hash = TransactionHashHelper.GenerateTransactionHash(dto.Amount, date, dto.Description),
         };
@@ -37,7 +37,11 @@ public static class TransactionMapping
             CategoryLocked = transaction.CategoryLocked,
             Hidden = transaction.Hidden,
             TransactionType = transaction.TransactionType,
-            Account = transaction.Account,
+            AccountId = transaction.AccountId,
+            AccountName = transaction.Account?.Name ?? string.Empty,
+            AccountType = transaction.Account?.Type ?? default,
+            Flow = transaction.Flow,
+            FlowLocked = transaction.FlowLocked,
             BudgetId = transaction.BudgetId,
             Budget = transaction.Budget?.ToReference()
         };

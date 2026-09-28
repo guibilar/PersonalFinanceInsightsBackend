@@ -7,7 +7,10 @@ public class TransactionFilterDto
 {
     public Guid? TransactionId { get; set; }
     public TransactionType? TransactionType { get; set; }
+    /// <summary>Kinds of account (every account of those kinds).</summary>
     public List<AccountType>? AccountType { get; set; }
+    public Guid? AccountId { get; set; }
+    public Flow? Flow { get; set; }
     public DateTime? StartDate { get; set; }
 
     /// <summary>Inclusive: transactions on this date are returned.</summary>

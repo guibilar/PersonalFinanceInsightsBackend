@@ -29,7 +29,7 @@ public class ApiBehaviourTests
         Date = DateTime.SpecifyKind(date, DateTimeKind.Utc),
         Category = Category.Dining,
         TransactionType = TransactionType.Debit,
-        Account = AccountType.CreditCard,
+        AccountId = Account.DefaultCreditCardId,
         Hash = Guid.NewGuid().ToString(),
         BudgetId = budgetId
     };
@@ -57,7 +57,7 @@ public class ApiBehaviourTests
         var form = new MultipartFormDataContent
         {
             { new ByteArrayContent("x"u8.ToArray()), "file", "statement.csv" },
-            { new StringContent("Chequing"), "account" }
+            { new StringContent(Account.DefaultChequingId.ToString()), "accountId" }
         };
 
         var response = await factory.CreateClient().PostAsync("/api/Transaction/Import", form);
@@ -138,7 +138,8 @@ public class ApiBehaviourTests
             services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FixedTimeProvider(now))));
         Transaction Tx(string description, decimal amount, TransactionType type, AccountType account, Category category) => new()
         {
-            Id = Guid.NewGuid(), Description = description, Amount = amount, TransactionType = type, Account = account,
+            Id = Guid.NewGuid(), Description = description, Amount = amount, TransactionType = type,
+            AccountId = TestAccounts.Id(account), Flow = TestAccounts.DefaultFlow(account, type),
             Category = category, Date = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc), Hash = Guid.NewGuid().ToString()
         };
         await factory.SeedAsync(db => db.Transactions.AddRange(
@@ -197,6 +198,7 @@ public class ApiBehaviourTests
             db.Transactions.Add(NewTransaction("Groceries", 40, new DateTime(2026, 2, 2)));
             var refund = NewTransaction("Refund", 15, new DateTime(2026, 2, 3));
             refund.TransactionType = TransactionType.Credit;
+            refund.Flow = Flow.Refund;
             db.Transactions.Add(refund);
             db.Transactions.Add(NewTransaction("Later in February", 60, new DateTime(2026, 2, 6)));
             db.Transactions.Add(NewTransaction("March", 70, new DateTime(2026, 3, 2)));
@@ -352,6 +354,9 @@ public class ApiBehaviourTests
                 _cancelled.TrySetResult();
             }
         }
+
+        public Task<CashFlowReport> GenerateCashFlowReportAsync(CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
     }
 
     private class CapturingLoggerProvider : ILoggerProvider
@@ -371,7 +376,7 @@ public class ApiBehaviourTests
 
     private class ThrowingParser : IStatementParser
     {
-        public List<Transaction> Parse(Stream statement, AccountType account, CategoryMatcher categories) =>
+        public ParsedStatement Parse(Stream statement) =>
             throw new InvalidDataException("Bad row in '/secret-path/cibc_credit.csv'");
     }
 }

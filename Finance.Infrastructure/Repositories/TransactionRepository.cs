@@ -12,7 +12,7 @@ namespace Finance.Infrastructure.Repositories;
 public class TransactionRepository(FinanceDbContext dbContext)
     : BaseRepository<Transaction>(dbContext), ITransactionRepository
 {
-    // First half of the advisory lock key for imports (the account is the second); any constant unique to this app.
+    // First half of the advisory lock key for imports (the second comes from the account id); any constant unique to this app.
     private const int ImportLockKey = 0x46494e41; // "FINA"
 
     public Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default)
@@ -28,26 +28,35 @@ public class TransactionRepository(FinanceDbContext dbContext)
     // Tracked, with its budget so the response after an edit still shows the link.
     public override Task<Transaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return DbContext.Transactions.Include(t => t.Budget).SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
+        return DbContext.Transactions.Include(t => t.Budget).Include(t => t.Account)
+            .SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
     }
 
     public Task<List<Transaction>> GetRuleCategorizedAsync(CancellationToken cancellationToken = default)
     {
         return DbContext.Transactions
-            .Where(t => !t.CategoryLocked && t.Account != AccountType.Savings)
+            .Where(t => !t.CategoryLocked && t.Account!.Type != AccountType.Savings)
+            .ToListAsync(cancellationToken);
+    }
+
+    public Task<List<Transaction>> GetRuleManagedAsync(CancellationToken cancellationToken = default)
+    {
+        return DbContext.Transactions
+            .Include(t => t.Account)
+            .Where(t => !t.CategoryLocked || !t.FlowLocked)
             .ToListAsync(cancellationToken);
     }
 
     public Task<Transaction?> GetIncludingHiddenAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return DbContext.Transactions.IgnoreQueryFilters().Include(t => t.Budget)
+        return DbContext.Transactions.IgnoreQueryFilters().Include(t => t.Budget).Include(t => t.Account)
             .SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
     }
 
     public async Task<int> HideLegacyMonthlyRentAsync(IReadOnlyCollection<DateTime> months, CancellationToken cancellationToken = default)
     {
         var rows = await DbContext.Transactions
-            .Where(t => t.Account == AccountType.Chequing && t.Category == Category.Rent &&
+            .Where(t => t.Account!.Type == AccountType.Chequing && t.Category == Category.Rent &&
                         t.Description == LegacyMonthlyRent.Description && months.Contains(t.Date))
             .ToListAsync(cancellationToken);
         rows.ForEach(t => t.Hidden = true);
@@ -55,14 +64,23 @@ public class TransactionRepository(FinanceDbContext dbContext)
         return rows.Count;
     }
 
-    public Task<Transaction?> FindByHashAsync(AccountType account, string hash, CancellationToken cancellationToken = default)
+    public Task<Transaction?> FindByHashAsync(Guid accountId, string hash, CancellationToken cancellationToken = default)
     {
         return DbContext.Transactions.IgnoreQueryFilters().AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Account == account && t.Hash == hash, cancellationToken);
+            .FirstOrDefaultAsync(t => t.AccountId == accountId && t.Hash == hash, cancellationToken);
+    }
+
+    public Task<Dictionary<Guid, int>> CountHashesByAccountAsync(IReadOnlyCollection<string> hashes, CancellationToken cancellationToken = default)
+    {
+        return DbContext.Transactions.IgnoreQueryFilters()
+            .Where(t => hashes.Contains(t.Hash))
+            .GroupBy(t => t.AccountId)
+            .Select(g => new { AccountId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.AccountId, x => x.Count, cancellationToken);
     }
 
     public Task<int> AddMissingAsync(
-        AccountType account, IReadOnlyCollection<Transaction> transactions, CancellationToken cancellationToken = default)
+        Guid accountId, IReadOnlyCollection<Transaction> transactions, CancellationToken cancellationToken = default)
     {
         // The retrying execution strategy only allows an explicit transaction when it can replay all of it.
         return DbContext.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
@@ -76,14 +94,15 @@ public class TransactionRepository(FinanceDbContext dbContext)
             {
                 // Held until commit: a concurrent import for the same account waits, then sees these rows as existing.
                 // Without it, both would insert the same rows and fail on the unique index (or deadlock on it).
-                await DbContext.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock({ImportLockKey}, {(int)account})", ct);
+                var accountKey = BitConverter.ToInt32(accountId.ToByteArray());
+                await DbContext.Database.ExecuteSqlAsync($"SELECT pg_advisory_xact_lock({ImportLockKey}, {accountKey})", ct);
             }
 
             var hashes = transactions.Select(t => t.Hash).ToList();
             // Hidden rows count: they were deleted on purpose and must not come back.
             var existing = (await DbContext.Transactions
                 .IgnoreQueryFilters()
-                .Where(t => t.Account == account && hashes.Contains(t.Hash))
+                .Where(t => t.AccountId == accountId && hashes.Contains(t.Hash))
                 .Select(t => t.Hash)
                 .ToListAsync(ct)).ToHashSet();
             var toAdd = transactions.Where(t => !existing.Contains(t.Hash)).ToList();
@@ -102,7 +121,8 @@ public class TransactionRepository(FinanceDbContext dbContext)
             : DbContext.Transactions;
         query = query
             .AsNoTracking()
-            .Include(x => x.Budget);
+            .Include(x => x.Budget)
+            .Include(x => x.Account);
 
         if (filter.TransactionId.HasValue)
         {
@@ -116,7 +136,17 @@ public class TransactionRepository(FinanceDbContext dbContext)
 
         if (filter.AccountType is { Count: > 0 })
         {
-            query = query.Where(x => filter.AccountType.Contains(x.Account));
+            query = query.Where(x => filter.AccountType.Contains(x.Account!.Type));
+        }
+
+        if (filter.AccountId.HasValue)
+        {
+            query = query.Where(x => x.AccountId == filter.AccountId.Value);
+        }
+
+        if (filter.Flow.HasValue)
+        {
+            query = query.Where(x => x.Flow == filter.Flow.Value);
         }
 
         if (filter.StartDate.HasValue)

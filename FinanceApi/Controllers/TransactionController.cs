@@ -17,6 +17,7 @@ public class TransactionController(ITransactionService transactionService) : Con
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<TransactionOutputDto>> Add(TransactionInputDto transaction, CancellationToken cancellationToken)
     {
@@ -24,12 +25,17 @@ public class TransactionController(ITransactionService transactionService) : Con
         return StatusCode(StatusCodes.Status201Created, result.ToOutput());
     }
 
-    /// <summary>Imports a CIBC CSV export. Re-importing an overlapping statement only adds new rows.</summary>
+    /// <summary>
+    /// Imports a CIBC CSV export into an account. Re-importing an overlapping statement only adds new rows. A file that
+    /// doesn't look like the account's is refused with 409 (code "account-mismatch") unless <c>confirmed</c> is set.
+    /// </summary>
     [HttpPost("Import")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(MaxStatementBytes)]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<ImportResultDto>> Import(IFormFile file, [FromForm] StatementImportDto import, CancellationToken cancellationToken)
     {
         if (file.Length == 0)
@@ -39,7 +45,7 @@ public class TransactionController(ITransactionService transactionService) : Con
         }
 
         await using var stream = file.OpenReadStream();
-        var result = await transactionService.ImportAsync(stream, import.Account!.Value, cancellationToken);
+        var result = await transactionService.ImportAsync(stream, import.AccountId!.Value, import.Confirmed, cancellationToken);
         return new ImportResultDto { Read = result.Read, Added = result.Added, Skipped = result.Skipped };
     }
 
@@ -67,24 +73,30 @@ public class TransactionController(ITransactionService transactionService) : Con
         return result.Map(TransactionMapping.ToOutput);
     }
 
-    /// <summary>Corrects a transaction's description and category (a changed category is then locked against rule changes).</summary>
+    /// <summary>
+    /// Corrects a transaction's description, category and flow (a changed category or flow is then locked against
+    /// rule changes).
+    /// </summary>
     [HttpPut("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TransactionOutputDto>> Update(Guid id, TransactionUpdateDto update, CancellationToken cancellationToken)
     {
-        var transaction = await transactionService.UpdateAsync(id, update.Description, update.Category!.Value, cancellationToken);
+        var transaction = await transactionService.UpdateAsync(id, update.Description, update.Category!.Value, update.Flow, cancellationToken);
         return transaction.ToOutput();
     }
 
-    /// <summary>Re-applies the current category rules (see CategoryRulesController) to stored transactions.</summary>
-    [HttpPost("ApplyCategoryRules")]
+    /// <summary>
+    /// Re-applies the current category and flow rules (see CategoryRulesController and FlowRulesController) to stored
+    /// transactions.
+    /// </summary>
+    [HttpPost("ApplyRules")]
     [ProducesResponseType(StatusCodes.Status200OK)]
-    public async Task<ActionResult<CategoryRulesResultDto>> ApplyCategoryRules(CancellationToken cancellationToken)
+    public async Task<ActionResult<RulesResultDto>> ApplyRules(CancellationToken cancellationToken)
     {
-        var result = await transactionService.ApplyCategoryRulesAsync(cancellationToken);
-        return new CategoryRulesResultDto { Checked = result.Checked, Updated = result.Updated };
+        var result = await transactionService.ApplyRulesAsync(cancellationToken);
+        return new RulesResultDto { Checked = result.Checked, Updated = result.Updated };
     }
 
     /// <summary>

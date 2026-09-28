@@ -26,7 +26,8 @@ public class CategoryRuleTests
         bool locked = false, bool hidden = false) => new()
     {
         Id = Guid.NewGuid(), Date = new DateTime(2026, 3, 10, 0, 0, 0, DateTimeKind.Utc), Description = description, Amount = 10,
-        Category = category, TransactionType = TransactionType.Debit, Account = account, Hash = Guid.NewGuid().ToString(),
+        Category = category, TransactionType = TransactionType.Debit, AccountId = TestAccounts.Id(account),
+        Flow = TestAccounts.DefaultFlow(account, TransactionType.Debit), Hash = Guid.NewGuid().ToString(),
         CategoryLocked = locked, Hidden = hidden
     };
 
@@ -65,14 +66,14 @@ public class CategoryRuleTests
         var client = factory.CreateClient();
 
         // A second start on the same database adds nothing.
-        await factory.Services.SeedCategoryRulesAsync(NullLogger.Instance);
+        await factory.Services.SeedRulesAsync(NullLogger.Instance);
         Assert.Equal(SeedRules.Count, (await GetRulesAsync(client)).Count);
 
         foreach (var rule in await GetRulesAsync(client))
         {
             Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"{Rules}/{rule.Id}")).StatusCode);
         }
-        await factory.Services.SeedCategoryRulesAsync(NullLogger.Instance);
+        await factory.Services.SeedRulesAsync(NullLogger.Instance);
 
         Assert.Empty(await GetRulesAsync(client));
     }
@@ -280,7 +281,7 @@ public class CategoryRuleTests
     }
 
     [Fact]
-    public async Task ApplyCategoryRules_UsesTheStoredRules_AndStillSkipsHandPickedSavingsHiddenAndGeneratedRent()
+    public async Task ApplyRules_UsesTheStoredRules_AndStillSkipsHandPickedSavingsHiddenAndGeneratedRent()
     {
         await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
@@ -296,9 +297,10 @@ public class CategoryRuleTests
         await AddRuleAsync(client, "CORNER STORE", "Groceries");
         await AddRuleAsync(client, "MONTHLY RENT", "Utilities", position: 0);
         await client.DeleteAsync($"{Rules}/{(await GetRulesAsync(client)).Single(r => r.Keyword == "WAL-MART").Id}");
-        var result = await (await client.PostAsync("/api/Transaction/ApplyCategoryRules", null)).ReadAsync<CategoryRulesResultDto>();
+        var result = await (await client.PostAsync("/api/Transaction/ApplyRules", null)).ReadAsync<RulesResultDto>();
 
-        Assert.Equal((2, 2), (result.Checked, result.Updated));
+        // Checked: everything visible whose category or flow the rules decide; the hand-picked categories still get their flow checked.
+        Assert.Equal((5, 2), (result.Checked, result.Updated));
         var categories = await factory.QueryAsync(db => db.Transactions.IgnoreQueryFilters().ToDictionaryAsync(t => t.Id, t => t.Category));
         Assert.Equal(Category.Groceries, categories[corner.Id]);
         Assert.Equal(Category.Other, categories[walmart.Id]);

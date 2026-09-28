@@ -52,7 +52,7 @@ if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
     await app.Services.MigrateDatabaseAsync();
 }
 await app.Services.EnsureInitialUserAsync(app.Logger);
-await app.Services.SeedCategoryRulesAsync(app.Logger);
+await app.Services.SeedRulesAsync(app.Logger);
 
 // First, so everything after it (the auth cookie in particular) sees the scheme the browser used.
 app.UseForwardedHeaders();

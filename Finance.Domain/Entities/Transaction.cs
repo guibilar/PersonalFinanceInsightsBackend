@@ -1,5 +1,3 @@
-
-
 using Finance.Domain.Enums;
 
 namespace Finance.Domain.Entities;
@@ -11,11 +9,18 @@ public class Transaction : BaseEntity
     public decimal Amount { get; set; }
     public Category Category { get; set; }
     public TransactionType? TransactionType { get; set; }
-    public required AccountType Account { get; set; }
+    public Guid AccountId { get; set; }
+    public Account? Account { get; set; }
     public string Hash { get; set; } = string.Empty;
 
     /// <summary>Set when someone picks the category by hand; re-applying the category rules leaves it alone.</summary>
     public bool CategoryLocked { get; set; }
+
+    /// <summary>Whether it counts as spending, income or neither (see <see cref="FlowRule"/>).</summary>
+    public Flow Flow { get; set; }
+
+    /// <summary>Set when someone picks the flow by hand; re-applying the flow rules leaves it alone.</summary>
+    public bool FlowLocked { get; set; }
 
     /// <summary>
     /// Deleted by the user. The row stays so re-importing a statement that contains it doesn't add it back;

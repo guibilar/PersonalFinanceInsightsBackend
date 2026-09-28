@@ -29,6 +29,6 @@ public class TransactionInputDto
     [Required, EnumDataType(typeof(TransactionType))]
     public TransactionType? TransactionType { get; set; }
 
-    [EnumDataType(typeof(AccountType))]
-    public required AccountType Account { get; set; }
+    [Required]
+    public Guid? AccountId { get; set; }
 }

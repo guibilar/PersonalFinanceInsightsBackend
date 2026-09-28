@@ -19,7 +19,7 @@ public class TransactionSortTests : IAsyncLifetime
         {
             Id = Guid.NewGuid(), Description = description, Amount = amount, Category = category,
             Date = new DateTime(2026, 3, day, 0, 0, 0, DateTimeKind.Utc), Hash = Guid.NewGuid().ToString(),
-            Account = AccountType.CreditCard, TransactionType = TransactionType.Debit
+            AccountId = Account.DefaultCreditCardId, TransactionType = TransactionType.Debit
         };
         await _factory.SeedAsync(db => db.Transactions.AddRange(
             Tx("Bravo", 20, 2, Category.Shopping),

@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 using CsvHelper;
 using CsvHelper.Configuration;
 using Finance.Application.Abstractions;
@@ -7,30 +8,30 @@ using Finance.Application.Import;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
-using Microsoft.Extensions.Options;
 
 namespace Finance.Infrastructure.Import;
 
 /// <summary>
-/// CIBC CSV exports: no header; columns are date (yyyy-MM-dd), description, money out, money in.
-/// Read as UTF-8, or as Windows-1252 when the file is not valid UTF-8 (as saved by Excel on Windows).
+/// CIBC CSV exports: no header; columns are date (yyyy-MM-dd), description, money out, money in, and on credit card
+/// exports the masked card number. Read as UTF-8, or as Windows-1252 when the file is not valid UTF-8 (as saved by
+/// Excel on Windows).
 /// </summary>
-public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
+public partial class CibcCsvParser : IStatementParser
 {
     private const int DateColumn = 0;
     private const int DescriptionColumn = 1;
     private const int MoneyOutColumn = 2;
     private const int MoneyInColumn = 3;
+    private const int CardNumberColumn = 4;
 
     private static readonly Encoding StrictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
     private static readonly Encoding Windows1252 = CodePagesEncodingProvider.Instance.GetEncoding(1252)!;
 
-    private readonly ImportOptions _options = options.Value;
-
-    public List<Transaction> Parse(Stream statement, AccountType account, CategoryMatcher categories)
+    public ParsedStatement Parse(Stream statement)
     {
         var transactions = new List<Transaction>();
         var datedRows = 0;
+        var cardRows = 0;
         using var reader = new StringReader(ReadText(statement));
         // Short rows read as missing fields (null) and stray quotes as data, so any file gets row-by-row checks
         // below instead of an exception halfway through.
@@ -51,33 +52,11 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
             }
             date = DateTime.SpecifyKind(date, DateTimeKind.Utc);
             datedRows++;
+            if (MaskedCardNumber().IsMatch(csv.GetField(CardNumberColumn) ?? "")) cardRows++;
 
-            if (account == AccountType.Savings)
-            {
-                // Savings statements: every movement counts, in both directions.
-                AddIfAmount(transactions, csv.GetField(MoneyInColumn), date, description, account, TransactionType.Credit, Category.Other, positiveOnly: true);
-                AddIfAmount(transactions, csv.GetField(MoneyOutColumn), date, description, account, TransactionType.Debit, Category.Other, positiveOnly: true);
-                continue;
-            }
-
-            var category = categories.Categorize(description);
-
-            // Income is matched by keyword only; the exclusion list applies to spending.
-            if (account == AccountType.Chequing && IsIncome(description))
-            {
-                AddIfAmount(transactions, csv.GetField(MoneyInColumn), date, description, account, TransactionType.Credit, category);
-            }
-
-            if (!IsExcluded(description))
-            {
-                AddIfAmount(transactions, csv.GetField(MoneyOutColumn), date, description, account, TransactionType.Debit, category);
-
-                // Refunds give money back in the purchase's category; paying the card off is not spending at all.
-                if (account == AccountType.CreditCard && !IsCardPayment(description))
-                {
-                    AddIfAmount(transactions, csv.GetField(MoneyInColumn), date, description, account, TransactionType.Credit, category);
-                }
-            }
+            // Every movement is kept; the flow rules decide later what counts as spending, income or neither.
+            AddIfAmount(transactions, csv.GetField(MoneyOutColumn), date, description, TransactionType.Debit);
+            AddIfAmount(transactions, csv.GetField(MoneyInColumn), date, description, TransactionType.Credit);
         }
 
         // Not a single dated row: another bank's export, a spreadsheet, or not a CSV at all. Saying "0 imported"
@@ -88,7 +67,7 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
                 "No transactions found in this file. Is it a CIBC CSV export (date, description, money out, money in)?");
         }
 
-        return transactions;
+        return new ParsedStatement(transactions, IsCreditCardExport: cardRows > 0);
     }
 
     private static string ReadText(Stream statement)
@@ -109,20 +88,10 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
         }
     }
 
-    private bool IsExcluded(string description) =>
-        _options.ExcludedDescriptions.Any(excluded => description.Contains(excluded, StringComparison.Ordinal));
-
-    private bool IsCardPayment(string description) =>
-        _options.CardPaymentKeywords.Any(keyword => description.Contains(keyword, StringComparison.OrdinalIgnoreCase));
-
-    private bool IsIncome(string description) =>
-        _options.IncomeKeywords.Any(keyword => description.Contains(keyword, StringComparison.Ordinal));
-
     private static void AddIfAmount(List<Transaction> transactions, string? amountField, DateTime date, string description,
-        AccountType account, TransactionType type, Category category, bool positiveOnly = false)
+        TransactionType type)
     {
-        if (!decimal.TryParse(amountField, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount) ||
-            (positiveOnly && amount <= 0))
+        if (!decimal.TryParse(amountField, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount) || amount == 0)
         {
             return;
         }
@@ -132,9 +101,12 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
             Date = date,
             Description = description,
             Amount = amount,
-            Category = category,
-            TransactionType = type,
-            Account = account
+            Category = Category.Other,
+            TransactionType = type
         });
     }
+
+    // "4500********1234", as in the last column of a CIBC card export.
+    [GeneratedRegex(@"^\d{4}\*+\d{3,4}$")]
+    private static partial Regex MaskedCardNumber();
 }

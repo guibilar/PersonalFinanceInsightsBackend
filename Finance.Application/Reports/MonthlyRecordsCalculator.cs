@@ -10,11 +10,19 @@ public static class MonthlyRecordsCalculator
     public static List<MonthlyRecords> GenerateMonthlyRecords(List<Transaction> records) => Group(records, r => r.Amount);
 
     /// <summary>
-    /// Spending per calendar month: purchases count positive and refunds (credits) negative, so a refunded
-    /// purchase nets out in its category.
+    /// Spending per calendar month from spending and refund transactions (anything else is left out): purchases count
+    /// positive and refunds negative, so a refunded purchase nets out in its category.
     /// </summary>
     public static List<MonthlyRecords> GenerateSpendingRecords(List<Transaction> records) =>
-        Group(records, r => r.TransactionType == TransactionType.Credit ? -r.Amount : r.Amount);
+        Group(records.Where(r => r.Flow is Flow.Spending or Flow.Refund).ToList(), SpendingAmount);
+
+    /// <summary>What a transaction adds to spending: its amount, negative for a refund, and 0 unless spending or refund.</summary>
+    public static decimal SpendingAmount(Transaction transaction) => transaction.Flow switch
+    {
+        Flow.Spending => transaction.Amount,
+        Flow.Refund => -transaction.Amount,
+        _ => 0
+    };
 
     private static List<MonthlyRecords> Group(List<Transaction> records, Func<Transaction, decimal> amount)
     {

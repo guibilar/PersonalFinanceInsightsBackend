@@ -17,10 +17,10 @@ public class DataIntegrityTests
     private static bool OnPostgres => TestDatabase.OnPostgres;
 
     private static object ManualTransaction(
-        string account = "CreditCard", string? transactionType = "Debit", string? category = "Dining",
+        AccountType account = AccountType.CreditCard, string? transactionType = "Debit", string? category = "Dining",
         decimal amount = 16.99m, string? date = "2026-09-10") => new
     {
-        date, description = "NETFLIX", amount, category, transactionType, account
+        date, description = "NETFLIX", amount, category, transactionType, accountId = TestAccounts.Id(account)
     };
 
     // ---- Duplicates
@@ -42,9 +42,9 @@ public class DataIntegrityTests
         Assert.Equal(1, creditCard.Added);
         Assert.Equal(1, savings.Added);
         Assert.Equal((0, 1), (savingsAgain.Added, savingsAgain.Skipped));
-        var accounts = await factory.QueryAsync(db => db.Transactions.Select(t => t.Account).ToListAsync());
+        var accounts = await factory.QueryAsync(db => db.Transactions.Select(t => t.AccountId).ToListAsync());
         Assert.Equal(2, accounts.Count);
-        Assert.Equal([AccountType.CreditCard, AccountType.Savings], accounts.ToHashSet());
+        Assert.Equal([Account.DefaultCreditCardId, Account.DefaultSavingsId], accounts.ToHashSet());
     }
 
     [Fact]
@@ -54,7 +54,7 @@ public class DataIntegrityTests
         var client = factory.CreateClient();
 
         var first = await client.PostAsJsonAsync("/api/Transaction", ManualTransaction());
-        var otherAccount = await client.PostAsJsonAsync("/api/Transaction", ManualTransaction(account: "Chequing"));
+        var otherAccount = await client.PostAsJsonAsync("/api/Transaction", ManualTransaction(account: AccountType.Chequing));
         var duplicate = await client.PostAsJsonAsync("/api/Transaction", ManualTransaction());
 
         Assert.Equal(HttpStatusCode.Created, first.StatusCode);
@@ -108,10 +108,11 @@ public class DataIntegrityTests
 
         await migrator.MigrateAsync();
 
-        var remaining = await db.Transactions.AsNoTracking().ToDictionaryAsync(t => t.Account, t => t.Id);
+        // Later migrations move them onto the default accounts.
+        var remaining = await db.Transactions.AsNoTracking().ToDictionaryAsync(t => t.AccountId, t => t.Id);
         Assert.Equal(2, remaining.Count);
-        Assert.Equal(linkedCopy, remaining[AccountType.CreditCard]);
-        Assert.True(remaining.ContainsKey(AccountType.Chequing));
+        Assert.Equal(linkedCopy, remaining[Account.DefaultCreditCardId]);
+        Assert.True(remaining.ContainsKey(Account.DefaultChequingId));
     }
 
     // ---- Budget totals
@@ -130,7 +131,7 @@ public class DataIntegrityTests
                 db.Transactions.Add(new Transaction
                 {
                     Id = Guid.NewGuid(), Date = DateTime.UtcNow, Description = $"HOTEL {type}", Amount = amount,
-                    TransactionType = type, Account = AccountType.CreditCard, Hash = Guid.NewGuid().ToString(), BudgetId = budgetId
+                    TransactionType = type, AccountId = Account.DefaultCreditCardId, Hash = Guid.NewGuid().ToString(), BudgetId = budgetId
                 });
             }
         });
@@ -149,7 +150,8 @@ public class DataIntegrityTests
         ManualTransaction(date: null),
         ManualTransaction(amount: 0),
         ManualTransaction(amount: -5),
-        new { date = "2026-09-10", description = "NETFLIX", amount = 16.99, category = 99, transactionType = "Debit", account = "CreditCard" },
+        new { date = "2026-09-10", description = "NETFLIX", amount = 16.99, category = 99, transactionType = "Debit", accountId = Account.DefaultCreditCardId },
+        new { date = "2026-09-10", description = "NETFLIX", amount = 16.99, category = "Dining", transactionType = "Debit" },
     };
 
     [Theory]

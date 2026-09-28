@@ -1,16 +1,18 @@
 using System.Net;
+using System.Net.Http.Json;
 using System.Text;
 using Finance.Application.Import;
 using Finance.Contracts.Outputs;
+using Finance.Domain.Common;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
 using Finance.Domain.Helpers;
 using Finance.Infrastructure.Import;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Options;
 
 namespace FinanceTests;
 
@@ -21,9 +23,19 @@ public class ImportTests
         .AddJsonFile("import-rules.json").Build()
         .GetSection(ImportOptions.SectionName).Get<ImportOptions>()!;
 
-    private static List<Transaction> Parse(string csv, AccountType account, ImportOptions? options = null) =>
-        new CibcCsvParser(Options.Create(options ?? Rules))
-            .Parse(new MemoryStream(Encoding.UTF8.GetBytes(csv)), account, new CategoryMatcher((options ?? Rules).ToCategoryRules()));
+    private static readonly TransactionClassifier Classifier =
+        new(new CategoryMatcher(Rules.ToCategoryRules()), new FlowMatcher(Rules.ToFlowRules()));
+
+    private static ParsedStatement ParseStatement(string csv) =>
+        new CibcCsvParser().Parse(new MemoryStream(Encoding.UTF8.GetBytes(csv)));
+
+    /// <summary>Parsed, then categorised and given a flow by the shipped rules, as an import into that kind of account.</summary>
+    private static List<Transaction> Parse(string csv, AccountType account)
+    {
+        var transactions = ParseStatement(csv).Transactions;
+        transactions.ForEach(t => Classifier.Classify(t, account));
+        return transactions;
+    }
 
     // ---- Hash
 
@@ -61,7 +73,7 @@ public class ImportTests
     }
 
     [Fact]
-    public void Parser_SkipsExcludedRowsPaymentsAndInvalidLines()
+    public void Parser_KeepsEveryMovement_TransfersAndPendingHoldsAreNotSpending()
     {
         var parsed = Parse("""
             2026-01-03,Internet Banking INTERNET TRANSFER 01,300.00,
@@ -72,12 +84,17 @@ public class ImportTests
             2026-01-07,METRO,8.00,
             """, AccountType.CreditCard);
 
-        var only = Assert.Single(parsed);
-        Assert.Equal(("METRO", 8.00m, TransactionType.Debit), (only.Description, only.Amount, only.TransactionType));
+        Assert.Equal(
+        [
+            ("Internet Banking INTERNET TRANSFER 01", TransactionType.Debit, Flow.Transfer),
+            ("UBER* PENDING", TransactionType.Debit, Flow.Ignored),
+            ("PAYMENT THANK YOU", TransactionType.Credit, Flow.Transfer),
+            ("METRO", TransactionType.Debit, Flow.Spending)
+        ], parsed.Select(t => (t.Description, t.TransactionType!.Value, t.Flow)));
     }
 
     [Fact]
-    public void Parser_CreditCardRefundsAreCredits_InThePurchaseCategory_ButCardPaymentsAreSkipped()
+    public void Parser_CreditCardRefundsAreRefunds_InThePurchaseCategory_AndCardPaymentsAreTransfers()
     {
         var parsed = Parse("""
             2026-01-03,WAL-MART #3059,120.00,
@@ -88,27 +105,67 @@ public class ImportTests
             """, AccountType.CreditCard);
 
         Assert.Equal(
-            [(TransactionType.Debit, 120m, Category.Groceries), (TransactionType.Credit, 120m, Category.Groceries)],
-            parsed.Select(t => (t.TransactionType!.Value, t.Amount, t.Category)));
+        [
+            (TransactionType.Debit, 120m, Category.Groceries, Flow.Spending),
+            (TransactionType.Credit, 120m, Category.Groceries, Flow.Refund),
+            (TransactionType.Credit, 500m, Category.Other, Flow.Transfer),
+            (TransactionType.Credit, 50m, Category.Other, Flow.Transfer),
+            (TransactionType.Credit, 20m, Category.Other, Flow.Transfer)
+        ], parsed.Select(t => (t.TransactionType!.Value, t.Amount, t.Category, t.Flow)));
     }
 
     [Fact]
-    public void Parser_ChequingMoneyInIsOnlyKnownIncome()
+    public void Parser_ChequingDeposits_AreIncome_UnlessARuleSaysOtherwise()
     {
+        // Used to be dropped unless they matched an income keyword.
         var parsed = Parse("""
             2026-01-15,E-TRANSFER FROM A FRIEND,,40.00
-            2026-01-16,METRO,,5.00
-            """, AccountType.Chequing, new ImportOptions
-            {
-                IncomeKeywords = Rules.IncomeKeywords, ExcludedDescriptions = Rules.ExcludedDescriptions,
-                CategoryRules = Rules.CategoryRules
-            });
+            2026-01-16,Internet Banking INTERNET TRANSFER 000123,,500.00
+            2026-01-17,Deel Canada PAYROLL,,4200.00
+            """, AccountType.Chequing);
 
-        Assert.Empty(parsed);
+        Assert.Equal([Flow.Income, Flow.Transfer, Flow.Income], parsed.Select(t => t.Flow));
     }
 
     [Fact]
-    public void Parser_ChequingImportsKnownIncomeAndTheRealRentPayment()
+    public void FlowRules_LongestKeywordWins_AndIncomeRulesOnlyApplyToMoneyIn()
+    {
+        var flows = new FlowMatcher([
+            new FlowRule { Keyword = "TRANSFER", Flow = Flow.Transfer },
+            new FlowRule { Keyword = "e-transfer from", Flow = Flow.Income },
+            new FlowRule { Keyword = "AMAZON", Flow = Flow.Refund }
+        ]);
+
+        Assert.Equal(Flow.Income, flows.Match("E-TRANSFER FROM BOSS", AccountType.Chequing, TransactionType.Credit));
+        Assert.Equal(Flow.Transfer, flows.Match("INTERNET TRANSFER", AccountType.Chequing, TransactionType.Credit));
+        // Money out can't be income or a refund: the next rule, or the default, decides.
+        Assert.Equal(Flow.Transfer, flows.Match("E-TRANSFER FROM BOSS", AccountType.Chequing, TransactionType.Debit));
+        Assert.Equal(Flow.Spending, flows.Match("AMAZON.CA", AccountType.CreditCard, TransactionType.Debit));
+        Assert.Equal(Flow.Refund, flows.Match("AMAZON.CA", AccountType.Chequing, TransactionType.Credit));
+    }
+
+    [Theory]
+    [InlineData(AccountType.Chequing, TransactionType.Debit, Flow.Spending)]
+    [InlineData(AccountType.Chequing, TransactionType.Credit, Flow.Income)]
+    [InlineData(AccountType.CreditCard, TransactionType.Debit, Flow.Spending)]
+    [InlineData(AccountType.CreditCard, TransactionType.Credit, Flow.Refund)]
+    [InlineData(AccountType.Savings, TransactionType.Debit, Flow.Transfer)]
+    [InlineData(AccountType.Savings, TransactionType.Credit, Flow.Transfer)]
+    public void FlowRules_WithoutAMatch_TheAccountAndDirectionDecide(AccountType account, TransactionType direction, Flow expected)
+    {
+        Assert.Equal(expected, new FlowMatcher([]).Match("ANYTHING", account, direction));
+    }
+
+    [Fact]
+    public void Parser_RecognisesCreditCardExports_ByTheCardNumberColumn()
+    {
+        Assert.True(ParseStatement("2026-01-03,METRO,8.00,,4500********1234").IsCreditCardExport);
+        Assert.False(ParseStatement("2026-01-03,METRO,8.00,").IsCreditCardExport);
+        Assert.False(ParseStatement("2026-01-03,METRO,8.00,,a note").IsCreditCardExport);
+    }
+
+    [Fact]
+    public void Parser_ChequingImportsIncomeAndTheRealRentPayment()
     {
         var parsed = Parse("""
             2026-01-01,VALIANT RENTAL PAYMENT,1947.50,
@@ -117,7 +174,7 @@ public class ImportTests
             2026-02-10,BELL CANADA,85.00,
             """, AccountType.Chequing);
 
-        Assert.Equal(4200m, Assert.Single(parsed, t => t.TransactionType == TransactionType.Credit).Amount);
+        Assert.Equal(4200m, Assert.Single(parsed, t => t.Description.StartsWith("Deel")).Amount);
         // The payment as the bank shows it: no generated rent, and none for February, which has no payment.
         var rent = Assert.Single(parsed, t => t.Category == Category.Rent);
         Assert.Equal(("VALIANT RENTAL PAYMENT", 1947.50m, new DateTime(2026, 1, 1)), (rent.Description, rent.Amount, rent.Date));
@@ -144,8 +201,10 @@ public class ImportTests
             2026-02-15,TRANSFER OUT,250.00,
             """, AccountType.Savings);
 
-        Assert.Equal([(TransactionType.Credit, 1000m), (TransactionType.Debit, 250m)],
-            parsed.Select(t => (t.TransactionType!.Value, t.Amount)));
+        // Transfers from and to the other accounts; not purchases, so no category.
+        Assert.Equal([(TransactionType.Credit, 1000m, Flow.Transfer), (TransactionType.Debit, 250m, Flow.Transfer)],
+            parsed.Select(t => (t.TransactionType!.Value, t.Amount, t.Flow)));
+        Assert.All(parsed, t => Assert.Equal(Category.Other, t.Category));
     }
 
     [Theory]
@@ -162,10 +221,9 @@ public class ImportTests
             _ => CodePagesEncodingProvider.Instance.GetEncoding(1252)!.GetBytes(csv)
         };
 
-        var parsed = new CibcCsvParser(Options.Create(Rules))
-            .Parse(new MemoryStream(bytes), AccountType.CreditCard, new CategoryMatcher(Rules.ToCategoryRules()));
+        var parsed = new CibcCsvParser().Parse(new MemoryStream(bytes));
 
-        Assert.Equal("CAFÉ DÉPANNEUR – MONTRÉAL", Assert.Single(parsed).Description);
+        Assert.Equal("CAFÉ DÉPANNEUR – MONTRÉAL", Assert.Single(parsed.Transactions).Description);
     }
 
     [Fact]
@@ -199,18 +257,26 @@ public class ImportTests
     }
 
     [Fact]
-    public void Parser_StatementWhoseRowsAreAllSkipped_IsNotAnError()
+    public void Parser_StatementWithOnlyACardPayment_IsNotAnError()
     {
-        // Still a statement: this month only has a card payment.
-        Assert.Empty(Parse("2026-01-05,PAYMENT THANK YOU,,500.00", AccountType.CreditCard));
+        // Still a statement: this month only has a card payment, which isn't spending.
+        Assert.Equal(Flow.Transfer, Assert.Single(Parse("2026-01-05,PAYMENT THANK YOU,,500.00", AccountType.CreditCard)).Flow);
     }
 
     // ---- Endpoint
 
-    internal static MultipartFormDataContent Statement(string csv, string? account = "CreditCard")
+    /// <param name="account">
+    /// The kind of one of the default accounts ("CreditCard"), an account id, or anything else to send as the account id as is.
+    /// </param>
+    internal static MultipartFormDataContent Statement(string csv, string? account = "CreditCard", bool confirmed = false)
     {
         var form = new MultipartFormDataContent { { new ByteArrayContent(Encoding.UTF8.GetBytes(csv)), "file", "statement.csv" } };
-        if (account != null) form.Add(new StringContent(account), "account");
+        if (account != null)
+        {
+            var accountId = Enum.TryParse<AccountType>(account, out var type) ? TestAccounts.Id(type).ToString() : account;
+            form.Add(new StringContent(accountId), "accountId");
+        }
+        if (confirmed) form.Add(new StringContent("true"), "confirmed");
         return form;
     }
 
@@ -274,7 +340,7 @@ public class ImportTests
     private static Transaction GeneratedRent(DateTime month, bool hidden = false) => new()
     {
         Id = Guid.NewGuid(), Date = DateTime.SpecifyKind(month, DateTimeKind.Utc), Description = "Monthly Rent", Amount = 1947.50m,
-        Category = Category.Rent, CategoryLocked = true, TransactionType = TransactionType.Debit, Account = AccountType.Chequing,
+        Category = Category.Rent, CategoryLocked = true, TransactionType = TransactionType.Debit, AccountId = Account.DefaultChequingId,
         Hash = TransactionHashHelper.GenerateTransactionHash(1947.50m, month, "Monthly Rent"), Hidden = hidden
     };
 
@@ -325,7 +391,7 @@ public class ImportTests
         await factory.SeedAsync(db => db.Transactions.Add(new Transaction
         {
             Id = Guid.NewGuid(), Date = new DateTime(2026, 1, 3, 0, 0, 0, DateTimeKind.Utc), Description = " METRO #123 OSHAWA ",
-            Amount = 45.10m, Account = AccountType.CreditCard, TransactionType = TransactionType.Debit,
+            Amount = 45.10m, AccountId = Account.DefaultCreditCardId, TransactionType = TransactionType.Debit,
             Hash = "29d9b96dd1f583f9ab10f9bab4d7dbad17b7f523164ee1439208fee58ca3bd26"
         }));
 
@@ -347,7 +413,7 @@ public class ImportTests
     {
         await using var factory = new FinanceApiFactory();
         var form = new MultipartFormDataContent { { new ByteArrayContent(content), "file", "statement.csv" } };
-        form.Add(new StringContent("CreditCard"), "account");
+        form.Add(new StringContent(Account.DefaultCreditCardId.ToString()), "accountId");
 
         var response = await factory.CreateClient().PostAsync("/api/Transaction/Import", form);
 
@@ -381,5 +447,82 @@ public class ImportTests
         var response = await factory.CreateClient().PostAsync("/api/Transaction/Import", Statement(csv, account));
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Import_UnknownAccount_Returns404()
+    {
+        await using var factory = new FinanceApiFactory();
+
+        var response = await factory.CreateClient().PostAsync("/api/Transaction/Import",
+            Statement("2026-01-03,METRO,1.00,", Guid.NewGuid().ToString()));
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Import_StoresRowsOnThatAccount_WithTheirFlow()
+    {
+        await using var factory = new FinanceApiFactory();
+        var client = factory.CreateClient();
+        var visa = await (await client.PostAsJsonAsync("/api/Accounts", new { name = "Visa", type = "CreditCard" }, FinanceApiFactory.Json))
+            .ReadAsync<AccountOutputDto>();
+
+        await client.PostAsync("/api/Transaction/Import", Statement("""
+            2026-01-03,WAL-MART #3059,120.00,
+            2026-01-10,PAYMENT THANK YOU,,500.00
+            """, visa.Id.ToString()));
+        var listed = await (await client.PostAsJsonAsync("/api/Transaction/Filter", new { accountId = visa.Id, sortBy = "Amount" }))
+            .ReadAsync<PaginatedList<TransactionOutputDto>>();
+
+        Assert.Equal(
+            [("Visa", AccountType.CreditCard, 500m, Flow.Transfer), ("Visa", AccountType.CreditCard, 120m, Flow.Spending)],
+            listed.Items.Select(t => (t.AccountName, t.AccountType, t.Amount, t.Flow)));
+    }
+
+    [Fact]
+    public async Task Import_CreditCardExportIntoABankAccount_AsksForConfirmation()
+    {
+        await using var factory = new FinanceApiFactory();
+        var client = factory.CreateClient();
+        const string csv = "2026-01-03,METRO,8.00,,4500********1234";
+
+        var refused = await client.PostAsync("/api/Transaction/Import", Statement(csv, "Chequing"));
+        var confirmed = await client.PostAsync("/api/Transaction/Import", Statement(csv, "Chequing", confirmed: true));
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        var problem = await refused.ReadAsync<ProblemDetails>();
+        Assert.Equal("account-mismatch", problem.Extensions["code"]?.ToString());
+        Assert.Contains("credit card export", problem.Detail);
+        Assert.Equal(1, (await confirmed.ReadAsync<ImportResultDto>()).Added);
+    }
+
+    [Fact]
+    public async Task Import_StatementAlreadyStoredOnAnotherAccount_AsksForConfirmation()
+    {
+        await using var factory = new FinanceApiFactory();
+        var client = factory.CreateClient();
+        const string statement = """
+            2026-01-03,METRO,8.00,
+            2026-01-04,BELL CANADA,85.00,
+            2026-01-05,NETFLIX.COM,16.99,
+            2026-01-06,SHELL,40.00,
+            """;
+        await client.PostAsync("/api/Transaction/Import", Statement(statement, "Chequing"));
+
+        // The same file again, with a new row, but into the card.
+        var refused = await client.PostAsync("/api/Transaction/Import", Statement(statement + "\n2026-01-07,TIM HORTONS,2.00,"));
+        // Re-importing it into the right account is fine, and so is a statement sharing only a row or two.
+        var sameAccount = await client.PostAsync("/api/Transaction/Import", Statement(statement, "Chequing"));
+        var fewShared = await client.PostAsync("/api/Transaction/Import", Statement("""
+            2026-01-03,METRO,8.00,
+            2026-01-08,LOBLAWS,60.00,
+            2026-01-09,AMAZON.CA,20.00,
+            """));
+
+        Assert.Equal(HttpStatusCode.Conflict, refused.StatusCode);
+        Assert.Contains("4 of the 5 transactions in this file are already in \"Chequing\"", (await refused.ReadAsync<ProblemDetails>()).Detail);
+        Assert.Equal(HttpStatusCode.OK, sameAccount.StatusCode);
+        Assert.Equal(3, (await fewShared.ReadAsync<ImportResultDto>()).Added);
     }
 }
