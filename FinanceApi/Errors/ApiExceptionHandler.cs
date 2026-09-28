@@ -13,18 +13,36 @@ public class ApiExceptionHandler(IProblemDetailsService problemDetails, ILogger<
 {
     public async ValueTask<bool> TryHandleAsync(HttpContext context, Exception exception, CancellationToken cancellationToken)
     {
-        if (exception is InvalidStatementException)
+        if (exception is InvalidInputException invalid)
         {
-            // Shaped like model validation, so clients show it next to the file field like any other input error.
+            // Shaped like model validation, so clients show it next to the field (the file, say) like any other input error.
             context.Response.StatusCode = StatusCodes.Status400BadRequest;
             return await problemDetails.TryWriteAsync(new ProblemDetailsContext
             {
                 HttpContext = context,
                 Exception = exception,
                 ProblemDetails = new HttpValidationProblemDetails(
-                    new Dictionary<string, string[]> { ["file"] = [exception.Message] })
+                    new Dictionary<string, string[]> { [invalid.Field] = [exception.Message] })
                 {
                     Status = StatusCodes.Status400BadRequest
+                }
+            });
+        }
+
+        if (exception is AccountMismatchException)
+        {
+            // Not an error in the file: the client asks whether to import it anyway.
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            return await problemDetails.TryWriteAsync(new ProblemDetailsContext
+            {
+                HttpContext = context,
+                Exception = exception,
+                ProblemDetails = new ProblemDetails
+                {
+                    Status = StatusCodes.Status409Conflict,
+                    Title = "Account mismatch",
+                    Detail = exception.Message,
+                    Extensions = { ["code"] = AccountMismatchException.Code }
                 }
             });
         }

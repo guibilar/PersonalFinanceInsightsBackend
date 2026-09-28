@@ -8,7 +8,7 @@ namespace FinanceApi.Controllers;
 
 /// <summary>
 /// The rules that categorise imported transactions: the first rule (by position) whose keyword the description
-/// contains decides. Changing them affects later imports; <c>POST /api/Transaction/ApplyCategoryRules</c> re-applies
+/// contains decides. Changing them affects later imports; <c>POST /api/Transaction/ApplyRules</c> re-applies
 /// them to stored transactions.
 /// </summary>
 [Route("api/[controller]")]

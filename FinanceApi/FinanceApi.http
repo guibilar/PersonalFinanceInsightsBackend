@@ -1,13 +1,13 @@
 @FinanceApi_HostAddress = http://localhost:5096
 
-### Import a CIBC statement (account: CreditCard, Chequing or Savings)
+### Import a CIBC statement into an account (GET /api/Accounts lists them; this is the default "Credit card")
 POST {{FinanceApi_HostAddress}}/api/Transaction/Import
 Content-Type: multipart/form-data; boundary=statement
 
 --statement
-Content-Disposition: form-data; name="account"
+Content-Disposition: form-data; name="accountId"
 
-CreditCard
+5b0c4b8e-3f5e-4c1a-9d53-0c2f7a1e8a03
 --statement
 Content-Disposition: form-data; name="file"; filename="cibc_credit.csv"
 Content-Type: text/csv

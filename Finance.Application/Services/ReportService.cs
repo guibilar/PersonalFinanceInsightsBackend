@@ -30,27 +30,55 @@ public class ReportService(ITransactionRepository transactionRepository, Reporti
         var previousStart = monthStart.AddMonths(-1);
         var days = Math.Min(calendar.Today().Day, DateTime.DaysInMonth(previousStart.Year, previousStart.Month));
         var previous = await SpendingAsync(previousStart, previousStart.AddDays(days), cancellationToken);
-        report.PreviousMonthToDateTotal = previous.Sum(t => t.TransactionType == TransactionType.Credit ? -t.Amount : t.Amount);
+        report.PreviousMonthToDateTotal = previous.Sum(MonthlyRecordsCalculator.SpendingAmount);
         return report;
     }
 
-    /// <summary>
-    /// Purchases from chequing and the credit card, plus credit card refunds (which reduce spending).
-    /// Money in on chequing is income, not a refund, so it stays out.
-    /// </summary>
+    public async Task<CashFlowReport> GenerateCashFlowReportAsync(CancellationToken cancellationToken = default)
+    {
+        var yearStart = new DateTime(calendar.Today().Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var filter = new TransactionFilterDto { StartDate = yearStart, EndDate = yearStart.AddYears(1) };
+        var transactions = await transactionRepository.FilterNoPaginationAsync(filter, cancellationToken);
+
+        var months = transactions
+            .GroupBy(t => new DateTime(t.Date.Year, t.Date.Month, 1))
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                var income = g.Where(t => t.Flow == Flow.Income).Sum(t => t.Amount);
+                var spending = g.Sum(MonthlyRecordsCalculator.SpendingAmount);
+                // What went into savings accounts, from anywhere, minus what came out; ignored rows don't count.
+                var saved = g.Where(t => t.Account!.Type == AccountType.Savings && t.Flow != Flow.Ignored)
+                    .Sum(t => t.TransactionType == TransactionType.Credit ? t.Amount : -t.Amount);
+                return (YearMonth: g.Key, Month: new CashFlowMonth
+                {
+                    Month = g.Key.ToString("MMM yyyy", CultureInfo.InvariantCulture),
+                    Income = income,
+                    Spending = spending,
+                    Net = income - spending,
+                    Saved = saved
+                });
+            })
+            .ToList();
+
+        // As for the spending average: the current month isn't over, so it only counts when no month is complete.
+        var complete = months.Where(m => m.YearMonth < calendar.CurrentMonthStart()).Select(m => m.Month).ToList();
+        var averaged = complete.Count > 0 ? complete : months.Select(m => m.Month).ToList();
+        return new CashFlowReport
+        {
+            Months = months.Select(m => m.Month).ToList(),
+            AverageMonthlyIncome = averaged.Count > 0 ? averaged.Average(m => m.Income) : 0,
+            AverageMonthlySpending = averaged.Count > 0 ? averaged.Average(m => m.Spending) : 0,
+            AverageMonthlySaved = averaged.Count > 0 ? averaged.Average(m => m.Saved) : 0
+        };
+    }
+
+    /// <summary>Spending and refunds (which reduce spending), on any account; income and transfers stay out.</summary>
     private async Task<List<Transaction>> SpendingAsync(DateTime start, DateTime end, CancellationToken cancellationToken)
     {
-        var filter = new TransactionFilterDto
-        {
-            AccountType = [AccountType.Chequing, AccountType.CreditCard],
-            StartDate = start,
-            EndDate = end
-        };
+        var filter = new TransactionFilterDto { StartDate = start, EndDate = end };
         var transactions = await transactionRepository.FilterNoPaginationAsync(filter, cancellationToken);
-        return transactions
-            .Where(t => t.TransactionType == TransactionType.Debit ||
-                        (t.TransactionType == TransactionType.Credit && t.Account == AccountType.CreditCard))
-            .ToList();
+        return transactions.Where(t => t.Flow is Flow.Spending or Flow.Refund).ToList();
     }
 
     /// <param name="averageBefore">

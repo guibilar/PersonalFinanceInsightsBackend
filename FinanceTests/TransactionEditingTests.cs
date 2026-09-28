@@ -14,7 +14,8 @@ public class TransactionEditingTests
         bool locked = false) => new()
     {
         Id = Guid.NewGuid(), Date = new DateTime(2026, 3, 10, 0, 0, 0, DateTimeKind.Utc), Description = description, Amount = 10,
-        Category = category, TransactionType = TransactionType.Debit, Account = account, Hash = Guid.NewGuid().ToString(),
+        Category = category, TransactionType = TransactionType.Debit, AccountId = TestAccounts.Id(account),
+        Flow = TestAccounts.DefaultFlow(account, TransactionType.Debit), Hash = Guid.NewGuid().ToString(),
         CategoryLocked = locked
     };
 
@@ -47,7 +48,7 @@ public class TransactionEditingTests
 
         var updated = await (await client.PutAsJsonAsync($"/api/Transaction/{transaction.Id}",
             new { description = "WAL-MART #3059 (groceries run)", category = "Other" })).ReadAsync<TransactionOutputDto>();
-        await client.PostAsync("/api/Transaction/ApplyCategoryRules", null);
+        await client.PostAsync("/api/Transaction/ApplyRules", null);
 
         Assert.False(updated.CategoryLocked);
         Assert.Equal(Category.Groceries, await factory.QueryAsync(db => db.Transactions.Select(t => t.Category).SingleAsync()));
@@ -99,7 +100,7 @@ public class TransactionEditingTests
     }
 
     [Fact]
-    public async Task ApplyCategoryRules_RecategorisesOnlyRuleManagedTransactions()
+    public async Task ApplyRules_RecategorisesOnlyRuleManagedTransactions()
     {
         await using var factory = new FinanceApiFactory();
         var stale = Stored("WAL-MART #3059", Category.Other);          // rules now say Groceries
@@ -110,10 +111,11 @@ public class TransactionEditingTests
         var fixedRent = Stored("Monthly Rent", Category.Rent, AccountType.Chequing, locked: true);
         await factory.SeedAsync(db => db.Transactions.AddRange(stale, alreadyRight, handPicked, savings, fixedRent));
 
-        var result = await (await factory.CreateClient().PostAsync("/api/Transaction/ApplyCategoryRules", null))
-            .ReadAsync<CategoryRulesResultDto>();
+        var result = await (await factory.CreateClient().PostAsync("/api/Transaction/ApplyRules", null))
+            .ReadAsync<RulesResultDto>();
 
-        Assert.Equal((2, 1), (result.Checked, result.Updated));
+        // Every one of them has its flow checked; none of the flows changes.
+        Assert.Equal((5, 1), (result.Checked, result.Updated));
         var categories = await factory.QueryAsync(db => db.Transactions.ToDictionaryAsync(t => t.Id, t => t.Category));
         Assert.Equal(Category.Groceries, categories[stale.Id]);
         Assert.Equal(Category.Dining, categories[alreadyRight.Id]);

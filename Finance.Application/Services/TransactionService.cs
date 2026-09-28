@@ -16,16 +16,27 @@ public class TransactionService(
     ITransactionRepository transactionRepository,
     IBudgetRepository budgetRepository,
     ICategoryRuleRepository categoryRuleRepository,
+    IFlowRuleRepository flowRuleRepository,
+    IAccountRepository accountRepository,
     IStatementParser statementParser) : ITransactionService
 {
     private const string DuplicateMessage = "An identical transaction (same account, date, amount and description) already exists.";
 
+    // A statement is taken for another account's when at least this many of its rows, and half of them, are stored there.
+    private const int MismatchMinimumRows = 3;
+
     public async Task<Transaction> AddAsync(Transaction transaction, CancellationToken cancellationToken = default)
     {
-        var existing = await transactionRepository.FindByHashAsync(transaction.Account, transaction.Hash, cancellationToken);
+        var account = await accountRepository.GetByIdAsync(transaction.AccountId, cancellationToken)
+                      ?? throw new NotFoundException(nameof(Account), transaction.AccountId);
+        // The category is the one given; the flow follows the rules like an imported row's.
+        var flows = await GetFlowMatcherAsync(cancellationToken);
+        transaction.Flow = flows.Match(transaction.Description, account.Type, transaction.TransactionType);
+
+        var existing = await transactionRepository.FindByHashAsync(transaction.AccountId, transaction.Hash, cancellationToken);
         if (existing is not null)
         {
-            logger.LogWarning("Transaction with hash {Hash} already exists on {Account}", transaction.Hash, transaction.Account);
+            logger.LogWarning("Transaction with hash {Hash} already exists on {Account}", transaction.Hash, account.Name);
             throw new ConflictException(existing.Hidden
                 ? "An identical transaction was deleted earlier; restore it from the deleted transactions instead."
                 : DuplicateMessage);
@@ -33,7 +44,9 @@ public class TransactionService(
 
         try
         {
-            return await transactionRepository.AddAsync(transaction, cancellationToken);
+            await transactionRepository.AddAsync(transaction, cancellationToken);
+            transaction.Account = account;
+            return transaction;
         }
         catch (DuplicateEntityException)
         {
@@ -41,9 +54,19 @@ public class TransactionService(
         }
     }
 
-    public async Task<ImportResult> ImportAsync(Stream statement, AccountType account, CancellationToken cancellationToken = default)
+    public async Task<ImportResult> ImportAsync(Stream statement, Guid accountId, bool confirmed,
+        CancellationToken cancellationToken = default)
     {
-        var parsed = statementParser.Parse(statement, account, await GetCategoryMatcherAsync(cancellationToken));
+        var account = await accountRepository.GetByIdAsync(accountId, cancellationToken)
+                      ?? throw new NotFoundException(nameof(Account), accountId);
+        var statementRows = statementParser.Parse(statement);
+        var parsed = statementRows.Transactions;
+        var classifier = await GetClassifierAsync(cancellationToken);
+        foreach (var transaction in parsed)
+        {
+            transaction.AccountId = account.Id;
+            classifier.Classify(transaction, account.Type);
+        }
 
         // Number identical rows (same day, amount and description) so repeated purchases get distinct
         // hashes, while re-importing the same statement produces the same hashes and adds nothing.
@@ -56,14 +79,19 @@ public class TransactionService(
                 transaction.Amount, transaction.Date, transaction.Description, occurrence);
         }
 
+        if (!confirmed)
+        {
+            await EnsureStatementMatchesAsync(account, statementRows, cancellationToken);
+        }
+
         // The statement is imported completely or not at all.
-        var added = await transactionRepository.AddMissingAsync(account, parsed, cancellationToken);
+        var added = await transactionRepository.AddMissingAsync(account.Id, parsed, cancellationToken);
 
         // Where a chequing statement brings a month's real rent payment, the rent generated there before goes away,
         // so the month counts rent once. Hidden, not deleted: it can be restored. (Other accounts never had it; a
         // rent-category purchase on the card, say a storage unit, is not the apartment's rent.)
         var rentMonths = parsed
-            .Where(t => t is { Account: AccountType.Chequing, Category: Category.Rent, TransactionType: TransactionType.Debit })
+            .Where(t => account.Type == AccountType.Chequing && t is { Category: Category.Rent, TransactionType: TransactionType.Debit })
             .Select(t => new DateTime(t.Date.Year, t.Date.Month, 1, 0, 0, 0, DateTimeKind.Utc))
             .Distinct()
             .ToList();
@@ -73,9 +101,43 @@ public class TransactionService(
             if (replaced > 0) logger.LogInformation("Hid {Count} generated monthly rent rows replaced by real payments", replaced);
         }
 
-        logger.LogInformation("Imported {Account} statement: {Read} read, {Added} added", account, parsed.Count, added);
+        logger.LogInformation("Imported {Account} statement: {Read} read, {Added} added", account.Name, parsed.Count, added);
         return new ImportResult(parsed.Count, added, parsed.Count - added);
     }
+
+    /// <summary>
+    /// Catches the account picked by mistake: a credit card export imported into a bank account, or a statement most of
+    /// whose rows are already stored on another account (imported there before, so this is probably that account's).
+    /// </summary>
+    private async Task EnsureStatementMatchesAsync(Account account, ParsedStatement statement, CancellationToken cancellationToken)
+    {
+        if (statement.IsCreditCardExport && account.Type != AccountType.CreditCard)
+        {
+            throw new AccountMismatchException(
+                $"This file is a credit card export, but \"{account.Name}\" is a {Describe(account.Type)} account.");
+        }
+
+        var hashes = statement.Transactions.Select(t => t.Hash).ToList();
+        var stored = await transactionRepository.CountHashesByAccountAsync(hashes, cancellationToken);
+        var here = stored.GetValueOrDefault(account.Id);
+        var (otherId, elsewhere) = stored.Where(s => s.Key != account.Id)
+            .Select(s => (s.Key, s.Value))
+            .OrderByDescending(s => s.Value)
+            .FirstOrDefault();
+        if (elsewhere >= MismatchMinimumRows && elsewhere * 2 >= hashes.Count && elsewhere > here)
+        {
+            var other = await accountRepository.GetByIdAsync(otherId, cancellationToken);
+            throw new AccountMismatchException(
+                $"{elsewhere} of the {hashes.Count} transactions in this file are already in \"{other?.Name}\". " +
+                $"Is \"{account.Name}\" the right account?");
+        }
+    }
+
+    private static string Describe(AccountType type) => type switch
+    {
+        AccountType.CreditCard => "credit card",
+        _ => type.ToString().ToLowerInvariant()
+    };
 
     public Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default)
     {
@@ -99,10 +161,22 @@ public class TransactionService(
         await transactionRepository.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<Transaction> UpdateAsync(Guid id, string description, Category category, CancellationToken cancellationToken = default)
+    public async Task<Transaction> UpdateAsync(Guid id, string description, Category category, Flow? flow,
+        CancellationToken cancellationToken = default)
     {
         var transaction = await transactionRepository.GetByIdAsync(id, cancellationToken)
                           ?? throw new NotFoundException(nameof(Transaction), id);
+        if (flow is { } picked && picked != transaction.Flow)
+        {
+            if (!FlowMatcher.IsAllowed(picked, transaction.TransactionType))
+            {
+                throw new InvalidInputException("flow", transaction.TransactionType == TransactionType.Debit
+                    ? "Money out can be spending, a transfer or ignored."
+                    : "Money in can be income, a refund, a transfer or ignored.");
+            }
+            transaction.Flow = picked;
+            transaction.FlowLocked = true;
+        }
 
         // The hash is left as imported: it identifies the statement row, so a re-import still recognises it.
         transaction.Description = description.Trim();
@@ -116,27 +190,23 @@ public class TransactionService(
         return transaction;
     }
 
-    public async Task<CategoryRulesResult> ApplyCategoryRulesAsync(CancellationToken cancellationToken = default)
+    public async Task<RulesResult> ApplyRulesAsync(CancellationToken cancellationToken = default)
     {
-        var categories = await GetCategoryMatcherAsync(cancellationToken);
-        var transactions = await transactionRepository.GetRuleCategorizedAsync(cancellationToken);
-
-        var updated = 0;
-        foreach (var transaction in transactions)
-        {
-            var category = categories.Categorize(transaction.Description);
-            if (category == transaction.Category) continue;
-            transaction.Category = category;
-            updated++;
-        }
+        var classifier = await GetClassifierAsync(cancellationToken);
+        var transactions = await transactionRepository.GetRuleManagedAsync(cancellationToken);
+        var updated = transactions.Count(t => classifier.Classify(t, t.Account!.Type));
 
         await transactionRepository.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Applied category rules: {Checked} checked, {Updated} updated", transactions.Count, updated);
-        return new CategoryRulesResult(transactions.Count, updated);
+        logger.LogInformation("Applied the rules: {Checked} checked, {Updated} updated", transactions.Count, updated);
+        return new RulesResult(transactions.Count, updated);
     }
 
-    private async Task<CategoryMatcher> GetCategoryMatcherAsync(CancellationToken cancellationToken) =>
-        new(await categoryRuleRepository.GetAllAsync(cancellationToken));
+    private async Task<TransactionClassifier> GetClassifierAsync(CancellationToken cancellationToken) =>
+        new(new CategoryMatcher(await categoryRuleRepository.GetAllAsync(cancellationToken)),
+            await GetFlowMatcherAsync(cancellationToken));
+
+    private async Task<FlowMatcher> GetFlowMatcherAsync(CancellationToken cancellationToken) =>
+        new(await flowRuleRepository.GetAllAsync(cancellationToken));
 
     public async Task LinkTransactionToBudgetAsync(Guid budgetId, Guid transactionId, CancellationToken cancellationToken = default)
     {

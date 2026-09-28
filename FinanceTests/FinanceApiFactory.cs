@@ -1,12 +1,15 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Finance.Domain.Entities;
+using Finance.Domain.Enums;
 using Finance.Infrastructure;
 using Finance.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -74,6 +77,19 @@ public class FinanceApiFactory(
     {
         var host = base.CreateHost(builder);
         _createdDatabase = PostgresServer is not null;
+        using var scope = host.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
+        // What the migrations insert on PostgreSQL (once: a test can start a second host on the same database).
+        // EnsureCreated would, but the app has already stored its first user, and an in-memory database with data
+        // counts as created.
+        if (PostgresServer is null && !db.Accounts.Any())
+        {
+            db.Accounts.AddRange(db.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(Account))!.GetSeedData().Select(seed => new Account
+            {
+                Id = (Guid)seed[nameof(Account.Id)]!, Name = (string)seed[nameof(Account.Name)]!, Type = (AccountType)seed[nameof(Account.Type)]!
+            }));
+            db.SaveChanges();
+        }
         return host;
     }
 

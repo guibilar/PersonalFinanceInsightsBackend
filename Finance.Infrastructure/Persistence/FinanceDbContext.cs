@@ -20,7 +20,9 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
 
     public DbSet<Transaction> Transactions { get; set; } = null!;
     public DbSet<Budget> Budgets { get; set; } = null!;
+    public DbSet<Account> Accounts { get; set; } = null!;
     public DbSet<CategoryRule> CategoryRules { get; set; } = null!;
+    public DbSet<FlowRule> FlowRules { get; set; } = null!;
     public DbSet<SeedMarker> SeedMarkers { get; set; } = null!;
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
     public DbSet<UserSession> UserSessions { get; set; } = null!;
@@ -33,6 +35,7 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
         configurationBuilder.Properties<AccountType>().HaveConversion<string>();
         configurationBuilder.Properties<Status>().HaveConversion<string>();
         configurationBuilder.Properties<BudgetPeriod>().HaveConversion<string>();
+        configurationBuilder.Properties<Flow>().HaveConversion<string>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -44,7 +47,9 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
             entity.HasKey(t => t.Id);
             entity.Property(t => t.Date).IsRequired();
             // The hash identifies a statement row, so the same purchase may exist once per account.
-            entity.HasIndex(t => new { t.Account, t.Hash }).IsUnique();
+            entity.HasIndex(t => new { t.AccountId, t.Hash }).IsUnique();
+            // An account with transactions can't be deleted: they would come back on the next import.
+            entity.HasOne(t => t.Account).WithMany().HasForeignKey(t => t.AccountId).OnDelete(DeleteBehavior.Restrict);
             // Every list, filter and report is by date range and/or sorted by date.
             entity.HasIndex(t => t.Date);
             // Hidden (deleted) transactions exist only for duplicate detection unless a query asks for them
@@ -68,6 +73,28 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
             entity.HasIndex(r => r.Keyword).IsUnique();
             // Not unique: renumbering after a move saves rows one by one, which would briefly repeat a position.
             entity.HasIndex(r => r.Position);
+        });
+
+        modelBuilder.Entity<Account>(entity =>
+        {
+            entity.HasKey(a => a.Id);
+            entity.Property(a => a.Name).IsRequired().HasMaxLength(TextLimits.AccountName);
+            // Case-sensitive here; the service also refuses names differing only in case.
+            entity.HasIndex(a => a.Name).IsUnique();
+            // Every database starts with the three accounts there were before accounts were data; a migration
+            // moved the existing transactions onto them. They can be renamed, or deleted while empty.
+            entity.HasData(
+                new Account { Id = Account.DefaultChequingId, Name = "Chequing", Type = AccountType.Chequing },
+                new Account { Id = Account.DefaultSavingsId, Name = "Savings", Type = AccountType.Savings },
+                new Account { Id = Account.DefaultCreditCardId, Name = "Credit card", Type = AccountType.CreditCard });
+        });
+
+        modelBuilder.Entity<FlowRule>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            // Stored upper-case, so this is unique ignoring case.
+            entity.Property(r => r.Keyword).IsRequired().HasMaxLength(TextLimits.FlowRuleKeyword);
+            entity.HasIndex(r => r.Keyword).IsUnique();
         });
 
         modelBuilder.Entity<SeedMarker>(entity =>

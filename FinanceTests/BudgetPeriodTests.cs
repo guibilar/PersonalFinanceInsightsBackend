@@ -29,7 +29,7 @@ public class BudgetPeriodTests
             db.Transactions.Add(new Transaction
             {
                 Id = Guid.NewGuid(), Date = DateTime.SpecifyKind(day, DateTimeKind.Utc), Description = "SHOP", Amount = amount,
-                TransactionType = TransactionType.Debit, Account = AccountType.CreditCard, Hash = Guid.NewGuid().ToString(), BudgetId = budgetId
+                TransactionType = TransactionType.Debit, AccountId = Account.DefaultCreditCardId, Hash = Guid.NewGuid().ToString(), BudgetId = budgetId
             });
         }
     }

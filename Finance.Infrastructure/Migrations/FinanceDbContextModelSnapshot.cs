@@ -22,6 +22,49 @@ namespace Finance.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Finance.Domain.Entities.Account", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Accounts");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("5b0c4b8e-3f5e-4c1a-9d53-0c2f7a1e8a01"),
+                            Name = "Chequing",
+                            Type = "Chequing"
+                        },
+                        new
+                        {
+                            Id = new Guid("5b0c4b8e-3f5e-4c1a-9d53-0c2f7a1e8a02"),
+                            Name = "Savings",
+                            Type = "Savings"
+                        },
+                        new
+                        {
+                            Id = new Guid("5b0c4b8e-3f5e-4c1a-9d53-0c2f7a1e8a03"),
+                            Name = "Credit card",
+                            Type = "CreditCard"
+                        });
+                });
+
             modelBuilder.Entity("Finance.Domain.Entities.Budget", b =>
                 {
                     b.Property<Guid>("Id")
@@ -80,15 +123,37 @@ namespace Finance.Infrastructure.Migrations
                     b.ToTable("CategoryRules");
                 });
 
+            modelBuilder.Entity("Finance.Domain.Entities.FlowRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Flow")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Keyword")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Keyword")
+                        .IsUnique();
+
+                    b.ToTable("FlowRules");
+                });
+
             modelBuilder.Entity("Finance.Domain.Entities.Transaction", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Account")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid");
 
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric");
@@ -110,6 +175,13 @@ namespace Finance.Infrastructure.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("Flow")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("FlowLocked")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Hash")
                         .IsRequired()
                         .HasColumnType("text");
@@ -126,7 +198,7 @@ namespace Finance.Infrastructure.Migrations
 
                     b.HasIndex("Date");
 
-                    b.HasIndex("Account", "Hash")
+                    b.HasIndex("AccountId", "Hash")
                         .IsUnique();
 
                     b.ToTable("Transactions");
@@ -390,9 +462,17 @@ namespace Finance.Infrastructure.Migrations
 
             modelBuilder.Entity("Finance.Domain.Entities.Transaction", b =>
                 {
+                    b.HasOne("Finance.Domain.Entities.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("Finance.Domain.Entities.Budget", "Budget")
                         .WithMany("Transactions")
                         .HasForeignKey("BudgetId");
+
+                    b.Navigation("Account");
 
                     b.Navigation("Budget");
                 });

@@ -21,7 +21,7 @@ public interface ICategoryRuleService
 
     /// <summary>
     /// What adding this rule first and re-applying the rules would change: only transactions the rules decide
-    /// (see <see cref="ITransactionService.ApplyCategoryRulesAsync"/>).
+    /// (see <see cref="ITransactionService.ApplyRulesAsync"/>).
     /// </summary>
     Task<CategoryRulePreview> PreviewAsync(string keyword, Category category, Guid? excludeTransactionId,
         CancellationToken cancellationToken = default);

@@ -7,7 +7,6 @@ using Finance.Domain.Exceptions;
 using Finance.Infrastructure;
 using Finance.Infrastructure.Import;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.Options;
 
 namespace Finance.Cli;
 
@@ -20,16 +19,19 @@ class Program
             .AddJsonFile(DependencyInjection.ImportRulesFile)
             .Build();
         var options = configuration.GetSection(ImportOptions.SectionName).Get<ImportOptions>() ?? new ImportOptions();
-        var parser = new CibcCsvParser(Options.Create(options));
+        var parser = new CibcCsvParser();
         // No database here: the rules in import-rules.json, not the ones edited in the app.
-        var categoryRules = new CategoryMatcher(options.ToCategoryRules());
+        var classifier = new TransactionClassifier(
+            new CategoryMatcher(options.ToCategoryRules()), new FlowMatcher(options.ToFlowRules()));
 
         List<Transaction> Read(string file, AccountType account)
         {
             using var stream = File.OpenRead(FileHelper.GetInputPathForFile(file, "CIBC", "csv"));
             try
             {
-                return parser.Parse(stream, account, categoryRules);
+                var transactions = parser.Parse(stream).Transactions;
+                transactions.ForEach(t => classifier.Classify(t, account));
+                return transactions;
             }
             catch (InvalidStatementException ex)
             {
@@ -48,16 +50,17 @@ class Program
             return;
         }
 
-        // Spending: purchases on both accounts, minus credit card refunds (money in on chequing is income).
-        var records = creditCard.Concat(chequing.Where(t => t.TransactionType == TransactionType.Debit)).ToList();
-        var recordsWithOutRent = records.Where(t => t.Category != Category.Rent).ToList();
-        var recordsIncome = chequing.Where(t => t.TransactionType == TransactionType.Credit).ToList();
         var recordsSavings = Read("cibc_savings", AccountType.Savings);
+        var all = creditCard.Concat(chequing).Concat(recordsSavings).ToList();
+        // Spending: purchases minus refunds, whichever account (transfers and income stay out).
+        var records = all.Where(t => t.Flow is Flow.Spending or Flow.Refund).ToList();
+        var recordsWithOutRent = records.Where(t => t.Category != Category.Rent).ToList();
+        var recordsIncome = all.Where(t => t.Flow == Flow.Income).ToList();
 
         // Group totals per month/category
         var monthly = MonthlyRecordsCalculator.GenerateSpendingRecords(records);
         var monthlyWithOutRent = MonthlyRecordsCalculator.GenerateSpendingRecords(recordsWithOutRent);
-        var monthlySavings = SavingsCalculator.GenerateMonthlySavingsRecords(recordsSavings);
+        var monthlySavings = SavingsCalculator.GenerateMonthlySavingsRecords(recordsSavings.Where(t => t.Flow != Flow.Ignored).ToList());
 
         // ================= Line Chart: Monthly Totals =================
         // Empty when a statement only has rent (or nothing but income).

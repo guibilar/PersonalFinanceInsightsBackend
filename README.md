@@ -60,24 +60,35 @@ nginx container). When the browser connects over HTTPS somewhere in front, the s
 `Secure`. Narrow the list (e.g. `ReverseProxy__TrustedNetworks__0=172.18.0.0/16`) if other machines on
 your network can reach the API directly.
 
+## Accounts
+
+Statements are imported into accounts. Every database starts with three, one per kind: "Chequing",
+"Savings" and "Credit card" (transactions stored before accounts existed are on them). Add more for a second
+card or bank account, rename them, or delete one that has no transactions (deleted ones included: they are
+what keeps a re-import from adding them back). An account's kind (`Chequing`, `Savings`, `CreditCard`) never
+changes; it decides what its transactions mean when no flow rule says otherwise.
+
+- `GET /api/Accounts`: `{id, name, type, transactionCount}`, by kind then name.
+- `POST /api/Accounts` `{name, type}`, `PUT /api/Accounts/{id}` `{name}`: names are trimmed, up to 100
+  characters, and unique ignoring case (409 otherwise).
+- `DELETE /api/Accounts/{id}`: 409 while it has transactions.
+
 ## Import bank statements
 
-Upload a CIBC CSV export with the account it belongs to (`CreditCard`, `Chequing` or `Savings`):
+Upload a CIBC CSV export with the id of the account it belongs to:
 
 ```bash
-curl -F file=@cibc_credit.csv -F account=CreditCard http://localhost:5096/api/Transaction/Import
+curl -F file=@cibc_credit.csv -F accountId=5b0c4b8e-3f5e-4c1a-9d53-0c2f7a1e8a03 http://localhost:5096/api/Transaction/Import
 # {"read":42,"added":40,"skipped":2}
 ```
 
 Re-importing a statement, or an overlapping one, only adds rows that aren't stored yet; identical
-purchases on the same day are kept. Excluded descriptions, income sources and card payments are configured
-in `Finance.Infrastructure/Import/import-rules.json` (override with
-`Import__...` environment variables). Categories come from the category rules stored in the database
-(see [Category rules](#category-rules)).
+purchases on the same day are kept. Every row is imported; categories and flows come from the rules stored in
+the database (see [Category rules](#category-rules) and [Flows](#flows)).
 
-Money in on a credit card statement is imported as a refund (a credit in the purchase's category), except
-the card's own payments, recognised by `CardPaymentKeywords`. Refunds reduce spending in the reports and
-in budgets. On chequing, money in only counts as income when it matches `IncomeKeywords`.
+A file that doesn't look like the account's is refused with 409 and `"code": "account-mismatch"`: a credit card
+export (CIBC's carry the card number) imported into a bank account, or a statement most of whose rows (at least
+3) are already stored on another account. Sending `confirmed=true` imports it anyway.
 
 Rent is imported as paid: the payment on the chequing statement (e.g. `VALIANT RENTAL PAYMENT`), in the
 Rent category by the category rules. It used to be generated instead (a fixed "Monthly Rent" row on the 1st
@@ -88,11 +99,38 @@ hides that month's "Monthly Rent" row, so rent counts once; it can be restored f
 Statements are read as UTF-8, or as Windows-1252 when the file isn't valid UTF-8 (e.g. re-saved in Excel).
 Transactions are duplicates only within the same account.
 
-## Correcting categories
+## Flows
 
-`PUT /api/Transaction/{id}` changes a transaction's description and category. A category picked by hand is
-locked: `POST /api/Transaction/ApplyCategoryRules` re-runs the current category rules over everything else
-(savings rows and deleted rows are left alone). Editing never changes the duplicate
+Every transaction has a flow, which decides where the reports count it:
+
+| Flow | Meaning | Allowed for |
+|---|---|---|
+| `Spending` | counts as spending | money out |
+| `Refund` | money back, reduces spending | money in |
+| `Income` | counts as income | money in |
+| `Transfer` | between your own accounts (a card payment, moving money to savings) | both |
+| `Ignored` | not counted anywhere (e.g. a pending hold) | both |
+
+A flow rule is a keyword and a flow; the rule with the longest keyword the description contains (ignoring case)
+wins, and income and refund rules only apply to money in. Without a matching rule, money out is spending, money in
+is income on chequing and a refund on a credit card, and everything on a savings account is a transfer.
+
+- `GET /api/FlowRules`: `{id, keyword, flow}`, by keyword.
+- `POST /api/FlowRules` `{keyword, flow}`, `PUT /api/FlowRules/{id}`, `DELETE /api/FlowRules/{id}`: keywords are
+  stored trimmed and upper-case, up to 100 characters, and unique (409); a `Spending` rule is refused (400).
+
+`FlowRules` in `import-rules.json` is only the initial set (transfers, card payments, pending holds, income
+sources), copied into the database once like the category rules. Before flows existed, rows matching those
+keywords were dropped at import, and so was money in on chequing that wasn't a known income; the migration
+gives stored rows the flow the reports gave them (purchases spending, card credits refunds, chequing credits
+income, savings transfers).
+
+## Correcting transactions
+
+`PUT /api/Transaction/{id}` `{description, category, flow?}` changes a transaction's description, category and
+flow (a flow the other way is refused with 400). A category or flow picked by hand is locked:
+`POST /api/Transaction/ApplyRules` re-runs the current category and flow rules over everything else (hidden
+rows are left alone, and so are the categories of savings accounts' rows). Editing never changes the duplicate
 hash, so re-importing the statement still skips the row.
 
 ## Category rules
@@ -111,7 +149,7 @@ needs no redeploy:
 - `POST /api/CategoryRules/Preview` `{keyword, category, excludeTransactionId?}`: how many stored transactions
   would change category if the rule were added first and the rules re-applied, with up to five examples.
 
-Changed rules apply to later imports; `POST /api/Transaction/ApplyCategoryRules` applies them to stored
+Changed rules apply to later imports; `POST /api/Transaction/ApplyRules` applies them to stored
 transactions. `CategoryRules` in `import-rules.json` is only the initial set: the API copies it into the
 database (one rule per keyword, in order) the first time it starts on a database, and never again, even after
 every rule was deleted. The CLI has no database, so it still categorises with the file's rules.
@@ -122,6 +160,10 @@ A budget's `period` is `Total` (everything linked counts, e.g. a trip) or `Month
 in the current month count, so it starts over every month).
 
 ## Reports
+
+Spending is every `Spending` transaction minus every `Refund`, whichever account it is on.
+`GET /api/Reports/cash-flow` gives income, spending, net (income minus spending) and money saved (into savings
+accounts minus out of them) per month of the current year, with monthly averages over the finished months.
 
 The dashboard's current month and year follow `Reports:TimeZone` in `appsettings.json`
 (IANA id, default `America/Toronto`; override with `Reports__TimeZone`). An unknown id stops the API at startup.

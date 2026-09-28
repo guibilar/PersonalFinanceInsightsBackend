@@ -1,18 +1,5 @@
 {
   "Import": {
-    "ExcludedDescriptions": [
-      "Internet Banking INTERNET TRANSFER",
-      "Internet Banking FULFILL REQUEST",
-      "UBER* PENDING"
-    ],
-    "CardPaymentKeywords": [
-      "PAYMENT THANK YOU",
-      "PAIEMENT MERCI"
-    ],
-    "IncomeKeywords": [
-      "Deel Canada",
-      "DEPOSIT TrupCAN"
-    ],
     "CategoryRules": [
       {
         "Category": "Groceries",
@@ -135,6 +122,30 @@
           "DISNEY",
           "SUBSCRIPTION",
           "GOOGLE ONE"
+        ]
+      }
+    ],
+    "FlowRules": [
+      {
+        "Flow": "Transfer",
+        "Keywords": [
+          "Internet Banking INTERNET TRANSFER",
+          "Internet Banking FULFILL REQUEST",
+          "PAYMENT THANK YOU",
+          "PAIEMENT MERCI"
+        ]
+      },
+      {
+        "Flow": "Ignored",
+        "Keywords": [
+          "UBER* PENDING"
+        ]
+      },
+      {
+        "Flow": "Income",
+        "Keywords": [
+          "Deel Canada",
+          "DEPOSIT TrupCAN"
         ]
       }
     ]
