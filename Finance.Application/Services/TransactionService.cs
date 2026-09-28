@@ -8,7 +8,6 @@ using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
 using Finance.Domain.Helpers;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace Finance.Application.Services;
 
@@ -17,8 +16,7 @@ public class TransactionService(
     ITransactionRepository transactionRepository,
     IBudgetRepository budgetRepository,
     ICategoryRuleRepository categoryRuleRepository,
-    IStatementParser statementParser,
-    IOptions<ImportOptions> importOptions) : ITransactionService
+    IStatementParser statementParser) : ITransactionService
 {
     private const string DuplicateMessage = "An identical transaction (same account, date, amount and description) already exists.";
 
@@ -58,41 +56,25 @@ public class TransactionService(
                 transaction.Amount, transaction.Date, transaction.Description, occurrence);
         }
 
-        var toImport = await SettleMonthlyRentAsync(account, parsed, cancellationToken);
-
         // The statement is imported completely or not at all.
-        var added = await transactionRepository.AddMissingAsync(account, toImport, cancellationToken);
+        var added = await transactionRepository.AddMissingAsync(account, parsed, cancellationToken);
+
+        // Where a chequing statement brings a month's real rent payment, the rent generated there before goes away,
+        // so the month counts rent once. Hidden, not deleted: it can be restored. (Other accounts never had it; a
+        // rent-category purchase on the card, say a storage unit, is not the apartment's rent.)
+        var rentMonths = parsed
+            .Where(t => t is { Account: AccountType.Chequing, Category: Category.Rent, TransactionType: TransactionType.Debit })
+            .Select(t => new DateTime(t.Date.Year, t.Date.Month, 1, 0, 0, 0, DateTimeKind.Utc))
+            .Distinct()
+            .ToList();
+        if (rentMonths.Count > 0)
+        {
+            var replaced = await transactionRepository.HideLegacyMonthlyRentAsync(rentMonths, cancellationToken);
+            if (replaced > 0) logger.LogInformation("Hid {Count} generated monthly rent rows replaced by real payments", replaced);
+        }
 
         logger.LogInformation("Imported {Account} statement: {Read} read, {Added} added", account, parsed.Count, added);
         return new ImportResult(parsed.Count, added, parsed.Count - added);
-    }
-
-    /// <summary>
-    /// The fixed rent is one per month, generated from the rules. A month that already has it gets no second one
-    /// (its hash includes the amount, so after a rent change it would look new), and its stored amount follows the
-    /// rules, so adding a rent change and re-importing corrects the months it covers. Deleted rents stay deleted.
-    /// </summary>
-    private async Task<List<Transaction>> SettleMonthlyRentAsync(AccountType account, List<Transaction> parsed,
-        CancellationToken cancellationToken)
-    {
-        var rents = parsed.Where(importOptions.Value.IsFixedMonthlyRent).ToList();
-        if (rents.Count == 0) return parsed;
-
-        var stored = await transactionRepository.GetRentsAsync(
-            account, importOptions.Value.MonthlyRent!.Description, rents.Select(t => t.Date).ToList(), cancellationToken);
-        var corrected = 0;
-        foreach (var rent in stored.Where(t => !t.Hidden))
-        {
-            var amount = rents.First(t => t.Date == rent.Date).Amount;
-            if (rent.Amount == amount) continue;
-            logger.LogInformation("Rent for {Month:yyyy-MM} corrected from {Old} to {New}", rent.Date, rent.Amount, amount);
-            rent.Amount = amount;
-            corrected++;
-        }
-        if (corrected > 0) await transactionRepository.SaveChangesAsync(cancellationToken);
-
-        var paidMonths = stored.Select(t => t.Date).ToHashSet();
-        return parsed.Where(t => !rents.Contains(t) || !paidMonths.Contains(t.Date)).ToList();
     }
 
     public Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default)
@@ -137,9 +119,7 @@ public class TransactionService(
     public async Task<CategoryRulesResult> ApplyCategoryRulesAsync(CancellationToken cancellationToken = default)
     {
         var categories = await GetCategoryMatcherAsync(cancellationToken);
-        var transactions = (await transactionRepository.GetRuleCategorizedAsync(cancellationToken))
-            .Where(t => !importOptions.Value.IsFixedMonthlyRent(t))
-            .ToList();
+        var transactions = await transactionRepository.GetRuleCategorizedAsync(cancellationToken);
 
         var updated = 0;
         foreach (var transaction in transactions)

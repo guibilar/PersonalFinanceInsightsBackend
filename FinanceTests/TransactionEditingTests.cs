@@ -106,7 +106,8 @@ public class TransactionEditingTests
         var alreadyRight = Stored("TIM HORTONS #55", Category.Dining);  // unchanged
         var handPicked = Stored("METRO #123", Category.Pet, locked: true);
         var savings = Stored("METRO TRANSFER", Category.Other, AccountType.Savings);
-        var fixedRent = Stored("Monthly Rent", Category.Rent, AccountType.Chequing);
+        // Rent generated before real payments were imported: the migration locked its category.
+        var fixedRent = Stored("Monthly Rent", Category.Rent, AccountType.Chequing, locked: true);
         await factory.SeedAsync(db => db.Transactions.AddRange(stale, alreadyRight, handPicked, savings, fixedRent));
 
         var result = await (await factory.CreateClient().PostAsync("/api/Transaction/ApplyCategoryRules", null))

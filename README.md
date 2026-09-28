@@ -70,8 +70,8 @@ curl -F file=@cibc_credit.csv -F account=CreditCard http://localhost:5096/api/Tr
 ```
 
 Re-importing a statement, or an overlapping one, only adds rows that aren't stored yet; identical
-purchases on the same day are kept. Excluded descriptions, income sources, card payments and the fixed
-monthly rent are configured in `Finance.Infrastructure/Import/import-rules.json` (override with
+purchases on the same day are kept. Excluded descriptions, income sources and card payments are configured
+in `Finance.Infrastructure/Import/import-rules.json` (override with
 `Import__...` environment variables). Categories come from the category rules stored in the database
 (see [Category rules](#category-rules)).
 
@@ -79,21 +79,11 @@ Money in on a credit card statement is imported as a refund (a credit in the pur
 the card's own payments, recognised by `CardPaymentKeywords`. Refunds reduce spending in the reports and
 in budgets. On chequing, money in only counts as income when it matches `IncomeKeywords`.
 
-With `MonthlyRent` set, rent payments found on chequing statements are replaced by one fixed rent per
-month the statement covers. When the rent changes, add an entry to `Changes` instead of editing `Amount`,
-so earlier months keep what was actually paid:
-
-```json
-"MonthlyRent": {
-  "Amount": 1947.5,
-  "Description": "Monthly Rent",
-  "Changes": [ { "From": "2027-01", "Amount": 2050 } ]
-}
-```
-
-A month never gets a second rent, whatever the amount, and re-importing a statement sets its months' rent to
-the configured amount (a deleted rent stays deleted). So after adding a change late, re-import the statements
-of the months it covers. A malformed entry stops the API at startup with a message naming the setting.
+Rent is imported as paid: the payment on the chequing statement (e.g. `VALIANT RENTAL PAYMENT`), in the
+Rent category by the category rules. It used to be generated instead (a fixed "Monthly Rent" row on the 1st
+of every month a chequing statement covered, with the real payment dropped). Those rows are kept for the months
+already stored, with their category locked. Importing a chequing statement that has a month's real rent payment
+hides that month's "Monthly Rent" row, so rent counts once; it can be restored from the deleted transactions.
 
 Statements are read as UTF-8, or as Windows-1252 when the file isn't valid UTF-8 (e.g. re-saved in Excel).
 Transactions are duplicates only within the same account.
@@ -102,14 +92,13 @@ Transactions are duplicates only within the same account.
 
 `PUT /api/Transaction/{id}` changes a transaction's description and category. A category picked by hand is
 locked: `POST /api/Transaction/ApplyCategoryRules` re-runs the current category rules over everything else
-(savings rows, deleted rows and the fixed monthly rent are left alone). Editing never changes the duplicate
+(savings rows and deleted rows are left alone). Editing never changes the duplicate
 hash, so re-importing the statement still skips the row.
 
 ## Category rules
 
 A rule is a keyword and a category: a transaction whose description contains the keyword (ignoring case)
-gets the category. Rules are checked in order and the first match wins; no match means `Other`. With
-`MonthlyRent` set, a chequing payment whose rule says `Rent` is replaced by the fixed rent.
+gets the category. Rules are checked in order and the first match wins; no match means `Other`.
 
 The rules live in the database and are edited in the app (the frontend's Rules page), so a new merchant
 needs no redeploy:

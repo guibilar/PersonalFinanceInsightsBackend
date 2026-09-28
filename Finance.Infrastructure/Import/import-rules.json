@@ -13,11 +13,6 @@
       "Deel Canada",
       "DEPOSIT TrupCAN"
     ],
-    "MonthlyRent": {
-      "Amount": 1947.5,
-      "Description": "Monthly Rent",
-      "Changes": []
-    },
     "CategoryRules": [
       {
         "Category": "Groceries",

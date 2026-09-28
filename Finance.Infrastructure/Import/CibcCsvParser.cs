@@ -30,7 +30,7 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
     public List<Transaction> Parse(Stream statement, AccountType account, CategoryMatcher categories)
     {
         var transactions = new List<Transaction>();
-        var statementMonths = new HashSet<DateTime>();
+        var datedRows = 0;
         using var reader = new StringReader(ReadText(statement));
         // Short rows read as missing fields (null) and stray quotes as data, so any file gets row-by-row checks
         // below instead of an exception halfway through.
@@ -50,7 +50,7 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
                 continue;
             }
             date = DateTime.SpecifyKind(date, DateTimeKind.Utc);
-            statementMonths.Add(new DateTime(date.Year, date.Month, 1, 0, 0, 0, DateTimeKind.Utc));
+            datedRows++;
 
             if (account == AccountType.Savings)
             {
@@ -68,8 +68,7 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
                 AddIfAmount(transactions, csv.GetField(MoneyInColumn), date, description, account, TransactionType.Credit, category);
             }
 
-            var replacedByMonthlyRent = _options.MonthlyRent != null && category == Category.Rent;
-            if (!replacedByMonthlyRent && !IsExcluded(description))
+            if (!IsExcluded(description))
             {
                 AddIfAmount(transactions, csv.GetField(MoneyOutColumn), date, description, account, TransactionType.Debit, category);
 
@@ -83,15 +82,10 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
 
         // Not a single dated row: another bank's export, a spreadsheet, or not a CSV at all. Saying "0 imported"
         // would look like success.
-        if (statementMonths.Count == 0)
+        if (datedRows == 0)
         {
             throw new InvalidStatementException(
                 "No transactions found in this file. Is it a CIBC CSV export (date, description, money out, money in)?");
-        }
-
-        if (account == AccountType.Chequing && _options.MonthlyRent is { } rent)
-        {
-            AddMonthlyRent(transactions, rent, account, statementMonths);
         }
 
         return transactions;
@@ -142,23 +136,5 @@ public class CibcCsvParser(IOptions<ImportOptions> options) : IStatementParser
             TransactionType = type,
             Account = account
         });
-    }
-
-    // One rent per month the statement covers (every dated row counts, including the skipped rent itself).
-    private static void AddMonthlyRent(List<Transaction> transactions, MonthlyRentOptions rent, AccountType account,
-        IEnumerable<DateTime> statementMonths)
-    {
-        foreach (var month in statementMonths.Order())
-        {
-            transactions.Add(new Transaction
-            {
-                Date = month,
-                Description = rent.Description,
-                Amount = rent.AmountFor(month),
-                Category = Category.Rent,
-                TransactionType = TransactionType.Debit,
-                Account = account
-            });
-        }
     }
 }

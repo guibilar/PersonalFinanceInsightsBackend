@@ -101,85 +101,39 @@ public class ImportTests
             """, AccountType.Chequing, new ImportOptions
             {
                 IncomeKeywords = Rules.IncomeKeywords, ExcludedDescriptions = Rules.ExcludedDescriptions,
-                CategoryRules = Rules.CategoryRules, MonthlyRent = null
+                CategoryRules = Rules.CategoryRules
             });
 
         Assert.Empty(parsed);
     }
 
     [Fact]
-    public void Parser_ChequingImportsKnownIncomeAndOneRentPerMonth()
+    public void Parser_ChequingImportsKnownIncomeAndTheRealRentPayment()
     {
         var parsed = Parse("""
-            2026-01-01,VALIANT RENTAL PAYMENT,1900.00,
+            2026-01-01,VALIANT RENTAL PAYMENT,1947.50,
             2026-01-15,Deel Canada PAYROLL,,4200.00
             2026-01-21,E-TRANSFER FROM FRIEND,,40.00
             2026-02-10,BELL CANADA,85.00,
             """, AccountType.Chequing);
 
         Assert.Equal(4200m, Assert.Single(parsed, t => t.TransactionType == TransactionType.Credit).Amount);
-        var rent = parsed.Where(t => t.Category == Category.Rent).ToList();
-        Assert.Equal([new DateTime(2026, 1, 1), new DateTime(2026, 2, 1)], rent.Select(t => t.Date));
-        Assert.All(rent, t => Assert.Equal(("Monthly Rent", 1947.50m), (t.Description, t.Amount)));
+        // The payment as the bank shows it: no generated rent, and none for February, which has no payment.
+        var rent = Assert.Single(parsed, t => t.Category == Category.Rent);
+        Assert.Equal(("VALIANT RENTAL PAYMENT", 1947.50m, new DateTime(2026, 1, 1)), (rent.Description, rent.Amount, rent.Date));
     }
 
     [Fact]
-    public void Parser_MonthlyRent_UsesTheAmountThatAppliedThatMonth()
+    public void Parser_CreditCardRowsInTheRentCategory_AreKept()
     {
-        var options = new ImportOptions
-        {
-            CategoryRules = Rules.CategoryRules,
-            MonthlyRent = new MonthlyRentOptions
-            {
-                Amount = 1900, Description = "Monthly Rent",
-                // In any order.
-                Changes = [new RentChange { From = "2026-04", Amount = 2100 }, new RentChange { From = "2026-02", Amount = 2000 }]
-            }
-        };
-
+        // Used to be dropped without a trace: rent-category rows were replaced by a generated rent on chequing only.
         var parsed = Parse("""
-            2026-01-10,BELL CANADA,85.00,
-            2026-02-10,BELL CANADA,85.00,
-            2026-03-10,BELL CANADA,85.00,
-            2026-04-10,BELL CANADA,85.00,
-            """, AccountType.Chequing, options);
+            2026-01-10,VALIANT STORAGE UNIT,120.00,
+            2026-01-11,METRO,10.00,
+            """, AccountType.CreditCard);
 
-        Assert.Equal([1900m, 2000m, 2000m, 2100m], parsed.Where(t => t.Category == Category.Rent).Select(t => t.Amount));
-    }
-
-    [Theory]
-    [InlineData("2026/02", 2000)]
-    [InlineData("February 2026", 2000)]
-    [InlineData("2026-02", 0)]
-    public void RentChange_NeedsAMonthAsYearDashMonth_AndAPositiveAmount(string from, decimal amount)
-    {
-        var rent = new MonthlyRentOptions { Amount = 1900, Changes = [new RentChange { From = from, Amount = amount }] };
-
-        Assert.False(rent.IsValid());
-    }
-
-    [Fact]
-    public async Task InvalidRentChange_StopsTheApiAtStartup()
-    {
-        await using var factory = new FinanceApiFactory(settings: new Dictionary<string, string?>
-        {
-            ["Import:MonthlyRent:Changes:0:From"] = "2027/01",
-            ["Import:MonthlyRent:Changes:0:Amount"] = "2050",
-        });
-
-        var ex = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
-
-        Assert.Contains("Import:MonthlyRent:Changes", ex.ToString());
-    }
-
-    [Fact]
-    public void Parser_WithoutMonthlyRent_KeepsRealRentPayments()
-    {
-        var options = new ImportOptions { CategoryRules = Rules.CategoryRules };
-
-        var parsed = Parse("2026-01-01,VALIANT RENTAL PAYMENT,1900.00,", AccountType.Chequing, options);
-
-        Assert.Equal(1900m, Assert.Single(parsed).Amount);
+        Assert.Equal([("VALIANT STORAGE UNIT", Category.Rent), ("METRO", Category.Groceries)],
+            parsed.Select(t => (t.Description, t.Category)));
     }
 
     [Fact]
@@ -316,52 +270,52 @@ public class ImportTests
         Assert.Equal((2, 1, 1), (result.Read, result.Added, result.Skipped));
     }
 
-    private static Transaction StoredRent(DateTime month, decimal amount, bool hidden = false) => new()
+    /// <summary>A rent row generated before real payments were imported (the migration locked its category).</summary>
+    private static Transaction GeneratedRent(DateTime month, bool hidden = false) => new()
     {
-        Id = Guid.NewGuid(), Date = DateTime.SpecifyKind(month, DateTimeKind.Utc), Description = "Monthly Rent", Amount = amount,
-        Category = Category.Rent, TransactionType = TransactionType.Debit, Account = AccountType.Chequing,
-        Hash = TransactionHashHelper.GenerateTransactionHash(amount, month, "Monthly Rent"), Hidden = hidden
+        Id = Guid.NewGuid(), Date = DateTime.SpecifyKind(month, DateTimeKind.Utc), Description = "Monthly Rent", Amount = 1947.50m,
+        Category = Category.Rent, CategoryLocked = true, TransactionType = TransactionType.Debit, Account = AccountType.Chequing,
+        Hash = TransactionHashHelper.GenerateTransactionHash(1947.50m, month, "Monthly Rent"), Hidden = hidden
     };
 
     [Fact]
-    public async Task Import_AMonthThatAlreadyHasRent_GetsNoSecondOne_AndItsAmountFollowsTheRules()
+    public async Task Import_RealRentPayment_ReplacesThatMonthsGeneratedRent_AndOnlyThatMonths()
     {
-        // The rules: 1947.50, and 2050 from February. January and February were imported before that change.
-        await using var factory = new FinanceApiFactory(settings: new Dictionary<string, string?>
-        {
-            ["Import:MonthlyRent:Changes:0:From"] = "2026-02",
-            ["Import:MonthlyRent:Changes:0:Amount"] = "2050",
-        });
-        await factory.SeedAsync(db =>
-        {
-            db.Transactions.Add(StoredRent(new DateTime(2026, 1, 1), 1947.50m));
-            db.Transactions.Add(StoredRent(new DateTime(2026, 2, 1), 1947.50m));
-        });
+        await using var factory = new FinanceApiFactory();
+        var january = GeneratedRent(new DateTime(2026, 1, 1));
+        var february = GeneratedRent(new DateTime(2026, 2, 1));
+        await factory.SeedAsync(db => db.Transactions.AddRange(january, february));
 
+        // January's statement, re-imported now that rent comes in as paid (on the 3rd).
         var result = await (await factory.CreateClient().PostAsync("/api/Transaction/Import", Statement("""
+            2026-01-03,VALIANT RENTAL PAYMENT,1947.50,
             2026-01-10,BELL CANADA,85.00,
-            2026-02-10,BELL CANADA,85.00,
-            2026-03-10,BELL CANADA,85.00,
             """, "Chequing"))).ReadAsync<ImportResultDto>();
 
-        // Read: three bills and three rents; January's and February's rents are already there.
-        Assert.Equal((6, 4, 2), (result.Read, result.Added, result.Skipped));
-        var rents = await factory.QueryAsync(db => db.Transactions.Where(t => t.Category == Category.Rent)
-            .OrderBy(t => t.Date).Select(t => t.Amount).ToListAsync());
-        Assert.Equal([1947.50m, 2050m, 2050m], rents);
+        Assert.Equal((2, 2, 0), (result.Read, result.Added, result.Skipped));
+        // Rent counts once per month: January the real payment, February (not re-imported) the generated row.
+        var visibleRent = await factory.QueryAsync(db => db.Transactions.Where(t => t.Category == Category.Rent)
+            .OrderBy(t => t.Date).Select(t => new { t.Date.Month, t.Description }).ToListAsync());
+        Assert.Equal([new { Month = 1, Description = "VALIANT RENTAL PAYMENT" }, new { Month = 2, Description = "Monthly Rent" }],
+            visibleRent);
+        // Hidden, not deleted: it can still be restored.
+        Assert.True(await factory.QueryAsync(db => db.Transactions.IgnoreQueryFilters()
+            .Where(t => t.Id == january.Id).Select(t => t.Hidden).SingleAsync()));
     }
 
     [Fact]
-    public async Task Import_DeletedRent_StaysDeleted()
+    public async Task Import_WithoutARentPayment_LeavesTheGeneratedRentAlone()
     {
         await using var factory = new FinanceApiFactory();
-        await factory.SeedAsync(db => db.Transactions.Add(StoredRent(new DateTime(2026, 1, 1), 1800, hidden: true)));
+        var january = GeneratedRent(new DateTime(2026, 1, 1));
+        await factory.SeedAsync(db => db.Transactions.Add(january));
 
-        var result = await (await factory.CreateClient().PostAsync("/api/Transaction/Import",
-            Statement("2026-01-10,BELL CANADA,85.00,", "Chequing"))).ReadAsync<ImportResultDto>();
+        await factory.CreateClient().PostAsync("/api/Transaction/Import", Statement("2026-01-10,BELL CANADA,85.00,", "Chequing"));
+        // A rent-category purchase on the card (a storage unit) is not the apartment's rent.
+        await factory.CreateClient().PostAsync("/api/Transaction/Import", Statement("2026-01-12,VALIANT STORAGE,50.00,", "CreditCard"));
 
-        Assert.Equal((2, 1, 1), (result.Read, result.Added, result.Skipped));
-        Assert.Equal(0, await factory.QueryAsync(db => db.Transactions.CountAsync(t => t.Category == Category.Rent)));
+        Assert.False(await factory.QueryAsync(db => db.Transactions.IgnoreQueryFilters()
+            .Where(t => t.Id == january.Id).Select(t => t.Hidden).SingleAsync()));
     }
 
     [Fact]
