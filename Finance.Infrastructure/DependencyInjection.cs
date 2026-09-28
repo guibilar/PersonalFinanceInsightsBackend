@@ -28,6 +28,7 @@ public static class DependencyInjection
 
         services.AddScoped<ITransactionRepository, TransactionRepository>();
         services.AddScoped<IBudgetRepository, BudgetRepository>();
+        services.AddScoped<ICategoryRuleRepository, CategoryRuleRepository>();
         services.AddScoped<IStatementParser, CibcCsvParser>();
         return services;
     }

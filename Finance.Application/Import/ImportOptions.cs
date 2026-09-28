@@ -1,4 +1,5 @@
 using System.Globalization;
+using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 
 namespace Finance.Application.Import;
@@ -21,19 +22,43 @@ public class ImportOptions
     public List<string> IncomeKeywords { get; set; } = [];
 
     /// <summary>
-    /// Upper-case keywords per category. Rules are checked in order (a list, because configuration sorts
-    /// dictionary keys); the first match wins and no match means <see cref="Category.Other"/>.
+    /// The initial category rules: keywords per category, in order (a list, because configuration sorts
+    /// dictionary keys). The API copies them into the database once, where they are then edited in the app;
+    /// only the CLI, which has no database, still categorises with these.
     /// </summary>
-    public List<CategoryRule> CategoryRules { get; set; } = [];
+    public List<CategoryKeywords> CategoryRules { get; set; } = [];
 
     /// <summary>
     /// When set, rent payments found in statements are replaced by one fixed rent transaction per month on
     /// chequing statements.
     /// </summary>
     public MonthlyRentOptions? MonthlyRent { get; set; }
+
+    /// <summary>
+    /// <see cref="CategoryRules"/> as one rule per keyword, in order (rule order, then keyword order). A keyword
+    /// that appears again later is left out: the first one always wins anyway.
+    /// </summary>
+    public List<CategoryRule> ToCategoryRules()
+    {
+        var keywords = new HashSet<string>();
+        return CategoryRules
+            .SelectMany(rule => rule.Keywords.Select(keyword => (Keyword: CategoryRule.NormalizeKeyword(keyword), rule.Category)))
+            .Where(rule => rule.Keyword.Length > 0 && keywords.Add(rule.Keyword))
+            .Select((rule, position) => new CategoryRule { Keyword = rule.Keyword, Category = rule.Category, Position = position })
+            .ToList();
+    }
+
+    /// <summary>
+    /// The rent the importer adds each month: Rent by definition, whatever its description says to the rules.
+    /// </summary>
+    public bool IsFixedMonthlyRent(Transaction transaction) =>
+        MonthlyRent is { } rent &&
+        transaction is { Account: AccountType.Chequing, Category: Category.Rent } &&
+        transaction.Description == rent.Description;
 }
 
-public class CategoryRule
+/// <summary>An initial category rule from import-rules.json: any of the keywords gives the category.</summary>
+public class CategoryKeywords
 {
     public Category Category { get; set; }
     public List<string> Keywords { get; set; } = [];

@@ -78,7 +78,7 @@ public class TransactionController(ITransactionService transactionService) : Con
         return transaction.ToOutput();
     }
 
-    /// <summary>Re-applies the current category rules (import-rules.json) to stored transactions.</summary>
+    /// <summary>Re-applies the current category rules (see CategoryRulesController) to stored transactions.</summary>
     [HttpPost("ApplyCategoryRules")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<ActionResult<CategoryRulesResultDto>> ApplyCategoryRules(CancellationToken cancellationToken)

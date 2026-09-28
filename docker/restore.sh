@@ -11,8 +11,9 @@ dump=${1:?usage: docker/restore.sh <path to .dump file>}
 [ -f "$dump" ] || { echo "No such file: $dump" >&2; exit 1; }
 
 echo "Saving the current database first..."
+# Owner-only, like the nightly dumps (umask 077).
 docker compose exec -T backup sh -c \
-  'pg_dump --format=custom --file="${BACKUP_DIR:-/backups}/before-restore-$(date +%Y-%m-%d_%H%M%S).dump"'
+  'umask 077 && pg_dump --format=custom --file="${BACKUP_DIR:-/backups}/before-restore-$(date +%Y-%m-%d_%H%M%S).dump"'
 
 docker compose stop app
 # One transaction: if anything fails, the database is left as it was. The connection (PGHOST,

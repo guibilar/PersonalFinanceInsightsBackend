@@ -1,0 +1,67 @@
+# Weekly dependency updates, grouped so a week brings a few pull requests rather than one per package.
+# CI (build, tests on PostgreSQL, vulnerability check, the Docker stack's smoke test) runs on each.
+version: 2
+updates:
+  # Directory.Packages.props (central package management) and the dotnet-ef tool manifest.
+  - package-ecosystem: nuget
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # ASP.NET Core, EF Core, the Npgsql provider and dotnet-ef ship matching versions: one PR.
+      dotnet:
+        patterns:
+          - "Microsoft.*"
+          - "Npgsql.*"
+          - "dotnet-ef"
+      swashbuckle:
+        patterns:
+          - "Swashbuckle.*"
+      # Everything else in one pull request; a major version gets its own.
+      minor-and-patch:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Their majors follow .NET's (11.x needs net11.0): moved by hand with the SDK and the images.
+      - dependency-name: "Microsoft.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Npgsql.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "dotnet-ef"
+        update-types: ["version-update:semver-major"]
+
+  # The Dockerfile's .NET SDK and runtime images.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    ignore:
+      - dependency-name: "*dotnet/*"
+        update-types: ["version-update:semver-major"]
+
+  # docker-compose.yml's images.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    ignore:
+      # A new PostgreSQL major can't open the old data volume: upgrade by hand (dump, then restore).
+      - dependency-name: "postgres"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns:
+          - "*"

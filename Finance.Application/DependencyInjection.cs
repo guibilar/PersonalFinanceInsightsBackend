@@ -12,6 +12,7 @@ public static class DependencyInjection
         services.AddScoped<ITransactionService, TransactionService>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IBudgetService, BudgetService>();
+        services.AddScoped<ICategoryRuleService, CategoryRuleService>();
         services.AddSingleton<ReportingCalendar>();
         return services;
     }

@@ -5,12 +5,30 @@
 # Connection from the standard PGHOST / PGUSER / PGPASSWORD / PGDATABASE variables. Dumps older than
 # $BACKUP_KEEP_DAYS days are deleted, but only after a successful dump.
 set -u
+# The dumps hold the whole database (password hash, cookie keys, sessions): owner-only files.
+umask 077
 
 dir=${BACKUP_DIR:-/backups}
 keep_days=${BACKUP_KEEP_DAYS:-14}
 at=${BACKUP_AT:-03:00}
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
+
+# The container runs as the host user (BACKUP_UID), so it can't write to a folder that belongs to
+# root, which is what Docker creates when ./backups doesn't exist yet.
+check_dir() {
+  mkdir -p "$dir" 2>/dev/null
+  [ -d "$dir" ] && [ -w "$dir" ] && return 0
+  if [ -d "$dir" ]; then
+    log "BACKUP FAILED: $dir belongs to uid $(stat -c %u "$dir") and is not writable by uid $(id -u)." >&2
+  else
+    log "BACKUP FAILED: cannot create $dir as uid $(id -u)." >&2
+  fi
+  log "On the host, give the backup folder (BACKUP_DIR, default ./backups) to that user:" >&2
+  log "  sudo chown -R $(id -u):$(id -g) backups" >&2
+  log "or set BACKUP_UID and BACKUP_GID in .env to the folder owner's (\`id -u\`, \`id -g\`)." >&2
+  return 1
+}
 
 backup() {
   name="finance-$(date +%Y-%m-%d_%H%M%S).dump"
@@ -35,14 +53,15 @@ seconds_until_next_run() {
 
 case "${1:-schedule}" in
   once)
-    backup
+    check_dir && backup
     ;;
   schedule)
     # As the container's main process, stop at once on `docker compose stop`/`down` (a foreground sleep
     # would hold the signal until Docker's 10-second timeout kills the container).
     sleeper=""
     trap 'log "stopping"; [ -n "$sleeper" ] && kill "$sleeper" 2>/dev/null; exit 0' TERM INT
-    mkdir -p "$dir"
+    # Exits, so the container restarts and `docker compose up --wait` fails with the message above.
+    check_dir || exit 1
     backup
     while true; do
       wait=$(seconds_until_next_run)

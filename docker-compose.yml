@@ -65,6 +65,10 @@ services:
     # Same image as the database, so pg_dump always matches the server version.
     image: postgres:15
     container_name: postgres-backup
+    # As the host user who owns the backup folder, so the dumps (owner-only, see backup.sh) can be
+    # copied and encrypted without sudo. pg_dump needs nothing else from the user: no home directory
+    # (the password comes from PGPASSWORD, not ~/.pgpass). The folder must exist and belong to that user.
+    user: "${BACKUP_UID:-1000}:${BACKUP_GID:-1000}"
     entrypoint: ["sh", "/usr/local/bin/backup.sh"]
     environment:
       PGHOST: db

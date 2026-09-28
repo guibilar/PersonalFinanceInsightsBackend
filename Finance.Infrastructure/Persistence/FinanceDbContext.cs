@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Finance.Contracts.Inputs;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 
@@ -19,6 +20,8 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
 
     public DbSet<Transaction> Transactions { get; set; } = null!;
     public DbSet<Budget> Budgets { get; set; } = null!;
+    public DbSet<CategoryRule> CategoryRules { get; set; } = null!;
+    public DbSet<SeedMarker> SeedMarkers { get; set; } = null!;
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; } = null!;
     public DbSet<UserSession> UserSessions { get; set; } = null!;
 
@@ -55,6 +58,22 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
             entity.Property(s => s.Id).HasMaxLength(64);
             // Deleting the account ends its sessions.
             entity.HasOne<IdentityUser>().WithMany().HasForeignKey(s => s.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CategoryRule>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            // Stored upper-case, so this is unique ignoring case.
+            entity.Property(r => r.Keyword).IsRequired().HasMaxLength(TextLimits.CategoryRuleKeyword);
+            entity.HasIndex(r => r.Keyword).IsUnique();
+            // Not unique: renumbering after a move saves rows one by one, which would briefly repeat a position.
+            entity.HasIndex(r => r.Position);
+        });
+
+        modelBuilder.Entity<SeedMarker>(entity =>
+        {
+            entity.HasKey(m => m.Name);
+            entity.Property(m => m.Name).HasMaxLength(64);
         });
 
         modelBuilder.Entity<Budget>(entity =>

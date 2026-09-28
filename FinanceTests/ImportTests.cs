@@ -22,7 +22,8 @@ public class ImportTests
         .GetSection(ImportOptions.SectionName).Get<ImportOptions>()!;
 
     private static List<Transaction> Parse(string csv, AccountType account, ImportOptions? options = null) =>
-        new CibcCsvParser(Options.Create(options ?? Rules)).Parse(new MemoryStream(Encoding.UTF8.GetBytes(csv)), account);
+        new CibcCsvParser(Options.Create(options ?? Rules))
+            .Parse(new MemoryStream(Encoding.UTF8.GetBytes(csv)), account, new CategoryMatcher((options ?? Rules).ToCategoryRules()));
 
     // ---- Hash
 
@@ -207,7 +208,8 @@ public class ImportTests
             _ => CodePagesEncodingProvider.Instance.GetEncoding(1252)!.GetBytes(csv)
         };
 
-        var parsed = new CibcCsvParser(Options.Create(Rules)).Parse(new MemoryStream(bytes), AccountType.CreditCard);
+        var parsed = new CibcCsvParser(Options.Create(Rules))
+            .Parse(new MemoryStream(bytes), AccountType.CreditCard, new CategoryMatcher(Rules.ToCategoryRules()));
 
         Assert.Equal("CAFÉ DÉPANNEUR – MONTRÉAL", Assert.Single(parsed).Description);
     }
