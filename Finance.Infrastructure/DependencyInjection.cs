@@ -21,10 +21,7 @@ public static class DependencyInjection
             options.UseNpgsql(GetConnectionString(configuration), ConfigureNpgsql));
 
         services.AddOptions<ImportOptions>()
-            .Bind(configuration.GetSection(ImportOptions.SectionName))
-            .Validate(options => options.MonthlyRent?.IsValid() ?? true,
-                "Import:MonthlyRent:Changes needs a \"From\" month as yyyy-MM and an amount above 0 in every entry.")
-            .ValidateOnStart();
+            .Bind(configuration.GetSection(ImportOptions.SectionName));
 
         services.AddScoped<ITransactionRepository, TransactionRepository>();
         services.AddScoped<IBudgetRepository, BudgetRepository>();

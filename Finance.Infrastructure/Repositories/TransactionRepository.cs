@@ -1,4 +1,5 @@
 using Finance.Application.Abstractions;
+using Finance.Application.Import;
 using Finance.Contracts.Inputs;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
@@ -43,14 +44,15 @@ public class TransactionRepository(FinanceDbContext dbContext)
             .SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
     }
 
-    public Task<List<Transaction>> GetRentsAsync(AccountType account, string description,
-        IReadOnlyCollection<DateTime> months, CancellationToken cancellationToken = default)
+    public async Task<int> HideLegacyMonthlyRentAsync(IReadOnlyCollection<DateTime> months, CancellationToken cancellationToken = default)
     {
-        return DbContext.Transactions
-            .IgnoreQueryFilters()
-            .Where(t => t.Account == account && t.Category == Category.Rent && t.Description == description &&
-                        months.Contains(t.Date))
+        var rows = await DbContext.Transactions
+            .Where(t => t.Account == AccountType.Chequing && t.Category == Category.Rent &&
+                        t.Description == LegacyMonthlyRent.Description && months.Contains(t.Date))
             .ToListAsync(cancellationToken);
+        rows.ForEach(t => t.Hidden = true);
+        await SaveChangesAsync(cancellationToken);
+        return rows.Count;
     }
 
     public Task<Transaction?> FindByHashAsync(AccountType account, string hash, CancellationToken cancellationToken = default)

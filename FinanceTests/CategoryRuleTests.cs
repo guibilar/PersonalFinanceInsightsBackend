@@ -260,29 +260,27 @@ public class CategoryRuleTests
     }
 
     [Fact]
-    public async Task Import_RentPaymentsAreReplacedByTheFixedRent_WhileARuleSaysRent()
+    public async Task Import_RentPayments_AreCategorisedByTheRules_AndCountedOnce()
     {
         await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
-        const string january = "2026-01-01,VALIANT RENTAL PAYMENT,1900.00,";
 
-        await client.PostAsync("/api/Transaction/Import", ImportTests.Statement(january, "Chequing"));
+        await client.PostAsync("/api/Transaction/Import", ImportTests.Statement("2026-01-01,VALIANT RENTAL PAYMENT,1900.00,", "Chequing"));
         var valiant = (await GetRulesAsync(client)).Single(r => r.Keyword == "VALIANT");
         await client.DeleteAsync($"{Rules}/{valiant.Id}");
         await client.PostAsync("/api/Transaction/Import", ImportTests.Statement("2026-02-01,VALIANT RENTAL PAYMENT,1900.00,", "Chequing"));
 
-        var stored = await factory.QueryAsync(db => db.Transactions.OrderBy(t => t.Date).ThenBy(t => t.Description)
+        // Nothing generated and nothing dropped: the payments as paid, in whatever category the rules said then.
+        var stored = await factory.QueryAsync(db => db.Transactions.OrderBy(t => t.Date)
             .Select(t => new { t.Date.Month, t.Description, t.Amount, t.Category }).ToListAsync());
         Assert.Equal([
-            new { Month = 1, Description = "Monthly Rent", Amount = 1947.50m, Category = Category.Rent },
-            new { Month = 2, Description = "Monthly Rent", Amount = 1947.50m, Category = Category.Rent },
-            // Without the rule it is an ordinary payment.
+            new { Month = 1, Description = "VALIANT RENTAL PAYMENT", Amount = 1900.00m, Category = Category.Rent },
             new { Month = 2, Description = "VALIANT RENTAL PAYMENT", Amount = 1900.00m, Category = Category.Other },
         ], stored);
     }
 
     [Fact]
-    public async Task ApplyCategoryRules_UsesTheStoredRules_AndStillSkipsHandPickedSavingsHiddenAndFixedRent()
+    public async Task ApplyCategoryRules_UsesTheStoredRules_AndStillSkipsHandPickedSavingsHiddenAndGeneratedRent()
     {
         await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
@@ -291,7 +289,8 @@ public class CategoryRuleTests
         var handPicked = Stored("CORNER STORE #9", Category.Pet, locked: true);
         var savings = Stored("CORNER STORE TRANSFER", Category.Other, AccountType.Savings);
         var hidden = Stored("CORNER STORE #3", Category.Other, hidden: true);
-        var fixedRent = Stored("Monthly Rent", Category.Rent, AccountType.Chequing);
+        // Rent generated before real payments were imported: the migration locked its category.
+        var fixedRent = Stored("Monthly Rent", Category.Rent, AccountType.Chequing, locked: true);
         await factory.SeedAsync(db => db.Transactions.AddRange(corner, walmart, handPicked, savings, hidden, fixedRent));
 
         await AddRuleAsync(client, "CORNER STORE", "Groceries");

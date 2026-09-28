@@ -1,18 +1,15 @@
 using Finance.Application.Abstractions;
-using Finance.Application.Import;
 using Finance.Application.Models;
 using Finance.Application.Services.Interfaces;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
-using Microsoft.Extensions.Options;
 
 namespace Finance.Application.Services;
 
 public class CategoryRuleService(
     ICategoryRuleRepository ruleRepository,
-    ITransactionRepository transactionRepository,
-    IOptions<ImportOptions> importOptions) : ICategoryRuleService
+    ITransactionRepository transactionRepository) : ICategoryRuleService
 {
     private const int PreviewExamples = 5;
 
@@ -72,10 +69,9 @@ public class CategoryRuleService(
         CancellationToken cancellationToken = default)
     {
         var normalized = CategoryRule.NormalizeKeyword(keyword);
-        var options = importOptions.Value;
         // As the rule would be checked first, it decides every description containing its keyword.
         var changed = (await transactionRepository.GetRuleCategorizedAsync(cancellationToken))
-            .Where(t => t.Id != excludeTransactionId && !options.IsFixedMonthlyRent(t) && t.Category != category &&
+            .Where(t => t.Id != excludeTransactionId && t.Category != category &&
                         t.Description.ToUpperInvariant().Contains(normalized, StringComparison.Ordinal))
             .ToList();
 

@@ -16,11 +16,10 @@ public interface ITransactionRepository : IBaseRepository<Transaction>
     Task<Transaction?> GetIncludingHiddenAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Tracked: the stored fixed monthly rents (this description, on the account) dated on any of
-    /// <paramref name="months"/>, hidden or not, whatever their amount.
+    /// Hides the rows generated as <see cref="Import.LegacyMonthlyRent"/> in these months (their first day) and returns
+    /// how many were hidden.
     /// </summary>
-    Task<List<Transaction>> GetRentsAsync(AccountType account, string description, IReadOnlyCollection<DateTime> months,
-        CancellationToken cancellationToken = default);
+    Task<int> HideLegacyMonthlyRentAsync(IReadOnlyCollection<DateTime> months, CancellationToken cancellationToken = default);
 
     /// <summary>The stored transaction with this hash on the account, hidden or not; null when there is none.</summary>
     Task<Transaction?> FindByHashAsync(AccountType account, string hash, CancellationToken cancellationToken = default);
