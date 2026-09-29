@@ -17,16 +17,21 @@ public class CategoryMatcher
     }
 
     /// <returns>The matching rule's category, or Other when none matches.</returns>
-    public Guid Categorize(string description)
+    public Guid Categorize(string description) => Match(description)?.CategoryId ?? Category.OtherId;
+
+    /// <summary>The keyword of the rule that decides this description (the merchant, usually); null when none matches.</summary>
+    public string? MatchingKeyword(string description) => Match(description)?.Keyword;
+
+    private (string Keyword, Guid CategoryId)? Match(string description)
     {
         var upper = description.ToUpperInvariant();
-        foreach (var (keyword, categoryId) in _rules)
+        foreach (var rule in _rules)
         {
-            if (upper.Contains(keyword, StringComparison.Ordinal))
+            if (upper.Contains(rule.Keyword, StringComparison.Ordinal))
             {
-                return categoryId;
+                return rule;
             }
         }
-        return Category.OtherId;
+        return null;
     }
 }

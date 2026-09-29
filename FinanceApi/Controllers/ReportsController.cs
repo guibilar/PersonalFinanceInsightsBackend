@@ -1,4 +1,5 @@
 using Finance.Application.Services.Interfaces;
+using Finance.Contracts.Inputs;
 using Finance.Contracts.Reports;
 using Microsoft.AspNetCore.Mvc;
 
@@ -19,6 +20,18 @@ public class ReportsController(IReportService reportService) : ControllerBase
     public Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraph(CancellationToken cancellationToken)
     {
         return reportService.GenerateCurrentMonthCategorizedGraphDataAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Totals for the transactions the list's criteria pick, and how they spread over weeks, months, quarters or years
+    /// (running totals included), with the merchants the spending went to.
+    /// </summary>
+    [HttpPost("breakdown")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public Task<TransactionBreakdown> GenerateBreakdown(TransactionBreakdownInputDto input, CancellationToken cancellationToken)
+    {
+        return reportService.GenerateBreakdownAsync(input, cancellationToken);
     }
 
     /// <summary>Income, spending and money saved per month of the current year.</summary>
