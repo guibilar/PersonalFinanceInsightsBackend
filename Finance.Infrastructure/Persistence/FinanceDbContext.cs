@@ -21,6 +21,7 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
     public DbSet<Transaction> Transactions { get; set; } = null!;
     public DbSet<Budget> Budgets { get; set; } = null!;
     public DbSet<Account> Accounts { get; set; } = null!;
+    public DbSet<Category> Categories { get; set; } = null!;
     public DbSet<CategoryRule> CategoryRules { get; set; } = null!;
     public DbSet<FlowRule> FlowRules { get; set; } = null!;
     public DbSet<SeedMarker> SeedMarkers { get; set; } = null!;
@@ -30,7 +31,6 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
     // Enums are stored by name, so reordering or inserting enum members never changes stored data.
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
-        configurationBuilder.Properties<Category>().HaveConversion<string>();
         configurationBuilder.Properties<TransactionType>().HaveConversion<string>();
         configurationBuilder.Properties<AccountType>().HaveConversion<string>();
         configurationBuilder.Properties<Status>().HaveConversion<string>();
@@ -51,6 +51,8 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
             entity.HasIndex(t => new { t.AccountId, t.Hash }).IsUnique();
             // An account with transactions can't be deleted: they would come back on the next import.
             entity.HasOne(t => t.Account).WithMany().HasForeignKey(t => t.AccountId).OnDelete(DeleteBehavior.Restrict);
+            // Deleting a category moves its transactions to another one first (see CategoryRepository).
+            entity.HasOne(t => t.Category).WithMany().HasForeignKey(t => t.CategoryId).OnDelete(DeleteBehavior.Restrict);
             // Every list, filter and report is by date range and/or sorted by date.
             entity.HasIndex(t => t.Date);
             // Hidden (deleted) transactions exist only for duplicate detection unless a query asks for them
@@ -74,6 +76,20 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
             entity.HasIndex(r => r.Keyword).IsUnique();
             // Not unique: renumbering after a move saves rows one by one, which would briefly repeat a position.
             entity.HasIndex(r => r.Position);
+            entity.HasOne(r => r.Category).WithMany().HasForeignKey(r => r.CategoryId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Category>(entity =>
+        {
+            entity.HasKey(c => c.Id);
+            entity.Property(c => c.Name).IsRequired().HasMaxLength(TextLimits.CategoryName);
+            // Case-sensitive here; the service also refuses names differing only in case.
+            entity.HasIndex(c => c.Name).IsUnique();
+            entity.Property(c => c.Color).IsRequired().HasMaxLength(7);
+            entity.Ignore(c => c.IsBuiltIn);
+            // The categories there were before categories were data; a migration moved the stored transactions,
+            // rules and budgets onto them.
+            entity.HasData(DefaultCategories.Create());
         });
 
         modelBuilder.Entity<Account>(entity =>
@@ -120,7 +136,12 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
-        // The category is the key: it is counted by one budget only.
-        modelBuilder.Entity<BudgetCategory>(entity => entity.HasKey(c => c.Category));
+        modelBuilder.Entity<BudgetCategory>(entity =>
+        {
+            // The category is the key: it is counted by one budget only.
+            entity.HasKey(c => c.CategoryId);
+            // A deleted category is no longer counted by its budget.
+            entity.HasOne(c => c.Category).WithMany().HasForeignKey(c => c.CategoryId).OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }

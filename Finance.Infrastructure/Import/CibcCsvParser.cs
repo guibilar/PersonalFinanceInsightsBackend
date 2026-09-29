@@ -88,7 +88,6 @@ public partial class CibcCsvParser : IStatementParser
             Date = date,
             Description = description,
             Amount = amount,
-            Category = Category.Other,
             TransactionType = type
         });
     }

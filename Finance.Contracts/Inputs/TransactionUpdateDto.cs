@@ -12,8 +12,8 @@ public class TransactionUpdateDto
     [Required(AllowEmptyStrings = false), MaxLength(TextLimits.TransactionDescription)]
     public required string Description { get; set; }
 
-    [Required, EnumDataType(typeof(Category))]
-    public Category? Category { get; set; }
+    [Required]
+    public Guid? CategoryId { get; set; }
 
     /// <summary>Unchanged when omitted. Spending only for money out, income and refunds only for money in.</summary>
     [EnumDataType(typeof(Flow))]

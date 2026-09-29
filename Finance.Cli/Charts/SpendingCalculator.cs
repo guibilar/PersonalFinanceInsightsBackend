@@ -8,6 +8,13 @@ using Finance.Infrastructure.Import;
 namespace Finance.Cli.Charts{
     public static class SpendingCalculator
     {
+        // The CLI has no database, so it knows only the default categories: one column and one colour each, by name.
+        private static readonly List<Category> AllCategories = DefaultCategories.Create();
+
+        private static int IndexOf(Guid categoryId) => AllCategories.FindIndex(c => c.Id == categoryId);
+
+        private static string NameOf(Guid categoryId) => AllCategories.FirstOrDefault(c => c.Id == categoryId)?.Name ?? "Other";
+
         public static void GenerateExcelReport(List<Transaction> records, List<MonthlyRecords> monthly, List<Category> categories, string fileName)
         {
             using (var workbook = new XLWorkbook())
@@ -17,11 +24,11 @@ namespace Finance.Cli.Charts{
 
                 // Header
                 totalsSheet.Cell(1, 1).Value = "Month";
-                foreach (Category category in Enum.GetValues(typeof(Category)))
+                foreach (var category in AllCategories)
                 {
-                    totalsSheet.Cell(1, (int)category + 2).Value = category.ToString();
+                    totalsSheet.Cell(1, IndexOf(category.Id) + 2).Value = category.Name;
                 }
-                totalsSheet.Cell(1, Enum.GetValues(typeof(Category)).Length + 2).Value = "Total";
+                totalsSheet.Cell(1, AllCategories.Count + 2).Value = "Total";
 
                 // Monthly totals
                 int row = 2;
@@ -29,15 +36,15 @@ namespace Finance.Cli.Charts{
                 {
                     totalsSheet.Cell(row, 1).Value = m.YearMonth.ToString("yyyy-MM");
 
-                    foreach (Category category in Enum.GetValues(typeof(Category)))
+                    foreach (var category in AllCategories)
                     {
-                        var value = m.Categories.TryGetValue(category, out var v) ? v : 0m;
-                        totalsSheet.Cell(row, (int)category + 2).Value = value;
-                        totalsSheet.Cell(row, (int)category + 2).Style.NumberFormat.Format = "$#,##0.00";
+                        var value = m.Categories.TryGetValue(category.Id, out var v) ? v : 0m;
+                        totalsSheet.Cell(row, IndexOf(category.Id) + 2).Value = value;
+                        totalsSheet.Cell(row, IndexOf(category.Id) + 2).Style.NumberFormat.Format = "$#,##0.00";
                     }
 
-                    totalsSheet.Cell(row, Enum.GetValues(typeof(Category)).Length + 2).Value = m.Total;
-                    totalsSheet.Cell(row, Enum.GetValues(typeof(Category)).Length + 2).Style.NumberFormat.Format = "$#,##0.00";
+                    totalsSheet.Cell(row, AllCategories.Count + 2).Value = m.Total;
+                    totalsSheet.Cell(row, AllCategories.Count + 2).Style.NumberFormat.Format = "$#,##0.00";
 
                     row++;
                 }
@@ -46,15 +53,15 @@ namespace Finance.Cli.Charts{
 
                 // Averages
                 totalsSheet.Cell(row, 1).Value = "Average";
-                // Same columns as the monthly rows above: one per Category value, then the total.
+                // Same columns as the monthly rows above: one per category, then the total.
                 foreach (var category in categories)
                 {
-                    double avg = monthly.Average(m => m.Categories.TryGetValue(category, out var v) ? (double)v : 0.0);
-                    totalsSheet.Cell(row, (int)category + 2).Value = avg;
-                    totalsSheet.Cell(row, (int)category + 2).Style.NumberFormat.Format = "$#,##0.00";
+                    double avg = monthly.Average(m => m.Categories.TryGetValue(category.Id, out var v) ? (double)v : 0.0);
+                    totalsSheet.Cell(row, IndexOf(category.Id) + 2).Value = avg;
+                    totalsSheet.Cell(row, IndexOf(category.Id) + 2).Style.NumberFormat.Format = "$#,##0.00";
                 }
-                totalsSheet.Cell(row, Enum.GetValues(typeof(Category)).Length + 2).Value = monthly.Count > 0 ? monthly.Average(m => (double)m.Total) : 0;
-                totalsSheet.Cell(row, Enum.GetValues(typeof(Category)).Length + 2).Style.NumberFormat.Format = "$#,##0.00";
+                totalsSheet.Cell(row, AllCategories.Count + 2).Value = monthly.Count > 0 ? monthly.Average(m => (double)m.Total) : 0;
+                totalsSheet.Cell(row, AllCategories.Count + 2).Style.NumberFormat.Format = "$#,##0.00";
 
                 totalsSheet.Columns().AdjustToContents();
                 totalsSheet.Row(1).Style.Font.Bold = true;
@@ -74,7 +81,7 @@ namespace Finance.Cli.Charts{
                     // Group that month's records by Description
                     var descGroups = records
                         .Where(r => r.Date.Year == m.YearMonth.Year && r.Date.Month == m.YearMonth.Month)
-                        .GroupBy(r => new { r.Description, r.Category })
+                        .GroupBy(r => new { r.Description, r.CategoryId })
                         .OrderBy(g => g.Key.Description);
 
                     foreach (var g in descGroups)
@@ -83,7 +90,7 @@ namespace Finance.Cli.Charts{
                         // Refunds (credits) reduce the description's total, as in the monthly totals.
                         ws.Cell(detailRow, 2).Value = g.Sum(r => r.TransactionType == TransactionType.Credit ? -r.Amount : r.Amount);
                         ws.Cell(detailRow, 2).Style.NumberFormat.Format = "$#,##0.00";
-                        ws.Cell(detailRow, 3).Value = g.Key.Category.ToString();
+                        ws.Cell(detailRow, 3).Value = NameOf(g.Key.CategoryId);
 
                         detailRow++;
                     }
@@ -111,10 +118,10 @@ namespace Finance.Cli.Charts{
                 int pos = monthIndex + 1;
                 double nextBarBase = 0.0;
 
-                foreach (Category category in Enum.GetValues(typeof(Category)))
+                foreach (var category in AllCategories)
                 {
                     double value = 0;
-                    if (monthlyRecord.Categories.TryGetValue(category, out decimal d))
+                    if (monthlyRecord.Categories.TryGetValue(category.Id, out decimal d))
                         value = (double)d;
 
                     if (value == 0)
@@ -125,7 +132,7 @@ namespace Finance.Cli.Charts{
                         Position = pos,
                         ValueBase = nextBarBase,
                         Value = nextBarBase + value,
-                        FillColor = palette.GetColor((int)category)
+                        FillColor = palette.GetColor(IndexOf(category.Id))
                     };
 
                     barsList.Add(bar);
@@ -156,8 +163,8 @@ namespace Finance.Cli.Charts{
             {
                 plt2.Legend.ManualItems.Add(new ScottPlot.LegendItem()
                 {
-                    LabelText = categories[i].ToString(),
-                    FillColor = palette.GetColor((int)categories[i]),
+                    LabelText = categories[i].Name,
+                    FillColor = palette.GetColor(IndexOf(categories[i].Id)),
                     LineWidth = 0
                 });
             }

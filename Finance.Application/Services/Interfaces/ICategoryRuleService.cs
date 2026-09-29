@@ -7,13 +7,13 @@ namespace Finance.Application.Services.Interfaces;
 /// <summary>The category rules used at import and by re-applying the rules; positions always run 0..n-1.</summary>
 public interface ICategoryRuleService
 {
-    /// <summary>By position (the order they are checked in).</summary>
+    /// <summary>By position (the order they are checked in), with their categories.</summary>
     Task<List<CategoryRule>> GetAllAsync(CancellationToken cancellationToken = default);
 
     /// <param name="position">Where to insert it (the rules from there on move down); at the end when null.</param>
-    Task<CategoryRule> AddAsync(string keyword, Category category, int? position, CancellationToken cancellationToken = default);
+    Task<CategoryRule> AddAsync(string keyword, Guid categoryId, int? position, CancellationToken cancellationToken = default);
 
-    Task<CategoryRule> UpdateAsync(Guid id, string keyword, Category category, CancellationToken cancellationToken = default);
+    Task<CategoryRule> UpdateAsync(Guid id, string keyword, Guid categoryId, CancellationToken cancellationToken = default);
     Task RemoveAsync(Guid id, CancellationToken cancellationToken = default);
 
     /// <summary>Moves the rule to <paramref name="position"/> (past the end means last) and returns all rules.</summary>
@@ -23,6 +23,6 @@ public interface ICategoryRuleService
     /// What adding this rule first and re-applying the rules would change: only transactions the rules decide
     /// (see <see cref="ITransactionService.ApplyRulesAsync"/>).
     /// </summary>
-    Task<CategoryRulePreview> PreviewAsync(string keyword, Category category, Guid? excludeTransactionId,
+    Task<CategoryRulePreview> PreviewAsync(string keyword, Guid categoryId, Guid? excludeTransactionId,
         CancellationToken cancellationToken = default);
 }

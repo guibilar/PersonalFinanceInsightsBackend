@@ -24,7 +24,7 @@ public class ImportTests
         .GetSection(ImportOptions.SectionName).Get<ImportOptions>()!;
 
     private static readonly TransactionClassifier Classifier =
-        new(new CategoryMatcher(Rules.ToCategoryRules()), new FlowMatcher(Rules.ToFlowRules()));
+        new(new CategoryMatcher(Rules.ToCategoryRules(DefaultCategories.IdOf)), new FlowMatcher(Rules.ToFlowRules()));
 
     private static ParsedStatement ParseStatement(string csv) =>
         new CibcCsvParser().Parse(new MemoryStream(Encoding.UTF8.GetBytes(csv)));
@@ -69,7 +69,7 @@ public class ImportTests
             2026-01-05,SOMETHING NEW,5.00,
             """, AccountType.CreditCard);
 
-        Assert.Equal([Category.Groceries, Category.Shopping, Category.Other], parsed.Select(t => t.Category));
+        Assert.Equal([DefaultCategories.Groceries, DefaultCategories.Shopping, DefaultCategories.Other], parsed.Select(t => t.CategoryId));
     }
 
     [Fact]
@@ -106,12 +106,12 @@ public class ImportTests
 
         Assert.Equal(
         [
-            (TransactionType.Debit, 120m, Category.Groceries, Flow.Spending),
-            (TransactionType.Credit, 120m, Category.Groceries, Flow.Refund),
-            (TransactionType.Credit, 500m, Category.Other, Flow.Transfer),
-            (TransactionType.Credit, 50m, Category.Other, Flow.Transfer),
-            (TransactionType.Credit, 20m, Category.Other, Flow.Transfer)
-        ], parsed.Select(t => (t.TransactionType!.Value, t.Amount, t.Category, t.Flow)));
+            (TransactionType.Debit, 120m, DefaultCategories.Groceries, Flow.Spending),
+            (TransactionType.Credit, 120m, DefaultCategories.Groceries, Flow.Refund),
+            (TransactionType.Credit, 500m, DefaultCategories.Other, Flow.Transfer),
+            (TransactionType.Credit, 50m, DefaultCategories.Other, Flow.Transfer),
+            (TransactionType.Credit, 20m, DefaultCategories.Other, Flow.Transfer)
+        ], parsed.Select(t => (t.TransactionType!.Value, t.Amount, t.CategoryId, t.Flow)));
     }
 
     [Fact]
@@ -176,7 +176,7 @@ public class ImportTests
 
         Assert.Equal(4200m, Assert.Single(parsed, t => t.Description.StartsWith("Deel")).Amount);
         // The payment as the bank shows it: no generated rent, and none for February, which has no payment.
-        var rent = Assert.Single(parsed, t => t.Category == Category.Rent);
+        var rent = Assert.Single(parsed, t => t.CategoryId == DefaultCategories.Rent);
         Assert.Equal(("VALIANT RENTAL PAYMENT", 1947.50m, new DateTime(2026, 1, 1)), (rent.Description, rent.Amount, rent.Date));
     }
 
@@ -189,8 +189,8 @@ public class ImportTests
             2026-01-11,METRO,10.00,
             """, AccountType.CreditCard);
 
-        Assert.Equal([("VALIANT STORAGE UNIT", Category.Rent), ("METRO", Category.Groceries)],
-            parsed.Select(t => (t.Description, t.Category)));
+        Assert.Equal([("VALIANT STORAGE UNIT", DefaultCategories.Rent), ("METRO", DefaultCategories.Groceries)],
+            parsed.Select(t => (t.Description, t.CategoryId)));
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public class ImportTests
         // Transfers from and to the other accounts; not purchases, so no category.
         Assert.Equal([(TransactionType.Credit, 1000m, Flow.Transfer), (TransactionType.Debit, 250m, Flow.Transfer)],
             parsed.Select(t => (t.TransactionType!.Value, t.Amount, t.Flow)));
-        Assert.All(parsed, t => Assert.Equal(Category.Other, t.Category));
+        Assert.All(parsed, t => Assert.Equal(DefaultCategories.Other, t.CategoryId));
     }
 
     [Theory]
@@ -340,7 +340,7 @@ public class ImportTests
     private static Transaction GeneratedRent(DateTime month, bool hidden = false) => new()
     {
         Id = Guid.NewGuid(), Date = DateTime.SpecifyKind(month, DateTimeKind.Utc), Description = "Monthly Rent", Amount = 1947.50m,
-        Category = Category.Rent, CategoryLocked = true, TransactionType = TransactionType.Debit, AccountId = Account.DefaultChequingId,
+        CategoryId = DefaultCategories.Rent, CategoryLocked = true, TransactionType = TransactionType.Debit, AccountId = Account.DefaultChequingId,
         Hash = TransactionHashHelper.GenerateTransactionHash(1947.50m, month, "Monthly Rent"), Hidden = hidden
     };
 
@@ -360,7 +360,7 @@ public class ImportTests
 
         Assert.Equal((2, 2, 0), (result.Read, result.Added, result.Skipped));
         // Rent counts once per month: January the real payment, February (not re-imported) the generated row.
-        var visibleRent = await factory.QueryAsync(db => db.Transactions.Where(t => t.Category == Category.Rent)
+        var visibleRent = await factory.QueryAsync(db => db.Transactions.Where(t => t.CategoryId == DefaultCategories.Rent)
             .OrderBy(t => t.Date).Select(t => new { t.Date.Month, t.Description }).ToListAsync());
         Assert.Equal([new { Month = 1, Description = "VALIANT RENTAL PAYMENT" }, new { Month = 2, Description = "Monthly Rent" }],
             visibleRent);

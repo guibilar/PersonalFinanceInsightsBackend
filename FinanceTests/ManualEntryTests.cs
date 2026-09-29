@@ -24,9 +24,9 @@ public class ManualEntryTests
     }
 
     private static object Tx(Guid accountId, string description = "FARMERS FRIDGE", string type = "Debit",
-        object? category = null, object? flow = null, bool allowDuplicate = false) => new
+        Guid? categoryId = null, object? flow = null, bool allowDuplicate = false) => new
     {
-        date = "2026-09-10", description, amount = 12.5m, transactionType = type, accountId, category, flow, allowDuplicate
+        date = "2026-09-10", description, amount = 12.5m, transactionType = type, accountId, categoryId, flow, allowDuplicate
     };
 
     [Fact]
@@ -53,13 +53,13 @@ public class ManualEntryTests
         await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
         var accountId = await AddManualAccountAsync(client);
-        await client.PostAsJsonAsync("/api/CategoryRules", new { keyword = "FARMERS FRIDGE", category = "Groceries", position = 0 }, FinanceApiFactory.Json);
+        await client.PostAsJsonAsync("/api/CategoryRules", new { keyword = "FARMERS FRIDGE", categoryId = DefaultCategories.Groceries, position = 0 }, FinanceApiFactory.Json);
 
         var response = await client.PostAsJsonAsync("/api/Transaction", Tx(accountId), FinanceApiFactory.Json);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var stored = await factory.QueryAsync(db => db.Transactions.SingleAsync());
-        Assert.Equal(Category.Groceries, stored.Category);
+        Assert.Equal(DefaultCategories.Groceries, stored.CategoryId);
         Assert.False(stored.CategoryLocked);
         Assert.Equal(Flow.Spending, stored.Flow);
         Assert.False(stored.FlowLocked);
@@ -71,16 +71,16 @@ public class ManualEntryTests
         await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
         var accountId = await AddManualAccountAsync(client);
-        await client.PostAsJsonAsync("/api/CategoryRules", new { keyword = "FARMERS FRIDGE", category = "Groceries", position = 0 }, FinanceApiFactory.Json);
+        await client.PostAsJsonAsync("/api/CategoryRules", new { keyword = "FARMERS FRIDGE", categoryId = DefaultCategories.Groceries, position = 0 }, FinanceApiFactory.Json);
 
         var response = await client.PostAsJsonAsync("/api/Transaction",
-            Tx(accountId, category: "Dining", flow: "Transfer"), FinanceApiFactory.Json);
+            Tx(accountId, categoryId: DefaultCategories.Dining, flow: "Transfer"), FinanceApiFactory.Json);
         await client.PostAsync("/api/Transaction/ApplyRules", null);
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         var stored = await factory.QueryAsync(db => db.Transactions.SingleAsync());
-        Assert.Equal((Category.Dining, true, Flow.Transfer, true),
-            (stored.Category, stored.CategoryLocked, stored.Flow, stored.FlowLocked));
+        Assert.Equal((DefaultCategories.Dining, true, Flow.Transfer, true),
+            (stored.CategoryId, stored.CategoryLocked, stored.Flow, stored.FlowLocked));
     }
 
     [Theory]

@@ -13,7 +13,7 @@ namespace Finance.Cli.Charts{
                 .Select(g => new MonthlyRecords
                 {
                     YearMonth = new DateTime(g.Key.Year, g.Key.Month, 1),
-                    Categories = g.GroupBy(r => r.Category)
+                    Categories = g.GroupBy(r => r.CategoryId)
                                   .ToDictionary(c => c.Key, c => c.Where(x => x.TransactionType == TransactionType.Credit).Sum(r => r.Amount) - c.Where(x => x.TransactionType == TransactionType.Debit).Sum(r => r.Amount)),
                     Total = g.Where(x => x.TransactionType == TransactionType.Credit).Sum(r => r.Amount) - g.Where(x => x.TransactionType == TransactionType.Debit).Sum(r => r.Amount)
                 })

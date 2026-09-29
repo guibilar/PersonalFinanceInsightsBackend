@@ -28,7 +28,7 @@ public class ApiTests : IAsyncLifetime
         Description = description,
         Amount = amount,
         Date = DateTime.SpecifyKind(date, DateTimeKind.Utc),
-        Category = Category.Dining,
+        CategoryId = DefaultCategories.Dining,
         TransactionType = TransactionType.Debit,
         AccountId = Account.DefaultCreditCardId,
         Hash = Guid.NewGuid().ToString(),
@@ -156,12 +156,12 @@ public class ApiTests : IAsyncLifetime
             new { name = new string('n', 100), description = new string('d', 500), status = "Active", amount = 10 });
         var created = await _client.PostAsJsonAsync("/api/Transaction", new
         {
-            date = "2026-09-10", description = new string('t', 200), amount = 5, category = "Dining",
+            date = "2026-09-10", description = new string('t', 200), amount = 5, categoryId = DefaultCategories.Dining,
             transactionType = "Debit", accountId = Account.DefaultCreditCardId
         });
         var id = (await created.ReadAsync<TransactionOutputDto>()).Id;
         var tooLong = await _client.PutAsJsonAsync($"/api/Transaction/{id}",
-            new { description = new string('t', 201), category = "Dining" });
+            new { description = new string('t', 201), categoryId = DefaultCategories.Dining });
 
         Assert.Equal(HttpStatusCode.Created, atLimit.StatusCode);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
@@ -232,7 +232,7 @@ public class ApiTests : IAsyncLifetime
     {
         var response = await _client.PostAsJsonAsync("/api/Transaction", new
         {
-            date, description = "COFFEE", amount = 5, category = "Dining", transactionType = "Debit", accountId = Account.DefaultCreditCardId
+            date, description = "COFFEE", amount = 5, categoryId = DefaultCategories.Dining, transactionType = "Debit", accountId = Account.DefaultCreditCardId
         });
 
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
@@ -276,7 +276,7 @@ public class ApiTests : IAsyncLifetime
     {
         object Tx(string description) => new
         {
-            date = "2026-09-10", description, amount = 5, category = "Dining",
+            date = "2026-09-10", description, amount = 5, categoryId = DefaultCategories.Dining,
             transactionType = "Debit", accountId = Account.DefaultCreditCardId, hash = "client-value-is-ignored"
         };
 

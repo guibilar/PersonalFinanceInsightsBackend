@@ -83,7 +83,7 @@ public class TransactionController(ITransactionService transactionService) : Con
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TransactionOutputDto>> Update(Guid id, TransactionUpdateDto update, CancellationToken cancellationToken)
     {
-        var transaction = await transactionService.UpdateAsync(id, update.Description, update.Category!.Value, update.Flow, cancellationToken);
+        var transaction = await transactionService.UpdateAsync(id, update.Description, update.CategoryId!.Value, update.Flow, cancellationToken);
         return transaction.ToOutput();
     }
 

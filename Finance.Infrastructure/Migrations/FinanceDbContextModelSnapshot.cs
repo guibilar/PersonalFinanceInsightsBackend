@@ -104,17 +104,109 @@ namespace Finance.Infrastructure.Migrations
 
             modelBuilder.Entity("Finance.Domain.Entities.BudgetCategory", b =>
                 {
-                    b.Property<string>("Category")
-                        .HasColumnType("text");
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("BudgetId")
                         .HasColumnType("uuid");
 
-                    b.HasKey("Category");
+                    b.HasKey("CategoryId");
 
                     b.HasIndex("BudgetId");
 
                     b.ToTable("BudgetCategory");
+                });
+
+            modelBuilder.Entity("Finance.Domain.Entities.Category", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Categories");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("7d3c9f2a-6b1e-4f08-a5c4-2e9b0d1c7b01"),
+                            Color = "#1F76B5",
+                            Name = "Dining"
+                        },
+                        new
+                        {
+                            Id = new Guid("7d3c9f2a-6b1e-4f08-a5c4-2e9b0d1c7b02"),
+                            Color = "#FF7E0F",
+                            Name = "Entertainment"
+                        },
+                        new
+                        {
+                            Id = new Guid("7d3c9f2a-6b1e-4f08-a5c4-2e9b0d1c7b03"),
+                            Color = "#2CA12D",
+                            Name = "Groceries"
+                        },
+                        new
+                        {
+                            Id = new Guid("7d3c9f2a-6b1e-4f08-a5c4-2e9b0d1c7b04"),
+                            Color = "#D72628",
+                            Name = "Health"
+                        },
+                        new
+                        {
+                            Id = new Guid("7d3c9f2a-6b1e-4f08-a5c4-2e9b0d1c7b05"),
+                            Color = "#9466BC",
+                            Name = "Other"
+                        },
+                        new
+                        {
+                            Id = new Guid("7d3c9f2a-6b1e-4f08-a5c4-2e9b0d1c7b06"),
+                            Color = "#8C564B",
+                            Name = "Pet"
+                        },
+                        new
+                        {
+                            Id = new Guid("7d3c9f2a-6b1e-4f08-a5c4-2e9b0d1c7b07"),
+                            Color = "#E277C3",
+                            Name = "Rent"
+                        },
+                        new
+                        {
+                            Id = new Guid("7d3c9f2a-6b1e-4f08-a5c4-2e9b0d1c7b08"),
+                            Color = "#7F7E7E",
+                            Name = "Shopping"
+                        },
+                        new
+                        {
+                            Id = new Guid("7d3c9f2a-6b1e-4f08-a5c4-2e9b0d1c7b09"),
+                            Color = "#BDBD23",
+                            Name = "Subscriptions"
+                        },
+                        new
+                        {
+                            Id = new Guid("7d3c9f2a-6b1e-4f08-a5c4-2e9b0d1c7b0a"),
+                            Color = "#16BFCF",
+                            Name = "Transportation"
+                        },
+                        new
+                        {
+                            Id = new Guid("7d3c9f2a-6b1e-4f08-a5c4-2e9b0d1c7b0b"),
+                            Color = "#800080",
+                            Name = "Utilities"
+                        });
                 });
 
             modelBuilder.Entity("Finance.Domain.Entities.CategoryRule", b =>
@@ -123,9 +215,8 @@ namespace Finance.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid");
 
                     b.Property<string>("Keyword")
                         .IsRequired()
@@ -136,6 +227,8 @@ namespace Finance.Infrastructure.Migrations
                         .HasColumnType("integer");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CategoryId");
 
                     b.HasIndex("Keyword")
                         .IsUnique();
@@ -183,9 +276,8 @@ namespace Finance.Infrastructure.Migrations
                     b.Property<Guid?>("BudgetId")
                         .HasColumnType("uuid");
 
-                    b.Property<string>("Category")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid");
 
                     b.Property<bool>("CategoryLocked")
                         .HasColumnType("boolean");
@@ -217,6 +309,8 @@ namespace Finance.Infrastructure.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("BudgetId");
+
+                    b.HasIndex("CategoryId");
 
                     b.HasIndex("Date");
 
@@ -490,7 +584,26 @@ namespace Finance.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("Finance.Domain.Entities.Category", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.Navigation("Budget");
+
+                    b.Navigation("Category");
+                });
+
+            modelBuilder.Entity("Finance.Domain.Entities.CategoryRule", b =>
+                {
+                    b.HasOne("Finance.Domain.Entities.Category", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Category");
                 });
 
             modelBuilder.Entity("Finance.Domain.Entities.Transaction", b =>
@@ -505,9 +618,17 @@ namespace Finance.Infrastructure.Migrations
                         .WithMany("Transactions")
                         .HasForeignKey("BudgetId");
 
+                    b.HasOne("Finance.Domain.Entities.Category", "Category")
+                        .WithMany()
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.Navigation("Account");
 
                     b.Navigation("Budget");
+
+                    b.Navigation("Category");
                 });
 
             modelBuilder.Entity("Finance.Infrastructure.Persistence.UserSession", b =>

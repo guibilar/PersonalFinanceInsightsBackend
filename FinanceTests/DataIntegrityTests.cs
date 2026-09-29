@@ -17,10 +17,11 @@ public class DataIntegrityTests
     private static bool OnPostgres => TestDatabase.OnPostgres;
 
     private static object ManualTransaction(
-        AccountType account = AccountType.CreditCard, string? transactionType = "Debit", string? category = "Dining",
+        AccountType account = AccountType.CreditCard, string? transactionType = "Debit", string? categoryId = null,
         decimal amount = 16.99m, string? date = "2026-09-10", int? flow = null) => new
     {
-        date, description = "NETFLIX", amount, category, transactionType, flow, accountId = TestAccounts.Id(account)
+        date, description = "NETFLIX", amount, categoryId = categoryId ?? DefaultCategories.Dining.ToString(), transactionType, flow,
+        accountId = TestAccounts.Id(account)
     };
 
     // ---- Duplicates
@@ -150,8 +151,8 @@ public class DataIntegrityTests
         ManualTransaction(date: null),
         ManualTransaction(amount: 0),
         ManualTransaction(amount: -5),
-        new { date = "2026-09-10", description = "NETFLIX", amount = 16.99, category = 99, transactionType = "Debit", accountId = Account.DefaultCreditCardId },
-        new { date = "2026-09-10", description = "NETFLIX", amount = 16.99, category = "Dining", transactionType = "Debit" },
+        new { date = "2026-09-10", description = "NETFLIX", amount = 16.99, categoryId = Guid.NewGuid(), transactionType = "Debit", accountId = Account.DefaultCreditCardId },
+        new { date = "2026-09-10", description = "NETFLIX", amount = 16.99, categoryId = DefaultCategories.Dining, transactionType = "Debit" },
     };
 
     [Theory]

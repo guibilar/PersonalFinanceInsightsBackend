@@ -1,12 +1,13 @@
 using System;
 using System.Collections.Generic;
-using Finance.Domain.Enums;
+using Finance.Contracts.Outputs;
 
 namespace Finance.Contracts.Reports;
 
 public class MonthlyCategorizedGraphData
 {
-    public List<Category> Categories { get; set; } = [];
+    /// <summary>The categories with spending in the report, by name, with their colours for the charts.</summary>
+    public List<CategoryReferenceDto> Categories { get; set; } = [];
     public List<MonthDataPoint> MonthlyData { get; set; } = [];
     public decimal AverageMonthlyTotal { get; set; }
 
@@ -20,6 +21,7 @@ public class MonthlyCategorizedGraphData
 public class MonthDataPoint
 {
     public string Month { get; set; } = string.Empty;
-    public Dictionary<Category, decimal> CategoryValues { get; set; } = [];
+    /// <summary>Spending per category, by category name.</summary>
+    public Dictionary<string, decimal> CategoryValues { get; set; } = [];
     public decimal Total { get; set; }
 }

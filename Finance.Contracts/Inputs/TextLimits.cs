@@ -12,4 +12,5 @@ public static class TextLimits
     public const int CategoryRuleKeyword = 100;
     public const int FlowRuleKeyword = 100;
     public const int AccountName = 100;
+    public const int CategoryName = 50;
 }

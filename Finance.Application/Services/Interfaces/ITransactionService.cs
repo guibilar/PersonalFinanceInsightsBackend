@@ -29,7 +29,7 @@ public interface ITransactionService
     /// Corrects the description, category and (when given) flow; a changed category or flow is then kept when the
     /// rules are re-applied.
     /// </summary>
-    Task<Transaction> UpdateAsync(Guid id, string description, Category category, Flow? flow, CancellationToken cancellationToken = default);
+    Task<Transaction> UpdateAsync(Guid id, string description, Guid categoryId, Flow? flow, CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Re-runs the current category and flow rules over stored transactions, except hand-picked (locked) categories

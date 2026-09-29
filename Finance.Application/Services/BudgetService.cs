@@ -10,13 +10,15 @@ using Finance.Domain.Exceptions;
 
 namespace Finance.Application.Services;
 
-public class BudgetService(IBudgetRepository budgetRepository, ReportingCalendar calendar) : IBudgetService
+public class BudgetService(IBudgetRepository budgetRepository, ICategoryRepository categoryRepository, ReportingCalendar calendar)
+    : IBudgetService
 {
     public async Task<BudgetSummary> AddAsync(Budget budget, CancellationToken cancellationToken = default)
     {
         await EnsureCategoriesFitAsync(budget, cancellationToken);
         await budgetRepository.AddAsync(budget, cancellationToken);
-        return new BudgetSummary(budget, TotalSpent: 0, budget.Categories.Select(c => c.Category).ToList());
+        // Totalled like any other read: a new budget's categories may already have spending this month.
+        return await GetByIdAsync(budget.Id, cancellationToken);
     }
 
     public async Task<BudgetSummary> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
@@ -33,11 +35,11 @@ public class BudgetService(IBudgetRepository budgetRepository, ReportingCalendar
         await EnsureCategoriesFitAsync(budget, cancellationToken);
 
         // Only what changed: removing and re-adding a category in one save would collide on its key.
-        var wanted = budget.Categories.Select(c => c.Category).ToHashSet();
-        existing.Categories.RemoveAll(c => !wanted.Contains(c.Category));
-        foreach (var category in wanted.Except(existing.Categories.Select(c => c.Category)))
+        var wanted = budget.Categories.Select(c => c.CategoryId).ToHashSet();
+        existing.Categories.RemoveAll(c => !wanted.Contains(c.CategoryId));
+        foreach (var categoryId in wanted.Except(existing.Categories.Select(c => c.CategoryId)))
         {
-            existing.Categories.Add(new BudgetCategory { Category = category });
+            existing.Categories.Add(new BudgetCategory { CategoryId = categoryId });
         }
 
         existing.Name = budget.Name;
@@ -58,19 +60,20 @@ public class BudgetService(IBudgetRepository budgetRepository, ReportingCalendar
     {
         if (budget.Categories.Count == 0) return;
 
-        if (budget.Categories.Any(c => !Enum.IsDefined(c.Category)))
+        var ids = budget.Categories.Select(c => c.CategoryId).Distinct().ToList();
+        var categories = await categoryRepository.GetByIdsAsync(ids, cancellationToken);
+        if (categories.Count != ids.Count)
         {
-            throw new InvalidInputException("categories", "One of the categories is not a known category.");
+            throw new InvalidInputException("categoryIds", "One of the categories doesn't exist.");
         }
 
         if (budget.Period != BudgetPeriod.Monthly)
         {
-            throw new InvalidInputException("categories",
+            throw new InvalidInputException("categoryIds",
                 "Categories count the current month's spending, so only a monthly budget can have them.");
         }
 
-        var categories = budget.Categories.Select(c => c.Category).Distinct().ToList();
-        var owners = await budgetRepository.GetCategoryOwnersAsync(categories, budget.Id, cancellationToken);
+        var owners = await budgetRepository.GetCategoryOwnersAsync(ids, budget.Id, cancellationToken);
         if (owners.Count > 0)
         {
             var (category, owner) = owners.First();

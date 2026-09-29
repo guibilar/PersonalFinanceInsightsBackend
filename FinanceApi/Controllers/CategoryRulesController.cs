@@ -31,7 +31,7 @@ public class CategoryRulesController(ICategoryRuleService ruleService) : Control
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<CategoryRuleOutputDto>> Add(CategoryRuleInputDto rule, CancellationToken cancellationToken)
     {
-        var result = await ruleService.AddAsync(rule.Keyword, rule.Category!.Value, rule.Position, cancellationToken);
+        var result = await ruleService.AddAsync(rule.Keyword, rule.CategoryId!.Value, rule.Position, cancellationToken);
         return StatusCode(StatusCodes.Status201Created, result.ToOutput());
     }
 
@@ -42,7 +42,7 @@ public class CategoryRulesController(ICategoryRuleService ruleService) : Control
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<CategoryRuleOutputDto>> Update(Guid id, CategoryRuleUpdateDto rule, CancellationToken cancellationToken)
     {
-        var result = await ruleService.UpdateAsync(id, rule.Keyword, rule.Category!.Value, cancellationToken);
+        var result = await ruleService.UpdateAsync(id, rule.Keyword, rule.CategoryId!.Value, cancellationToken);
         return result.ToOutput();
     }
 
@@ -72,7 +72,7 @@ public class CategoryRulesController(ICategoryRuleService ruleService) : Control
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CategoryRulePreviewDto>> Preview(CategoryRulePreviewInputDto rule, CancellationToken cancellationToken)
     {
-        var preview = await ruleService.PreviewAsync(rule.Keyword, rule.Category!.Value, rule.ExcludeTransactionId, cancellationToken);
+        var preview = await ruleService.PreviewAsync(rule.Keyword, rule.CategoryId!.Value, rule.ExcludeTransactionId, cancellationToken);
         return preview.ToOutput();
     }
 }
