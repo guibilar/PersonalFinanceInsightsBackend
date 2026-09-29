@@ -2,6 +2,7 @@ using Finance.Application.Models;
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
 using Finance.Domain.Entities;
+using Finance.Domain.Enums;
 
 namespace FinanceApi.Mapping;
 
@@ -17,9 +18,17 @@ public static class BudgetMapping
             Status = dto.Status,
             Amount = dto.Amount,
             Period = dto.Period,
+            // Dates belong to a custom period only; the service checks a custom one has both.
+            StartDate = dto.Period == BudgetPeriod.Custom ? Day(dto.StartDate) : null,
+            EndDate = dto.Period == BudgetPeriod.Custom ? Day(dto.EndDate) : null,
+            Merchant = string.IsNullOrWhiteSpace(dto.Merchant) ? null : dto.Merchant.Trim(),
             Categories = dto.CategoryIds.Distinct().Select(id => new BudgetCategory { CategoryId = id }).ToList(),
         };
     }
+
+    // Days are stored as midnight UTC, like transaction dates.
+    private static DateTime? Day(DateTime? date) =>
+        date is { } d ? DateTime.SpecifyKind(d.Date, DateTimeKind.Utc) : null;
 
     public static BudgetOutputDto ToOutput(this BudgetSummary summary)
     {
@@ -31,6 +40,9 @@ public static class BudgetMapping
             Description = budget.Description,
             Status = budget.Status,
             Period = budget.Period,
+            StartDate = budget.StartDate,
+            EndDate = budget.EndDate,
+            Merchant = budget.Merchant,
             Categories = categories.Select(c => c.ToReference()).ToList(),
             TotalAmount = budget.Amount,
             TotalSpent = totalSpent,

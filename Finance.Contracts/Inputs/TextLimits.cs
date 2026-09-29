@@ -5,6 +5,7 @@ public static class TextLimits
 {
     public const int BudgetName = 100;
     public const int BudgetDescription = 500;
+    public const int BudgetMerchant = 100;
 
     // Bank descriptions are well under this; room for a note added by hand.
     public const int TransactionDescription = 200;

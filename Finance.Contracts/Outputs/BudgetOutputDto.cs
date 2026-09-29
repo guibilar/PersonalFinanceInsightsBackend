@@ -9,7 +9,13 @@ public class BudgetOutputDto
     public required string Description { get; set; }
     public Status Status { get; set; }
     public BudgetPeriod Period { get; set; }
-    /// <summary>What it counts by itself (monthly budgets only), by name.</summary>
+    /// <summary>Custom periods only: the first day that counts.</summary>
+    public DateTime? StartDate { get; set; }
+    /// <summary>Custom periods only: the last day that counts.</summary>
+    public DateTime? EndDate { get; set; }
+    /// <summary>The merchant it counts by itself (any period but Total): part of the description.</summary>
+    public string? Merchant { get; set; }
+    /// <summary>The categories it counts by itself (any period but Total), by name.</summary>
     public List<CategoryReferenceDto> Categories { get; set; } = [];
     public decimal TotalAmount { get; set; }
     public decimal TotalRemaining { get; set; }

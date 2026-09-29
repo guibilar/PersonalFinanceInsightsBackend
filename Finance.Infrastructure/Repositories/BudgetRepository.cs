@@ -36,37 +36,56 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
         return owners.ToDictionary(o => o.Category, o => o.Budget);
     }
 
-    public Task<BudgetSummary?> GetSummaryAsync(Guid id, DateTime monthStart, CancellationToken cancellationToken = default)
+    public Task<BudgetSummary?> GetSummaryAsync(Guid id, DateTime today, CancellationToken cancellationToken = default)
     {
-        return ToSummaries(DbContext.Budgets.Where(x => x.Id == id), monthStart)
+        return ToSummaries(DbContext.Budgets.Where(x => x.Id == id), today)
             .SingleOrDefaultAsync(cancellationToken);
     }
 
-    public Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, DateTime monthStart, CancellationToken cancellationToken = default)
+    public Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, DateTime today, CancellationToken cancellationToken = default)
     {
-        return PaginateAsync(ToSummaries(FilterQuery(filter), monthStart), filter.Page, filter.PageSize, cancellationToken);
+        return PaginateAsync(ToSummaries(FilterQuery(filter), today), filter.Page, filter.PageSize, cancellationToken);
     }
 
     // Totals are summed in SQL instead of loading every linked transaction. Amounts are stored positive,
     // so credits (refunds) linked to a budget give money back instead of counting as spending.
-    // Monthly budgets only count this month's transactions; earlier months stay linked but no longer count.
-    // A budget with categories (monthly ones only) also counts this month's spending in them that isn't linked to
-    // another budget: spending as it counts in the reports, so refunds come off, and transfers and ignored rows
-    // stay out.
-    private IQueryable<BudgetSummary> ToSummaries(IQueryable<Budget> budgets, DateTime monthStart)
+    // A period limits which transactions count by their date: the current month, the current year, or the budget's
+    // own days (both ends included); earlier ones stay linked but no longer count. A total budget has no limit.
+    // A budget with a period also counts the period's spending in its categories, or at its merchant (part of the
+    // description, ignoring case), that isn't linked to another budget: spending as it counts in the reports, so
+    // refunds come off, and transfers and ignored rows stay out.
+    private IQueryable<BudgetSummary> ToSummaries(IQueryable<Budget> budgets, DateTime today)
     {
+        var monthStart = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
         var nextMonth = monthStart.AddMonths(1);
+        var yearStart = new DateTime(today.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        var nextYear = yearStart.AddYears(1);
         return budgets
             .AsNoTracking()
-            .Select(b => new BudgetSummary(b, b.Transactions
-                .Where(t => b.Period == BudgetPeriod.Total || (t.Date >= monthStart && t.Date < nextMonth))
+            .Select(b => new
+            {
+                Budget = b,
+                From = b.Period == BudgetPeriod.Monthly ? monthStart
+                    : b.Period == BudgetPeriod.Yearly ? yearStart
+                    : b.Period == BudgetPeriod.Custom ? b.StartDate
+                    : (DateTime?)null,
+                // Exclusive: the day after the last one.
+                To = b.Period == BudgetPeriod.Monthly ? nextMonth
+                    : b.Period == BudgetPeriod.Yearly ? nextYear
+                    : b.Period == BudgetPeriod.Custom ? b.EndDate!.Value.AddDays(1)
+                    : (DateTime?)null,
+            })
+            .Select(w => new BudgetSummary(w.Budget, w.Budget.Transactions
+                .Where(t => (w.From == null || t.Date >= w.From) && (w.To == null || t.Date < w.To))
                 .Sum(t => t.TransactionType == TransactionType.Credit ? -t.Amount : t.Amount)
                 + DbContext.Transactions
-                    .Where(t => t.BudgetId == null && t.Date >= monthStart && t.Date < nextMonth
+                    .Where(t => t.BudgetId == null && w.From != null && t.Date >= w.From && t.Date < w.To
                                 && (t.Flow == Flow.Spending || t.Flow == Flow.Refund)
-                                && b.Categories.Any(c => c.CategoryId == t.CategoryId))
+                                && (w.Budget.Categories.Any(c => c.CategoryId == t.CategoryId)
+                                    || (w.Budget.Merchant != null
+                                        && t.Description.ToLower().Contains(w.Budget.Merchant.ToLower()))))
                     .Sum(t => t.Flow == Flow.Refund ? -t.Amount : t.Amount),
-                b.Categories.Select(c => c.Category!).OrderBy(c => c.Name).ToList()));
+                w.Budget.Categories.Select(c => c.Category!).OrderBy(c => c.Name).ToList()));
     }
 
     private IQueryable<Budget> FilterQuery(BudgetFilterDto filter)

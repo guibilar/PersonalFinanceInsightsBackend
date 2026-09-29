@@ -15,7 +15,7 @@ public class BudgetService(IBudgetRepository budgetRepository, ICategoryReposito
 {
     public async Task<BudgetSummary> AddAsync(Budget budget, CancellationToken cancellationToken = default)
     {
-        await EnsureCategoriesFitAsync(budget, cancellationToken);
+        await EnsureFitsAsync(budget, cancellationToken);
         await budgetRepository.AddAsync(budget, cancellationToken);
         // Totalled like any other read: a new budget's categories may already have spending this month.
         return await GetByIdAsync(budget.Id, cancellationToken);
@@ -23,7 +23,7 @@ public class BudgetService(IBudgetRepository budgetRepository, ICategoryReposito
 
     public async Task<BudgetSummary> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return await budgetRepository.GetSummaryAsync(id, calendar.CurrentMonthStart(), cancellationToken)
+        return await budgetRepository.GetSummaryAsync(id, calendar.Today(), cancellationToken)
                ?? throw new NotFoundException(nameof(Budget), id);
     }
 
@@ -32,7 +32,7 @@ public class BudgetService(IBudgetRepository budgetRepository, ICategoryReposito
         var existing = await budgetRepository.GetByIdAsync(budget.Id, cancellationToken)
                        ?? throw new NotFoundException(nameof(Budget), budget.Id);
 
-        await EnsureCategoriesFitAsync(budget, cancellationToken);
+        await EnsureFitsAsync(budget, cancellationToken);
 
         // Only what changed: removing and re-adding a category in one save would collide on its key.
         var wanted = budget.Categories.Select(c => c.CategoryId).ToHashSet();
@@ -47,17 +47,48 @@ public class BudgetService(IBudgetRepository budgetRepository, ICategoryReposito
         existing.Status = budget.Status;
         existing.Amount = budget.Amount;
         existing.Period = budget.Period;
+        existing.StartDate = budget.StartDate;
+        existing.EndDate = budget.EndDate;
+        existing.Merchant = budget.Merchant;
         await budgetRepository.SaveChangesAsync(cancellationToken);
 
         return await GetByIdAsync(budget.Id, cancellationToken);
     }
 
     /// <summary>
-    /// Categories count this month's spending, so they belong to Monthly budgets; and each is counted by one budget
-    /// only, or its spending would be in two budgets at once.
+    /// A custom period needs its two days. Categories and a merchant count the period's spending, so a total budget
+    /// can't have them, and a budget counts one or the other; each category is counted by one budget only, or its
+    /// spending would be in two budgets at once (a merchant can be in several: "No Frills" a month and a year).
     /// </summary>
-    private async Task EnsureCategoriesFitAsync(Budget budget, CancellationToken cancellationToken)
+    private async Task EnsureFitsAsync(Budget budget, CancellationToken cancellationToken)
     {
+        if (budget.Period == BudgetPeriod.Custom)
+        {
+            if (budget.StartDate is null || budget.EndDate is null)
+            {
+                throw new InvalidInputException("startDate", "A custom period needs a start date and an end date.");
+            }
+
+            if (budget.StartDate > budget.EndDate)
+            {
+                throw new InvalidInputException("endDate", "The end date is before the start date.");
+            }
+        }
+
+        if (budget.Merchant is not null)
+        {
+            if (budget.Period == BudgetPeriod.Total)
+            {
+                throw new InvalidInputException("merchant",
+                    "A merchant counts the period's spending, so a total budget can't have one; choose a monthly, yearly or custom period.");
+            }
+
+            if (budget.Categories.Count > 0)
+            {
+                throw new InvalidInputException("merchant", "A budget counts a merchant or categories, not both.");
+            }
+        }
+
         if (budget.Categories.Count == 0) return;
 
         var ids = budget.Categories.Select(c => c.CategoryId).Distinct().ToList();
@@ -67,10 +98,10 @@ public class BudgetService(IBudgetRepository budgetRepository, ICategoryReposito
             throw new InvalidInputException("categoryIds", "One of the categories doesn't exist.");
         }
 
-        if (budget.Period != BudgetPeriod.Monthly)
+        if (budget.Period == BudgetPeriod.Total)
         {
             throw new InvalidInputException("categoryIds",
-                "Categories count the current month's spending, so only a monthly budget can have them.");
+                "Categories count the period's spending, so a total budget can't have them; choose a monthly, yearly or custom period.");
         }
 
         var owners = await budgetRepository.GetCategoryOwnersAsync(ids, budget.Id, cancellationToken);
@@ -97,6 +128,6 @@ public class BudgetService(IBudgetRepository budgetRepository, ICategoryReposito
 
     public Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, CancellationToken cancellationToken = default)
     {
-        return budgetRepository.FilterAsync(filter, calendar.CurrentMonthStart(), cancellationToken);
+        return budgetRepository.FilterAsync(filter, calendar.Today(), cancellationToken);
     }
 }

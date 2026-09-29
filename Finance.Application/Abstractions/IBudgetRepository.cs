@@ -16,9 +16,9 @@ public interface IBudgetRepository : IBaseRepository<Budget>
     /// </summary>
     Task<Dictionary<string, string>> GetCategoryOwnersAsync(IReadOnlyCollection<Guid> categoryIds, Guid exceptBudgetId, CancellationToken cancellationToken = default);
 
-    /// <param name="monthStart">First day of the current month: monthly budgets only count spending from then on.</param>
-    Task<BudgetSummary?> GetSummaryAsync(Guid id, DateTime monthStart, CancellationToken cancellationToken = default);
+    /// <param name="today">Which month and year are current: monthly and yearly budgets only count their dates.</param>
+    Task<BudgetSummary?> GetSummaryAsync(Guid id, DateTime today, CancellationToken cancellationToken = default);
 
-    /// <param name="monthStart">First day of the current month: monthly budgets only count spending from then on.</param>
-    Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, DateTime monthStart, CancellationToken cancellationToken = default);
+    /// <param name="today">Which month and year are current: monthly and yearly budgets only count their dates.</param>
+    Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, DateTime today, CancellationToken cancellationToken = default);
 }

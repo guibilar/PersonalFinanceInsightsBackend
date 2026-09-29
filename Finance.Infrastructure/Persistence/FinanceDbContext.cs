@@ -126,6 +126,7 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
             entity.Property(b => b.Name).IsRequired();
             entity.Property(b => b.Description).IsRequired();
             entity.Property(b => b.Status).IsRequired();
+            entity.Property(b => b.Merchant).HasMaxLength(TextLimits.BudgetMerchant);
             entity.HasMany(b => b.Transactions)
                 .WithOne(t => t.Budget)
                 .HasForeignKey(t => t.BudgetId)
