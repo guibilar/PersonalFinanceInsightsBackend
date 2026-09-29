@@ -209,15 +209,20 @@ with the file's rules, into the default categories.
 
 ## Budgets
 
-A budget's `period` is `Total` (everything linked counts, e.g. a trip) or `Monthly` (only transactions dated
-in the current month count, so it starts over every month).
+A budget's `period` says which transactions count, by their date: `Total` (everything linked counts, e.g. a trip),
+`Monthly` (the current month, so it starts over every month), `Yearly` (the current calendar year) or `Custom` (from
+`startDate` to `endDate`, both days included; both are required for it and ignored for the other periods). "Current"
+follows `Reports:TimeZone`.
 
-A monthly budget can also have categories (`categoryIds` on `POST`/`PUT`, returned as `categories`): it
-then counts this month's spending in those categories by itself, with no linking. That is spending as the reports
-count it (`Spending` minus `Refund`, so transfers and ignored rows stay out), deleted transactions excluded, and
-transactions linked to another budget left to that one. A transaction linked to the budget and also in its
-categories counts once. Only monthly budgets can have categories (400 otherwise), and a category belongs to one
-budget at most (409 naming the budget that has it); deleting a budget frees its categories.
+A budget with a period other than `Total` can also count spending by itself, with no linking, by **category**
+(`categoryIds` on `POST`/`PUT`, returned as `categories`) or by **merchant** (`merchant`: part of the description,
+ignoring case, so `no frills` counts every store of the chain). That is the period's spending as the reports count it
+(`Spending` minus `Refund`, so transfers and ignored rows stay out), deleted transactions excluded, and transactions
+linked to another budget left to that one. A transaction linked to the budget and also matching counts once.
+
+A budget counts categories or a merchant, not both, and a `Total` budget can have neither (400). A category belongs to
+one budget at most (409 naming the budget that has it; deleting a budget frees its categories). A merchant can be in
+several budgets, e.g. "No Frills" a month and a year.
 
 ## Reports
 

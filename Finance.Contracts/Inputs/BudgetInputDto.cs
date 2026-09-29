@@ -20,9 +20,22 @@ public class BudgetInputDto
     [EnumDataType(typeof(BudgetPeriod))]
     public BudgetPeriod Period { get; set; }
 
+    /// <summary>Custom periods only (and required for them): the first day that counts.</summary>
+    public DateTime? StartDate { get; set; }
+
+    /// <summary>Custom periods only (and required for them): the last day that counts, after or on the start.</summary>
+    public DateTime? EndDate { get; set; }
+
     /// <summary>
-    /// Categories the budget counts by itself: this month's spending in them, with no linking. Monthly budgets
-    /// only, and a category belongs to one budget at most.
+    /// Categories the budget counts by itself: the period's spending in them, with no linking. Any period but
+    /// Total, and a category belongs to one budget at most. Not with a merchant.
     /// </summary>
     public List<Guid> CategoryIds { get; set; } = [];
+
+    /// <summary>
+    /// A merchant the budget counts by itself: the period's spending whose description contains this, ignoring case
+    /// ("no frills" for every store of the chain). Any period but Total. Not with categories.
+    /// </summary>
+    [MaxLength(TextLimits.BudgetMerchant)]
+    public string? Merchant { get; set; }
 }
