@@ -15,6 +15,7 @@ public static class CategoryMapping
             Color = summary.Category.Color,
             TransactionCount = summary.TransactionCount,
             RuleCount = summary.RuleCount,
+            IsFallback = summary.Category.Id == Category.OtherId,
             BuiltInReason = summary.BuiltInReason
         };
     }

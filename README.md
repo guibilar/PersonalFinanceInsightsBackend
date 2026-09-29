@@ -170,7 +170,8 @@ Categories are data, edited in the app (the frontend's Categories page). Every d
 were before that (Dining, Groceries, Other, Rent...), with fixed ids and the colours the app always gave them; a
 migration moved the stored transactions, rules and budgets onto them.
 
-- `GET /api/Categories`: `{id, name, color, transactionCount, ruleCount, builtInReason}` by name. The counts include
+- `GET /api/Categories`: `{id, name, color, transactionCount, ruleCount, isFallback, builtInReason}` by name
+  (`isFallback` marks Other, whatever it is called now). The counts include
   deleted transactions, which move with the category too.
 - `POST /api/Categories` `{name, color}`, `PUT /api/Categories/{id}` `{name, color}`: names are trimmed, up to 50
   characters and unique ignoring case (409 otherwise); `color` is `#RRGGBB`, stored upper-case. Renaming or

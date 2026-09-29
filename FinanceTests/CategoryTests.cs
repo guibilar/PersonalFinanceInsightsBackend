@@ -52,6 +52,7 @@ public class CategoryTests
         Assert.True(categories.Single(c => c.Name == "Groceries").RuleCount > 0);
         // Only the two the app relies on are built in.
         Assert.Equal(["Other", "Rent"], categories.Where(c => c.BuiltInReason is not null).Select(c => c.Name));
+        Assert.Equal("Other", categories.Single(c => c.IsFallback).Name);
     }
 
     [Fact]
