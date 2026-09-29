@@ -190,6 +190,13 @@ every rule was deleted. The CLI has no database, so it still categorises with th
 A budget's `period` is `Total` (everything linked counts, e.g. a trip) or `Monthly` (only transactions dated
 in the current month count, so it starts over every month).
 
+A monthly budget can also have `categories` (a list, sent with the budget on `POST`/`PUT`, returned with it): it
+then counts this month's spending in those categories by itself, with no linking. That is spending as the reports
+count it (`Spending` minus `Refund`, so transfers and ignored rows stay out), deleted transactions excluded, and
+transactions linked to another budget left to that one. A transaction linked to the budget and also in its
+categories counts once. Only monthly budgets can have categories (400 otherwise), and a category belongs to one
+budget at most (409 naming the budget that has it); deleting a budget frees its categories.
+
 ## Reports
 
 Spending is every `Spending` transaction minus every `Refund`, whichever account it is on.
