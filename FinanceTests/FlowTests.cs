@@ -20,10 +20,20 @@ public class FlowTests
 {
     private const string Rules = "/api/FlowRules";
 
-    // The initial rules, as shipped in import-rules.json.
-    private static readonly List<FlowRule> SeedRules = new ConfigurationBuilder()
-        .AddJsonFile("import-rules.json").Build()
-        .GetSection(ImportOptions.SectionName).Get<ImportOptions>()!.ToFlowRules();
+    // The initial rules, as shipped in import-rules.json: the base set, then each rule pack's.
+    private static readonly List<FlowRule> SeedRules = ShippedRules();
+
+    private static List<FlowRule> ShippedRules()
+    {
+        var options = new ConfigurationBuilder().AddJsonFile("import-rules.json").Build()
+            .GetSection(ImportOptions.SectionName).Get<ImportOptions>()!;
+        var rules = options.ToFlowRules();
+        foreach (var pack in options.RulePacks)
+        {
+            rules.AddRange(pack.ToFlowRules(rules.Select(r => r.Keyword).ToHashSet()));
+        }
+        return rules;
+    }
 
     private static Transaction Stored(string description, decimal amount, TransactionType direction, AccountType account,
         DateTime? date = null, Flow? flow = null, bool flowLocked = false) => new()
@@ -48,7 +58,9 @@ public class FlowTests
         foreach (var rule in rules) await client.DeleteAsync($"{Rules}/{rule.Id}");
         await factory.Services.SeedRulesAsync(NullLogger.Instance);
 
-        Assert.Equal(SeedRules.OrderBy(r => r.Keyword).Select(r => (r.Keyword, r.Flow)), rules.Select(r => (r.Keyword, r.Flow)));
+        // Compared without regard to order: the database sorts by its own collation.
+        Assert.Equal(SeedRules.OrderBy(r => r.Keyword, StringComparer.Ordinal).Select(r => (r.Keyword, r.Flow)),
+            rules.OrderBy(r => r.Keyword, StringComparer.Ordinal).Select(r => (r.Keyword, r.Flow)));
         Assert.Contains(("PAYMENT THANK YOU", Flow.Transfer), rules.Select(r => (r.Keyword, r.Flow)));
         Assert.Contains(("DEEL CANADA", Flow.Income), rules.Select(r => (r.Keyword, r.Flow)));
         Assert.Empty(await GetRulesAsync(client));

@@ -29,6 +29,7 @@ public static class DependencyInjection
         services.AddScoped<IFlowRuleRepository, FlowRuleRepository>();
         services.AddScoped<IAccountRepository, AccountRepository>();
         services.AddScoped<IStatementParser, CibcCsvParser>();
+        services.AddScoped<IStatementParser, NeoCsvParser>();
         return services;
     }
 

@@ -148,6 +148,96 @@
           "DEPOSIT TrupCAN"
         ]
       }
+    ],
+    "RulePacks": [
+      {
+        "Name": "Neo",
+        "CategoryRules": [
+          {
+            "Category": "Groceries",
+            "Keywords": [
+              "FARMER'S FRIDGE",
+              "NO FRILLS",
+              "SAFEWAY",
+              "SAVE ON FOODS",
+              "SUPERSTORE"
+            ]
+          },
+          {
+            "Category": "Dining",
+            "Keywords": [
+              "KOJI KATSU",
+              "CUPBOP",
+              "OLLY FRESCO",
+              "CAFFE",
+              "APPLE EATERY",
+              "MINAS BRAZILIAN",
+              "ARAMARK"
+            ]
+          },
+          {
+            "Category": "Health",
+            "Keywords": [
+              "REXALL",
+              "PHARMAC",
+              "ANYTIME FITNE",
+              "EYECARE"
+            ]
+          },
+          {
+            "Category": "Pet",
+            "Keywords": [
+              "TRUPANION"
+            ]
+          },
+          {
+            "Category": "Utilities",
+            "Keywords": [
+              "ENMAX",
+              "TELUS"
+            ]
+          },
+          {
+            "Category": "Transportation",
+            "Keywords": [
+              "AIR CAN",
+              "WESTJET",
+              "AIR TRANSAT",
+              "PORTER AIRLINES",
+              "FLAIR AIRLINES"
+            ]
+          },
+          {
+            "Category": "Subscriptions",
+            "Keywords": [
+              "ANTHROPIC"
+            ]
+          },
+          {
+            "Category": "Entertainment",
+            "Keywords": [
+              "TASTEOFCALGARY"
+            ]
+          },
+          {
+            "Category": "Shopping",
+            "Keywords": [
+              "MINISO",
+              "SAMSUNG",
+              "SIMONS",
+              "TREEHOUSE TOYS"
+            ]
+          }
+        ],
+        "FlowRules": [
+          {
+            "Flow": "Transfer",
+            "Keywords": [
+              "PAYMENT RECEIVED - THANK YOU"
+            ]
+          }
+        ]
+      }
     ]
   }
 }

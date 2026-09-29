@@ -8,8 +8,8 @@ namespace Finance.Infrastructure.Persistence;
 
 /// <summary>
 /// Copies the category and flow rules from import-rules.json into the database the first time the API starts on it
-/// (each set once, so a database from before flow rules existed still gets them). From then on the rules are edited
-/// in the app; the file is only the initial set.
+/// (each set once, so a database from before flow rules existed still gets them), and each rule pack once too, after
+/// the rules already there. From then on the rules are edited in the app; the file is only the initial set.
 /// </summary>
 public static class RuleSeeder
 {
@@ -37,6 +37,25 @@ public static class RuleSeeder
             db.SeedMarkers.Add(new SeedMarker { Name = SeedMarker.FlowRules, SeededUtc = DateTimeOffset.UtcNow });
             await db.SaveChangesAsync();
             logger.LogInformation("Stored the {Count} initial flow rules from import-rules.json", rules.Count);
+        }
+
+        foreach (var pack in options.RulePacks.Where(pack => !string.IsNullOrWhiteSpace(pack.Name)))
+        {
+            var marker = SeedMarker.RulePack(pack.Name);
+            if (await db.SeedMarkers.AnyAsync(m => m.Name == marker)) continue;
+
+            var categoryKeywords = (await db.CategoryRules.Select(r => r.Keyword).ToListAsync()).ToHashSet();
+            var nextPosition = await db.CategoryRules.AnyAsync() ? await db.CategoryRules.MaxAsync(r => r.Position) + 1 : 0;
+            var flowKeywords = (await db.FlowRules.Select(r => r.Keyword).ToListAsync()).ToHashSet();
+            var categoryRules = pack.ToCategoryRules(categoryKeywords, nextPosition);
+            var flowRules = pack.ToFlowRules(flowKeywords);
+
+            db.CategoryRules.AddRange(categoryRules);
+            db.FlowRules.AddRange(flowRules);
+            db.SeedMarkers.Add(new SeedMarker { Name = marker, SeededUtc = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync();
+            logger.LogInformation("Stored the {Name} rule pack: {Categories} category and {Flows} flow rules",
+                pack.Name, categoryRules.Count, flowRules.Count);
         }
     }
 }

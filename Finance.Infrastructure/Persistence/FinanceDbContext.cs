@@ -36,6 +36,7 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
         configurationBuilder.Properties<Status>().HaveConversion<string>();
         configurationBuilder.Properties<BudgetPeriod>().HaveConversion<string>();
         configurationBuilder.Properties<Flow>().HaveConversion<string>();
+        configurationBuilder.Properties<StatementFormat>().HaveConversion<string>();
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -84,9 +85,9 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
             // Every database starts with the three accounts there were before accounts were data; a migration
             // moved the existing transactions onto them. They can be renamed, or deleted while empty.
             entity.HasData(
-                new Account { Id = Account.DefaultChequingId, Name = "Chequing", Type = AccountType.Chequing },
-                new Account { Id = Account.DefaultSavingsId, Name = "Savings", Type = AccountType.Savings },
-                new Account { Id = Account.DefaultCreditCardId, Name = "Credit card", Type = AccountType.CreditCard });
+                new Account { Id = Account.DefaultChequingId, Name = "Chequing", Type = AccountType.Chequing, Format = StatementFormat.Cibc },
+                new Account { Id = Account.DefaultSavingsId, Name = "Savings", Type = AccountType.Savings, Format = StatementFormat.Cibc },
+                new Account { Id = Account.DefaultCreditCardId, Name = "Credit card", Type = AccountType.CreditCard, Format = StatementFormat.Cibc });
         });
 
         modelBuilder.Entity<FlowRule>(entity =>

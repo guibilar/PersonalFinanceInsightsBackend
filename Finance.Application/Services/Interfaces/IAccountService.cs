@@ -9,8 +9,10 @@ public interface IAccountService
 {
     /// <summary>By kind, then name.</summary>
     Task<List<AccountSummary>> GetAllAsync(CancellationToken cancellationToken = default);
-    Task<AccountSummary> AddAsync(string name, AccountType type, CancellationToken cancellationToken = default);
-    Task<AccountSummary> RenameAsync(Guid id, string name, CancellationToken cancellationToken = default);
+    Task<AccountSummary> AddAsync(string name, AccountType type, StatementFormat format, CancellationToken cancellationToken = default);
+
+    /// <param name="format">The new statement format; unchanged when null.</param>
+    Task<AccountSummary> UpdateAsync(Guid id, string name, StatementFormat? format, CancellationToken cancellationToken = default);
 
     /// <summary>Only an account without transactions (deleted ones included) can be deleted.</summary>
     Task RemoveAsync(Guid id, CancellationToken cancellationToken = default);

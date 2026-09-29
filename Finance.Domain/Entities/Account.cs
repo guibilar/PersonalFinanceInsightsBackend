@@ -15,4 +15,7 @@ public class Account : BaseEntity
 
     /// <summary>Decides how its statements are read and what its transactions mean by default. Never changes.</summary>
     public AccountType Type { get; set; }
+
+    /// <summary>How its bank lays out statement files. Can be corrected while the account is in use.</summary>
+    public StatementFormat Format { get; set; }
 }

@@ -28,6 +28,10 @@ namespace Finance.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("Format")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -48,18 +52,21 @@ namespace Finance.Infrastructure.Migrations
                         new
                         {
                             Id = new Guid("5b0c4b8e-3f5e-4c1a-9d53-0c2f7a1e8a01"),
+                            Format = "Cibc",
                             Name = "Chequing",
                             Type = "Chequing"
                         },
                         new
                         {
                             Id = new Guid("5b0c4b8e-3f5e-4c1a-9d53-0c2f7a1e8a02"),
+                            Format = "Cibc",
                             Name = "Savings",
                             Type = "Savings"
                         },
                         new
                         {
                             Id = new Guid("5b0c4b8e-3f5e-4c1a-9d53-0c2f7a1e8a03"),
+                            Format = "Cibc",
                             Name = "Credit card",
                             Type = "CreditCard"
                         });

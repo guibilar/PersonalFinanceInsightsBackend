@@ -12,6 +12,7 @@ public static class AccountMapping
             Id = summary.Account.Id,
             Name = summary.Account.Name,
             Type = summary.Account.Type,
+            Format = summary.Account.Format,
             TransactionCount = summary.TransactionCount
         };
     }

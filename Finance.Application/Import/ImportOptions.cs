@@ -22,6 +22,12 @@ public class ImportOptions
     public List<FlowKeywords> FlowRules { get; set; } = [];
 
     /// <summary>
+    /// Extra starter rules for one bank or use, each copied into the database once, after the rules it already has
+    /// (see <see cref="RulePack"/>). Adding a pack here reaches databases that were seeded before it existed.
+    /// </summary>
+    public List<RulePack> RulePacks { get; set; } = [];
+
+    /// <summary>
     /// <see cref="CategoryRules"/> as one rule per keyword, in order (rule order, then keyword order). A keyword
     /// that appears again later is left out: the first one always wins anyway.
     /// </summary>
@@ -46,6 +52,40 @@ public class ImportOptions
             .Where(rule => rule.Flow != Flow.Spending)
             .SelectMany(rule => rule.Keywords.Select(keyword => (Keyword: FlowRule.NormalizeKeyword(keyword), rule.Flow)))
             .Where(rule => rule.Keyword.Length > 0 && keywords.Add(rule.Keyword))
+            .Select(rule => new FlowRule { Keyword = rule.Keyword, Flow = rule.Flow })
+            .ToList();
+    }
+}
+
+/// <summary>
+/// A named set of starter rules (Neo Financial's merchants, say). Its rules are added to the database once, after the
+/// existing ones and skipping keywords that already have a rule, so nothing edited in the app is ever overridden.
+/// </summary>
+public class RulePack
+{
+    public string Name { get; set; } = string.Empty;
+    public List<CategoryKeywords> CategoryRules { get; set; } = [];
+    public List<FlowKeywords> FlowRules { get; set; } = [];
+
+    /// <summary>One rule per keyword, positioned from <paramref name="firstPosition"/> on; keywords in <paramref name="existing"/> are left out.</summary>
+    public List<CategoryRule> ToCategoryRules(ISet<string> existing, int firstPosition)
+    {
+        var seen = new HashSet<string>(existing);
+        return CategoryRules
+            .SelectMany(rule => rule.Keywords.Select(keyword => (Keyword: CategoryRule.NormalizeKeyword(keyword), rule.Category)))
+            .Where(rule => rule.Keyword.Length > 0 && seen.Add(rule.Keyword))
+            .Select((rule, index) => new CategoryRule { Keyword = rule.Keyword, Category = rule.Category, Position = firstPosition + index })
+            .ToList();
+    }
+
+    /// <summary>One rule per keyword; keywords in <paramref name="existing"/> and spending rules are left out.</summary>
+    public List<FlowRule> ToFlowRules(ISet<string> existing)
+    {
+        var seen = new HashSet<string>(existing);
+        return FlowRules
+            .Where(rule => rule.Flow != Flow.Spending)
+            .SelectMany(rule => rule.Keywords.Select(keyword => (Keyword: FlowRule.NormalizeKeyword(keyword), rule.Flow)))
+            .Where(rule => rule.Keyword.Length > 0 && seen.Add(rule.Keyword))
             .Select(rule => new FlowRule { Keyword = rule.Keyword, Flow = rule.Flow })
             .ToList();
     }

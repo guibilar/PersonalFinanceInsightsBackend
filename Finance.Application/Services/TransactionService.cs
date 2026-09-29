@@ -18,7 +18,7 @@ public class TransactionService(
     ICategoryRuleRepository categoryRuleRepository,
     IFlowRuleRepository flowRuleRepository,
     IAccountRepository accountRepository,
-    IStatementParser statementParser) : ITransactionService
+    IEnumerable<IStatementParser> statementParsers) : ITransactionService
 {
     private const string DuplicateMessage = "An identical transaction (same account, date, amount and description) already exists.";
 
@@ -59,7 +59,9 @@ public class TransactionService(
     {
         var account = await accountRepository.GetByIdAsync(accountId, cancellationToken)
                       ?? throw new NotFoundException(nameof(Account), accountId);
-        var statementRows = statementParser.Parse(statement);
+        var parser = statementParsers.FirstOrDefault(p => p.Format == account.Format)
+                     ?? throw new InvalidInputException("accountId", $"Statements in the {account.Format} format can't be read yet.");
+        var statementRows = parser.Parse(statement);
         var parsed = statementRows.Transactions;
         var classifier = await GetClassifierAsync(cancellationToken);
         foreach (var transaction in parsed)
