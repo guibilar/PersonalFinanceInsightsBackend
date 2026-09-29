@@ -1,6 +1,7 @@
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Reports;
+using Finance.Domain.Common;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FinanceApi.Controllers;
@@ -32,6 +33,17 @@ public class ReportsController(IReportService reportService) : ControllerBase
     public Task<TransactionBreakdown> GenerateBreakdown(TransactionBreakdownInputDto input, CancellationToken cancellationToken)
     {
         return reportService.GenerateBreakdownAsync(input, cancellationToken);
+    }
+
+    /// <summary>
+    /// A page of the merchants the list's criteria spent at, largest first: the breakdown's top ones, and the rest.
+    /// </summary>
+    [HttpPost("merchants")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public Task<PaginatedList<MerchantTotal>> GetMerchants(MerchantsInputDto input, CancellationToken cancellationToken)
+    {
+        return reportService.GetMerchantsAsync(input, cancellationToken);
     }
 
     /// <summary>Income, spending and money saved per month of the current year.</summary>

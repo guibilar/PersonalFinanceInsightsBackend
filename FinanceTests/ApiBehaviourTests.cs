@@ -345,6 +345,9 @@ public class ApiBehaviourTests
         public Task<TransactionBreakdown> GenerateBreakdownAsync(TransactionBreakdownInputDto input, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<PaginatedList<MerchantTotal>> GetMerchantsAsync(MerchantsInputDto input, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public async Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraphDataAsync(CancellationToken cancellationToken = default)
         {
             _started.TrySetResult();

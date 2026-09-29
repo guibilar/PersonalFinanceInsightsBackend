@@ -4,8 +4,8 @@ using Finance.Domain.Enums;
 
 namespace Finance.Contracts.Inputs;
 
-/// <summary>The transaction list's criteria (all optional), and how long each period is.</summary>
-public class TransactionBreakdownInputDto
+/// <summary>The transaction list's criteria (all optional), without its paging and sorting.</summary>
+public class TransactionCriteriaInputDto
 {
     /// <summary>Part of the description, ignoring case: a merchant, say.</summary>
     [MaxLength(TextLimits.TransactionDescription)]
@@ -22,7 +22,21 @@ public class TransactionBreakdownInputDto
 
     /// <summary>Inclusive, as in the list. Without it, the periods end at the last matching transaction.</summary>
     public DateTime? EndDate { get; set; }
+}
 
+/// <summary>The transaction list's criteria, and how long each period is.</summary>
+public class TransactionBreakdownInputDto : TransactionCriteriaInputDto
+{
     [EnumDataType(typeof(BreakdownInterval))]
     public BreakdownInterval Interval { get; set; } = BreakdownInterval.Month;
+}
+
+/// <summary>The transaction list's criteria, and which page of the merchants they spent at.</summary>
+public class MerchantsInputDto : TransactionCriteriaInputDto
+{
+    [Range(1, PagingLimits.MaxPage)]
+    public int Page { get; set; } = 1;
+
+    [Range(1, PagingLimits.MaxPageSize)]
+    public int PageSize { get; set; } = 8;
 }

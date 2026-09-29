@@ -5,6 +5,7 @@ using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
 using Finance.Contracts.Reports;
+using Finance.Domain.Common;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
@@ -25,25 +26,9 @@ public class ReportService(
         CancellationToken cancellationToken = default)
     {
         var interval = input.Interval;
-        var start = input.StartDate is { } from ? DateTime.SpecifyKind(from.Date, DateTimeKind.Utc) : (DateTime?)null;
-        var end = input.EndDate is { } to && to.Date < DateTime.MaxValue.Date
-            ? DateTime.SpecifyKind(to.Date, DateTimeKind.Utc)
-            : (DateTime?)null;
-        if (start > end)
-        {
-            throw new InvalidInputException("endDate", "The end date is before the start date.");
-        }
-
-        // The list's criteria, so the totals are the list's; its end date is inclusive, the repository's isn't.
-        var transactions = await transactionRepository.FilterNoPaginationAsync(new TransactionFilterDto
-        {
-            Description = string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim(),
-            CategoryId = input.CategoryId,
-            AccountId = input.AccountId,
-            Flow = input.Flow,
-            StartDate = start,
-            EndDate = end?.AddDays(1),
-        }, cancellationToken);
+        var (start, end) = DateRange(input);
+        var transactions = await MatchingAsync(input, start, end, cancellationToken);
+        var merchants = await MerchantsAsync(transactions, cancellationToken);
 
         var breakdown = new TransactionBreakdown
         {
@@ -52,7 +37,8 @@ public class ReportService(
             Spending = transactions.Sum(MonthlyRecordsCalculator.SpendingAmount),
             Refunds = transactions.Where(t => t.Flow == Flow.Refund).Sum(t => t.Amount),
             Income = transactions.Where(t => t.Flow == Flow.Income).Sum(t => t.Amount),
-            TopMerchants = await TopMerchantsAsync(transactions, cancellationToken),
+            TopMerchants = merchants.Take(TopMerchants).ToList(),
+            MerchantCount = merchants.Count,
         };
 
         // From the first period asked for (or with a transaction) to the last asked for, or up to today: months with
@@ -98,13 +84,55 @@ public class ReportService(
         return breakdown;
     }
 
+    public async Task<PaginatedList<MerchantTotal>> GetMerchantsAsync(MerchantsInputDto input,
+        CancellationToken cancellationToken = default)
+    {
+        var (start, end) = DateRange(input);
+        var merchants = await MerchantsAsync(await MatchingAsync(input, start, end, cancellationToken), cancellationToken);
+        return new PaginatedList<MerchantTotal>
+        {
+            Items = merchants.Skip((input.Page - 1) * input.PageSize).Take(input.PageSize).ToList(),
+            Page = input.Page,
+            PageSize = input.PageSize,
+            TotalCount = merchants.Count,
+        };
+    }
+
+    /// <summary>The criteria's days, as UTC dates; an end date too far out to add a day to is no end.</summary>
+    private static (DateTime? Start, DateTime? End) DateRange(TransactionCriteriaInputDto input)
+    {
+        var start = input.StartDate is { } from ? DateTime.SpecifyKind(from.Date, DateTimeKind.Utc) : (DateTime?)null;
+        var end = input.EndDate is { } to && to.Date < DateTime.MaxValue.Date
+            ? DateTime.SpecifyKind(to.Date, DateTimeKind.Utc)
+            : (DateTime?)null;
+        if (start > end)
+        {
+            throw new InvalidInputException("endDate", "The end date is before the start date.");
+        }
+
+        return (start, end);
+    }
+
+    /// <summary>The list's criteria, so the totals are the list's; its end date is inclusive, the repository's isn't.</summary>
+    private Task<List<Transaction>> MatchingAsync(TransactionCriteriaInputDto input, DateTime? start, DateTime? end,
+        CancellationToken cancellationToken) =>
+        transactionRepository.FilterNoPaginationAsync(new TransactionFilterDto
+        {
+            Description = string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim(),
+            CategoryId = input.CategoryId,
+            AccountId = input.AccountId,
+            Flow = input.Flow,
+            StartDate = start,
+            EndDate = end?.AddDays(1),
+        }, cancellationToken);
+
     private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
 
     /// <summary>
     /// Spending grouped by merchant: the category rules name merchants, so the keyword of the rule that decides a
     /// description ("NO FRILLS" for every store of the chain); the description itself when no rule matches.
     /// </summary>
-    private async Task<List<MerchantTotal>> TopMerchantsAsync(List<Transaction> transactions, CancellationToken cancellationToken)
+    private async Task<List<MerchantTotal>> MerchantsAsync(List<Transaction> transactions, CancellationToken cancellationToken)
     {
         var matcher = new CategoryMatcher(await categoryRuleRepository.GetAllAsync(cancellationToken));
         return transactions
@@ -114,7 +142,6 @@ public class ReportService(
             .Where(m => m.Spending > 0)
             .OrderByDescending(m => m.Spending)
             .ThenBy(m => m.Name, StringComparer.Ordinal)
-            .Take(TopMerchants)
             .ToList();
     }
 

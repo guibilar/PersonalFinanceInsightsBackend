@@ -230,8 +230,12 @@ what the transaction list's criteria pick (a merchant by part of its description
 inclusive) and spreads it over periods: `interval` is `Week` (from Monday), `Month` (the default), `Quarter` or `Year`.
 It returns the count, spending, refunds and income; one entry per period from the first to the last (the first
 matching transaction and today when no dates are given), empty ones included, with running totals; averages per
-period over the finished ones; and the top merchants, grouped by the category rule keyword that matched ("NO FRILLS"
-for every store of the chain) or by description. More than 400 periods, or an end before the start, is a 400.
+period over the finished ones; and the top 8 merchants, grouped by the category rule keyword that matched ("NO FRILLS"
+for every store of the chain) or by description, with `merchantCount` for all of them. More than 400 periods, or an
+end before the start, is a 400.
+
+`POST /api/Reports/merchants` takes the same criteria with `page` and `pageSize` (default 8) and pages through all of
+those merchants, largest first, as a paginated list: page 1 is the breakdown's top 8.
 
 The dashboard's current month and year follow `Reports:TimeZone` in `appsettings.json`
 (IANA id, default `America/Toronto`; override with `Reports__TimeZone`). An unknown id stops the API at startup.
