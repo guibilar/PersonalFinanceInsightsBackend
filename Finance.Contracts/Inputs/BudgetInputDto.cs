@@ -19,4 +19,10 @@ public class BudgetInputDto
     /// <summary>Optional; <see cref="BudgetPeriod.Total"/> when omitted.</summary>
     [EnumDataType(typeof(BudgetPeriod))]
     public BudgetPeriod Period { get; set; }
+
+    /// <summary>
+    /// Categories the budget counts by itself: this month's spending in them, with no linking. Monthly budgets
+    /// only, and a category belongs to one budget at most.
+    /// </summary>
+    public List<Category> Categories { get; set; } = [];
 }

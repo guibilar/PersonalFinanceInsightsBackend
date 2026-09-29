@@ -102,6 +102,21 @@ namespace Finance.Infrastructure.Migrations
                     b.ToTable("Budgets");
                 });
 
+            modelBuilder.Entity("Finance.Domain.Entities.BudgetCategory", b =>
+                {
+                    b.Property<string>("Category")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("BudgetId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Category");
+
+                    b.HasIndex("BudgetId");
+
+                    b.ToTable("BudgetCategory");
+                });
+
             modelBuilder.Entity("Finance.Domain.Entities.CategoryRule", b =>
                 {
                     b.Property<Guid>("Id")
@@ -467,6 +482,17 @@ namespace Finance.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Finance.Domain.Entities.BudgetCategory", b =>
+                {
+                    b.HasOne("Finance.Domain.Entities.Budget", "Budget")
+                        .WithMany("Categories")
+                        .HasForeignKey("BudgetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Budget");
+                });
+
             modelBuilder.Entity("Finance.Domain.Entities.Transaction", b =>
                 {
                     b.HasOne("Finance.Domain.Entities.Account", "Account")
@@ -546,6 +572,8 @@ namespace Finance.Infrastructure.Migrations
 
             modelBuilder.Entity("Finance.Domain.Entities.Budget", b =>
                 {
+                    b.Navigation("Categories");
+
                     b.Navigation("Transactions");
                 });
 #pragma warning restore 612, 618

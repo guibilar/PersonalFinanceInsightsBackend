@@ -114,6 +114,13 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
                 .WithOne(t => t.Budget)
                 .HasForeignKey(t => t.BudgetId)
                 .IsRequired(false);
+            entity.HasMany(b => b.Categories)
+                .WithOne(c => c.Budget)
+                .HasForeignKey(c => c.BudgetId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
+
+        // The category is the key: it is counted by one budget only.
+        modelBuilder.Entity<BudgetCategory>(entity => entity.HasKey(c => c.Category));
     }
 }

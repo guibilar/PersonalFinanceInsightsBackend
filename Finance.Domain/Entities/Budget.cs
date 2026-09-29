@@ -10,4 +10,7 @@ public class Budget : BaseEntity
     public decimal Amount { get; set; }
     public BudgetPeriod Period { get; set; }
     public List<Transaction> Transactions { get; set; } = [];
+
+    /// <summary>Monthly budgets only: what this month's spending in these categories adds to the linked transactions.</summary>
+    public List<BudgetCategory> Categories { get; set; } = [];
 }
