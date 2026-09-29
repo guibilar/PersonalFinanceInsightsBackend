@@ -25,21 +25,37 @@ public class TransactionService(
     // A statement is taken for another account's when at least this many of its rows, and half of them, are stored there.
     private const int MismatchMinimumRows = 3;
 
-    public async Task<Transaction> AddAsync(Transaction transaction, CancellationToken cancellationToken = default)
+    public async Task<Transaction> AddAsync(Transaction transaction, bool allowDuplicate = false,
+        CancellationToken cancellationToken = default)
     {
         var account = await accountRepository.GetByIdAsync(transaction.AccountId, cancellationToken)
                       ?? throw new NotFoundException(nameof(Account), transaction.AccountId);
-        // The category is the one given; the flow follows the rules like an imported row's.
-        var flows = await GetFlowMatcherAsync(cancellationToken);
-        transaction.Flow = flows.Match(transaction.Description, account.Type, transaction.TransactionType);
+        if (transaction.FlowLocked && !FlowMatcher.IsAllowed(transaction.Flow, transaction.TransactionType))
+        {
+            throw new InvalidInputException("flow", transaction.TransactionType == TransactionType.Debit
+                ? "Money out can be spending, a transfer or ignored."
+                : "Money in can be income, a refund, a transfer or ignored.");
+        }
+        // What wasn't picked follows the rules, like an imported row's.
+        (await GetClassifierAsync(cancellationToken)).Classify(transaction, account.Type);
 
         var existing = await transactionRepository.FindByHashAsync(transaction.AccountId, transaction.Hash, cancellationToken);
-        if (existing is not null)
+        if (existing is not null && !allowDuplicate)
         {
             logger.LogWarning("Transaction with hash {Hash} already exists on {Account}", transaction.Hash, account.Name);
             throw new ConflictException(existing.Hidden
                 ? "An identical transaction was deleted earlier; restore it from the deleted transactions instead."
                 : DuplicateMessage);
+        }
+        if (existing is not null)
+        {
+            // Numbered like identical rows of a statement: the first free number.
+            for (var occurrence = 2; existing is not null; occurrence++)
+            {
+                transaction.Hash = TransactionHashHelper.GenerateTransactionHash(
+                    transaction.Amount, transaction.Date, transaction.Description, occurrence);
+                existing = await transactionRepository.FindByHashAsync(transaction.AccountId, transaction.Hash, cancellationToken);
+            }
         }
 
         try
@@ -59,6 +75,11 @@ public class TransactionService(
     {
         var account = await accountRepository.GetByIdAsync(accountId, cancellationToken)
                       ?? throw new NotFoundException(nameof(Account), accountId);
+        if (account.Format == StatementFormat.Manual)
+        {
+            throw new InvalidInputException("accountId",
+                $"\"{account.Name}\" has no statement files: add its transactions by hand, or change its statement format.");
+        }
         var parser = statementParsers.FirstOrDefault(p => p.Format == account.Format)
                      ?? throw new InvalidInputException("accountId", $"Statements in the {account.Format} format can't be read yet.");
         var statementRows = parser.Parse(statement);

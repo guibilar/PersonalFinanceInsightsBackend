@@ -1,6 +1,7 @@
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
 using Finance.Domain.Entities;
+using Finance.Domain.Enums;
 using Finance.Domain.Helpers;
 
 namespace FinanceApi.Mapping;
@@ -17,7 +18,10 @@ public static class TransactionMapping
             Date = date,
             Description = dto.Description,
             Amount = dto.Amount,
-            Category = dto.Category!.Value,
+            Category = dto.Category ?? Category.Other,
+            CategoryLocked = dto.Category is not null,
+            Flow = dto.Flow ?? default,
+            FlowLocked = dto.Flow is not null,
             TransactionType = dto.TransactionType!.Value,
             AccountId = dto.AccountId!.Value,
             // Computed server-side, same as the CSV sync, so duplicates are detected consistently.

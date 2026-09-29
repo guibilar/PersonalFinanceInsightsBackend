@@ -21,7 +21,7 @@ public class TransactionController(ITransactionService transactionService) : Con
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<TransactionOutputDto>> Add(TransactionInputDto transaction, CancellationToken cancellationToken)
     {
-        var result = await transactionService.AddAsync(transaction.ToModel(), cancellationToken);
+        var result = await transactionService.AddAsync(transaction.ToModel(), transaction.AllowDuplicate, cancellationToken);
         return StatusCode(StatusCodes.Status201Created, result.ToOutput());
     }
 

@@ -8,7 +8,11 @@ namespace Finance.Application.Services.Interfaces;
 
 public interface ITransactionService
 {
-    Task<Transaction> AddAsync(Transaction transaction, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Adds a transaction entered by hand. The rules decide the category and flow that weren't picked (locked).
+    /// An identical transaction is a conflict unless <paramref name="allowDuplicate"/>.
+    /// </summary>
+    Task<Transaction> AddAsync(Transaction transaction, bool allowDuplicate = false, CancellationToken cancellationToken = default);
     /// <summary>
     /// Imports the statement into the account, all rows or none. Unless <paramref name="confirmed"/>, a statement that
     /// doesn't look like the account's is refused with <see cref="Domain.Exceptions.AccountMismatchException"/>.

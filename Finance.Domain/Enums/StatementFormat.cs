@@ -7,5 +7,8 @@ public enum StatementFormat
     Cibc,
 
     /// <summary>Neo Financial: a header line, and one signed amount (negative is money out).</summary>
-    Neo
+    Neo,
+
+    /// <summary>The bank offers no export: transactions are added by hand, and statement files are refused.</summary>
+    Manual
 }
