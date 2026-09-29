@@ -376,6 +376,8 @@ public class ApiBehaviourTests
 
     private class ThrowingParser : IStatementParser
     {
+        public StatementFormat Format => StatementFormat.Cibc;
+
         public ParsedStatement Parse(Stream statement) =>
             throw new InvalidDataException("Bad row in '/secret-path/cibc_credit.csv'");
     }

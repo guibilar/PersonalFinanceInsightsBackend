@@ -12,15 +12,17 @@ public class AccountService(IAccountRepository accountRepository) : IAccountServ
     public Task<List<AccountSummary>> GetAllAsync(CancellationToken cancellationToken = default) =>
         accountRepository.GetSummariesAsync(cancellationToken);
 
-    public async Task<AccountSummary> AddAsync(string name, AccountType type, CancellationToken cancellationToken = default)
+    public async Task<AccountSummary> AddAsync(string name, AccountType type, StatementFormat format,
+        CancellationToken cancellationToken = default)
     {
-        var account = new Account { Name = name.Trim(), Type = type };
+        var account = new Account { Name = name.Trim(), Type = type, Format = format };
         EnsureUnique(await accountRepository.GetAllAsync(cancellationToken), account.Name, account.Id);
         await accountRepository.AddAsync(account, cancellationToken);
         return new AccountSummary(account, 0);
     }
 
-    public async Task<AccountSummary> RenameAsync(Guid id, string name, CancellationToken cancellationToken = default)
+    public async Task<AccountSummary> UpdateAsync(Guid id, string name, StatementFormat? format,
+        CancellationToken cancellationToken = default)
     {
         var accounts = await accountRepository.GetAllAsync(cancellationToken);
         var account = accounts.SingleOrDefault(a => a.Id == id) ?? throw new NotFoundException(nameof(Account), id);
@@ -28,6 +30,7 @@ public class AccountService(IAccountRepository accountRepository) : IAccountServ
         EnsureUnique(accounts, trimmed, id);
 
         account.Name = trimmed;
+        if (format is { } newFormat) account.Format = newFormat;
         await accountRepository.SaveChangesAsync(cancellationToken);
         return new AccountSummary(account, await accountRepository.CountTransactionsAsync(id, cancellationToken));
     }

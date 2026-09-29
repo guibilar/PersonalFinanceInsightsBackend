@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using System.Text.RegularExpressions;
 using CsvHelper;
 using CsvHelper.Configuration;
@@ -24,15 +23,14 @@ public partial class CibcCsvParser : IStatementParser
     private const int MoneyInColumn = 3;
     private const int CardNumberColumn = 4;
 
-    private static readonly Encoding StrictUtf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
-    private static readonly Encoding Windows1252 = CodePagesEncodingProvider.Instance.GetEncoding(1252)!;
+    public StatementFormat Format => StatementFormat.Cibc;
 
     public ParsedStatement Parse(Stream statement)
     {
         var transactions = new List<Transaction>();
         var datedRows = 0;
         var cardRows = 0;
-        using var reader = new StringReader(ReadText(statement));
+        using var reader = new StringReader(StatementText.Read(statement));
         // Short rows read as missing fields (null) and stray quotes as data, so any file gets row-by-row checks
         // below instead of an exception halfway through.
         using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
@@ -44,6 +42,13 @@ public partial class CibcCsvParser : IStatementParser
 
         while (csv.Read())
         {
+            // Read with this format, a Neo file would come out as no transactions at all, which looks like success.
+            if (string.Equals(csv.GetField(DateColumn)?.Trim(), "Transaction Date", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidStatementException(
+                    "This file has a header line, as Neo Financial exports do, but this account reads CIBC files. " +
+                    "Set the account's statement format to Neo, or choose another account.");
+            }
             var description = csv.GetField(DescriptionColumn);
             if (string.IsNullOrEmpty(description) ||
                 !DateTime.TryParse(csv.GetField(DateColumn), CultureInfo.InvariantCulture, out var date))
@@ -68,24 +73,6 @@ public partial class CibcCsvParser : IStatementParser
         }
 
         return new ParsedStatement(transactions, IsCreditCardExport: cardRows > 0);
-    }
-
-    private static string ReadText(Stream statement)
-    {
-        using var buffer = new MemoryStream();
-        statement.CopyTo(buffer);
-        var bytes = buffer.GetBuffer().AsSpan(0, (int)buffer.Length);
-        if (bytes.StartsWith(Encoding.UTF8.Preamble)) bytes = bytes[Encoding.UTF8.Preamble.Length..];
-
-        try
-        {
-            return StrictUtf8.GetString(bytes);
-        }
-        catch (DecoderFallbackException)
-        {
-            // Plain UTF-8 decoding would turn accented characters into U+FFFD instead.
-            return Windows1252.GetString(bytes);
-        }
     }
 
     private static void AddIfAmount(List<Transaction> transactions, string? amountField, DateTime date, string description,

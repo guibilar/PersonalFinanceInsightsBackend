@@ -86,7 +86,8 @@ public class FinanceApiFactory(
         {
             db.Accounts.AddRange(db.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(Account))!.GetSeedData().Select(seed => new Account
             {
-                Id = (Guid)seed[nameof(Account.Id)]!, Name = (string)seed[nameof(Account.Name)]!, Type = (AccountType)seed[nameof(Account.Type)]!
+                Id = (Guid)seed[nameof(Account.Id)]!, Name = (string)seed[nameof(Account.Name)]!, Type = (AccountType)seed[nameof(Account.Type)]!,
+                Format = (StatementFormat)seed[nameof(Account.Format)]!
             }));
             db.SaveChanges();
         }

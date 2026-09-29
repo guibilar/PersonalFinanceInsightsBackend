@@ -68,9 +68,10 @@ card or bank account, rename them, or delete one that has no transactions (delet
 what keeps a re-import from adding them back). An account's kind (`Chequing`, `Savings`, `CreditCard`) never
 changes; it decides what its transactions mean when no flow rule says otherwise.
 
-- `GET /api/Accounts`: `{id, name, type, transactionCount}`, by kind then name.
-- `POST /api/Accounts` `{name, type}`, `PUT /api/Accounts/{id}` `{name}`: names are trimmed, up to 100
-  characters, and unique ignoring case (409 otherwise).
+- `GET /api/Accounts`: `{id, name, type, format, transactionCount}`, by kind then name.
+- `POST /api/Accounts` `{name, type, format?}`, `PUT /api/Accounts/{id}` `{name, format?}`: names are trimmed, up to
+  100 characters, and unique ignoring case (409 otherwise). `format` is the layout of the bank's statement files,
+  `Cibc` (the default) or `Neo`; it can be corrected later, the kind can't.
 - `DELETE /api/Accounts/{id}`: 409 while it has transactions.
 
 ## Import bank statements
@@ -86,6 +87,9 @@ Re-importing a statement, or an overlapping one, only adds rows that aren't stor
 purchases on the same day are kept. Every row is imported; categories and flows come from the rules stored in
 the database (see [Category rules](#category-rules) and [Flows](#flows)).
 
+Each account's format decides how its file is read, and a file in another format is refused with 400 and a message
+saying so (a CIBC file has no header line; a Neo file has one), instead of being read as nothing.
+
 A file that doesn't look like the account's is refused with 409 and `"code": "account-mismatch"`: a credit card
 export (CIBC's carry the card number) imported into a bank account, or a statement most of whose rows (at least
 3) are already stored on another account. Sending `confirmed=true` imports it anyway.
@@ -98,6 +102,17 @@ hides that month's "Monthly Rent" row, so rent counts once; it can be restored f
 
 Statements are read as UTF-8, or as Windows-1252 when the file isn't valid UTF-8 (e.g. re-saved in Excel).
 Transactions are duplicates only within the same account.
+
+### Neo Financial
+
+Neo's exports (card, chequing and savings alike) start with a header line and have one signed amount per row, negative
+for money out. Columns are found by name (`Transaction Date`, `Description`, `Amount`; `Status` and `Posted Date` are
+optional), so their order doesn't matter. The date is the transaction date, not the day it posted. Only `Posted` rows
+are imported: a pending row shows up again once it posts, possibly worded differently. Runs of spaces in merchant
+names ("CALGARY       CAN") are collapsed to one.
+
+Neo card payments read "Payment Received - Thank you"; a flow rule makes them transfers, so paying the card doesn't
+count as a refund.
 
 ## Flows
 
@@ -118,6 +133,11 @@ is income on chequing and a refund on a credit card, and everything on a savings
 - `GET /api/FlowRules`: `{id, keyword, flow}`, by keyword.
 - `POST /api/FlowRules` `{keyword, flow}`, `PUT /api/FlowRules/{id}`, `DELETE /api/FlowRules/{id}`: keywords are
   stored trimmed and upper-case, up to 100 characters, and unique (409); a `Spending` rule is refused (400).
+
+`RulePacks` in `import-rules.json` are extra starter sets, one per bank (`Neo` for now). Each is copied into the
+database once, after the rules already there and skipping keywords that already have one, so a database seeded before
+the pack existed gets it too, and nothing edited in the app is overridden (a rule the pack adds can only apply where
+none of yours match first).
 
 `FlowRules` in `import-rules.json` is only the initial set (transfers, card payments, pending holds, income
 sources), copied into the database once like the category rules. Before flows existed, rows matching those

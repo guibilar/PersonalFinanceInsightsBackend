@@ -17,10 +17,20 @@ public class CategoryRuleTests
 {
     private const string Rules = "/api/CategoryRules";
 
-    // The initial rules, as shipped in import-rules.json.
-    private static readonly List<CategoryRule> SeedRules = new ConfigurationBuilder()
-        .AddJsonFile("import-rules.json").Build()
-        .GetSection(ImportOptions.SectionName).Get<ImportOptions>()!.ToCategoryRules();
+    // The initial rules, as shipped in import-rules.json: the base set, then each rule pack after it.
+    private static readonly List<CategoryRule> SeedRules = ShippedRules();
+
+    private static List<CategoryRule> ShippedRules()
+    {
+        var options = new ConfigurationBuilder().AddJsonFile("import-rules.json").Build()
+            .GetSection(ImportOptions.SectionName).Get<ImportOptions>()!;
+        var rules = options.ToCategoryRules();
+        foreach (var pack in options.RulePacks)
+        {
+            rules.AddRange(pack.ToCategoryRules(rules.Select(r => r.Keyword).ToHashSet(), rules.Count));
+        }
+        return rules;
+    }
 
     private static Transaction Stored(string description, Category category, AccountType account = AccountType.CreditCard,
         bool locked = false, bool hidden = false) => new()

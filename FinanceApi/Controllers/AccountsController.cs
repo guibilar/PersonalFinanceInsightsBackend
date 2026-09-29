@@ -1,6 +1,7 @@
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
+using Finance.Domain.Enums;
 using FinanceApi.Mapping;
 using Microsoft.AspNetCore.Mvc;
 
@@ -27,19 +28,19 @@ public class AccountsController(IAccountService accountService) : ControllerBase
     [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<AccountOutputDto>> Add(AccountInputDto account, CancellationToken cancellationToken)
     {
-        var result = await accountService.AddAsync(account.Name, account.Type!.Value, cancellationToken);
+        var result = await accountService.AddAsync(account.Name, account.Type!.Value, account.Format ?? StatementFormat.Cibc, cancellationToken);
         return StatusCode(StatusCodes.Status201Created, result.ToOutput());
     }
 
-    /// <summary>Renames the account; its kind can't change.</summary>
+    /// <summary>Renames the account and/or corrects its statement format; its kind can't change.</summary>
     [HttpPut("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    public async Task<ActionResult<AccountOutputDto>> Rename(Guid id, AccountUpdateDto account, CancellationToken cancellationToken)
+    public async Task<ActionResult<AccountOutputDto>> Update(Guid id, AccountUpdateDto account, CancellationToken cancellationToken)
     {
-        var result = await accountService.RenameAsync(id, account.Name, cancellationToken);
+        var result = await accountService.UpdateAsync(id, account.Name, account.Format, cancellationToken);
         return result.ToOutput();
     }
 
