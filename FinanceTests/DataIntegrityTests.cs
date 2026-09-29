@@ -18,9 +18,9 @@ public class DataIntegrityTests
 
     private static object ManualTransaction(
         AccountType account = AccountType.CreditCard, string? transactionType = "Debit", string? category = "Dining",
-        decimal amount = 16.99m, string? date = "2026-09-10") => new
+        decimal amount = 16.99m, string? date = "2026-09-10", int? flow = null) => new
     {
-        date, description = "NETFLIX", amount, category, transactionType, accountId = TestAccounts.Id(account)
+        date, description = "NETFLIX", amount, category, transactionType, flow, accountId = TestAccounts.Id(account)
     };
 
     // ---- Duplicates
@@ -146,7 +146,7 @@ public class DataIntegrityTests
     public static TheoryData<object> InvalidTransactions => new()
     {
         ManualTransaction(transactionType: null),
-        ManualTransaction(category: null),
+        ManualTransaction(flow: 99),
         ManualTransaction(date: null),
         ManualTransaction(amount: 0),
         ManualTransaction(amount: -5),

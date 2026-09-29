@@ -71,7 +71,8 @@ changes; it decides what its transactions mean when no flow rule says otherwise.
 - `GET /api/Accounts`: `{id, name, type, format, transactionCount}`, by kind then name.
 - `POST /api/Accounts` `{name, type, format?}`, `PUT /api/Accounts/{id}` `{name, format?}`: names are trimmed, up to
   100 characters, and unique ignoring case (409 otherwise). `format` is the layout of the bank's statement files,
-  `Cibc` (the default) or `Neo`; it can be corrected later, the kind can't.
+  `Cibc` (the default), `Neo` or `Manual` (no statement files: transactions are added by hand, and importing into it
+  is refused); it can be corrected later, the kind can't.
 - `DELETE /api/Accounts/{id}`: 409 while it has transactions.
 
 ## Import bank statements
@@ -103,10 +104,20 @@ hides that month's "Monthly Rent" row, so rent counts once; it can be restored f
 Statements are read as UTF-8, or as Windows-1252 when the file isn't valid UTF-8 (e.g. re-saved in Excel).
 Transactions are duplicates only within the same account.
 
+### Adding transactions by hand
+
+`POST /api/Transaction` `{date, description, amount, transactionType, accountId, category?, flow?, allowDuplicate?}`
+adds one transaction, for accounts without an importer (statement format `Manual`) or a purchase that isn't on a
+statement yet. The amount is positive and `transactionType` (`Debit` or `Credit`) says which way the money moved.
+Without `category` and `flow` the rules decide, as for an imported row; a given one is kept when the rules are
+re-applied, and a flow that doesn't fit the direction is a 400. An identical transaction (same account, day, amount
+and description) is a 409 unless `allowDuplicate`, for two purchases that really were the same.
+
 ### Neo Financial
 
-Neo's exports (card, chequing and savings alike) start with a header line and have one signed amount per row, negative
-for money out. Columns are found by name (`Transaction Date`, `Description`, `Amount`; `Status` and `Posted Date` are
+Neo only exports its credit card (the chequing and savings accounts have no export, so use `Manual` for them). The
+export starts with a header line and has one signed amount per row, negative for
+money out. Columns are found by name (`Transaction Date`, `Description`, `Amount`; `Status` and `Posted Date` are
 optional), so their order doesn't matter. The date is the transaction date, not the day it posted. Only `Posted` rows
 are imported: a pending row shows up again once it posts, possibly worded differently. Runs of spaces in merchant
 names ("CALGARY       CAN") are collapsed to one.
