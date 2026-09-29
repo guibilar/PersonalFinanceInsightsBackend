@@ -173,15 +173,18 @@ public class ReportService(
         var filter = new TransactionFilterDto { StartDate = yearStart, EndDate = yearStart.AddYears(1) };
         var transactions = await transactionRepository.FilterNoPaginationAsync(filter, cancellationToken);
 
+        // A month is listed when something in it counts: a month of nothing but transfers and ignored rows would
+        // only be a row of zeros that pulls the averages down.
         var months = transactions
+            .Where(CountsInCashFlow)
             .GroupBy(t => new DateTime(t.Date.Year, t.Date.Month, 1))
             .OrderBy(g => g.Key)
             .Select(g =>
             {
                 var income = g.Where(t => t.Flow == Flow.Income).Sum(t => t.Amount);
                 var spending = g.Sum(MonthlyRecordsCalculator.SpendingAmount);
-                // What went into savings accounts, from anywhere, minus what came out; ignored rows don't count.
-                var saved = g.Where(t => t.Account!.Type == AccountType.Savings && t.Flow != Flow.Ignored)
+                // What went into savings accounts, from anywhere, minus what came out.
+                var savingsChange = g.Where(t => t.Account!.Type == AccountType.Savings)
                     .Sum(t => t.TransactionType == TransactionType.Credit ? t.Amount : -t.Amount);
                 return (YearMonth: g.Key, Month: new CashFlowMonth
                 {
@@ -189,7 +192,7 @@ public class ReportService(
                     Income = income,
                     Spending = spending,
                     Net = income - spending,
-                    Saved = saved
+                    SavingsChange = savingsChange
                 });
             })
             .ToList();
@@ -202,9 +205,17 @@ public class ReportService(
             Months = months.Select(m => m.Month).ToList(),
             AverageMonthlyIncome = averaged.Count > 0 ? averaged.Average(m => m.Income) : 0,
             AverageMonthlySpending = averaged.Count > 0 ? averaged.Average(m => m.Spending) : 0,
-            AverageMonthlySaved = averaged.Count > 0 ? averaged.Average(m => m.Saved) : 0
+            AverageMonthlyNet = averaged.Count > 0 ? averaged.Average(m => m.Net) : 0,
+            AverageMonthlySavingsChange = averaged.Count > 0 ? averaged.Average(m => m.SavingsChange) : 0,
+            AveragedMonths = averaged.Count,
+            AveragesIncludeCurrentMonth = complete.Count == 0 && averaged.Count > 0
         };
     }
+
+    /// <summary>Whether a transaction changes any of the cash-flow figures: income, spending, or a savings account.</summary>
+    private static bool CountsInCashFlow(Transaction transaction) =>
+        transaction.Flow is Flow.Spending or Flow.Refund or Flow.Income
+        || (transaction.Account!.Type == AccountType.Savings && transaction.Flow != Flow.Ignored);
 
     /// <summary>Spending and refunds (which reduce spending), on any account; income and transfers stay out.</summary>
     private async Task<List<Transaction>> SpendingAsync(DateTime start, DateTime end, CancellationToken cancellationToken)
