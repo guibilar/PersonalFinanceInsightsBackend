@@ -7,11 +7,116 @@ using Finance.Contracts.Outputs;
 using Finance.Contracts.Reports;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
+using Finance.Domain.Exceptions;
+using Finance.Application.Import;
 
 namespace Finance.Application.Services;
 
-public class ReportService(ITransactionRepository transactionRepository, ReportingCalendar calendar) : IReportService
+public class ReportService(
+    ITransactionRepository transactionRepository,
+    ICategoryRuleRepository categoryRuleRepository,
+    ReportingCalendar calendar) : IReportService
 {
+    // A few years of weeks; more is a chart nobody can read, and a request that asked for the wrong interval.
+    private const int MaxPeriods = 400;
+    private const int TopMerchants = 8;
+
+    public async Task<TransactionBreakdown> GenerateBreakdownAsync(TransactionBreakdownInputDto input,
+        CancellationToken cancellationToken = default)
+    {
+        var interval = input.Interval;
+        var start = input.StartDate is { } from ? DateTime.SpecifyKind(from.Date, DateTimeKind.Utc) : (DateTime?)null;
+        var end = input.EndDate is { } to && to.Date < DateTime.MaxValue.Date
+            ? DateTime.SpecifyKind(to.Date, DateTimeKind.Utc)
+            : (DateTime?)null;
+        if (start > end)
+        {
+            throw new InvalidInputException("endDate", "The end date is before the start date.");
+        }
+
+        // The list's criteria, so the totals are the list's; its end date is inclusive, the repository's isn't.
+        var transactions = await transactionRepository.FilterNoPaginationAsync(new TransactionFilterDto
+        {
+            Description = string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim(),
+            CategoryId = input.CategoryId,
+            AccountId = input.AccountId,
+            Flow = input.Flow,
+            StartDate = start,
+            EndDate = end?.AddDays(1),
+        }, cancellationToken);
+
+        var breakdown = new TransactionBreakdown
+        {
+            Interval = interval,
+            Count = transactions.Count,
+            Spending = transactions.Sum(MonthlyRecordsCalculator.SpendingAmount),
+            Refunds = transactions.Where(t => t.Flow == Flow.Refund).Sum(t => t.Amount),
+            Income = transactions.Where(t => t.Flow == Flow.Income).Sum(t => t.Amount),
+            TopMerchants = await TopMerchantsAsync(transactions, cancellationToken),
+        };
+
+        // From the first period asked for (or with a transaction) to the last asked for, or up to today: months with
+        // nothing in them count too, for the average and the running total.
+        var today = calendar.Today();
+        DateTime? first = start ?? (transactions.Count > 0 ? transactions.Min(t => t.Date) : null);
+        DateTime? last = end ?? (transactions.Count > 0 ? Max(transactions.Max(t => t.Date), today) : start is null ? null : Max(start.Value, today));
+        if (first is null || last is null) return breakdown;
+
+        var count = BreakdownPeriods.Count(first.Value, last.Value, interval);
+        if (count > MaxPeriods)
+        {
+            throw new InvalidInputException("interval",
+                $"That is {count} {interval.ToString().ToLowerInvariant()}s; choose a longer interval or a shorter period.");
+        }
+
+        var byPeriod = transactions.ToLookup(t => BreakdownPeriods.StartOf(t.Date, interval));
+        decimal spending = 0, income = 0;
+        for (var periodStart = BreakdownPeriods.StartOf(first.Value, interval); periodStart <= last.Value;
+             periodStart = BreakdownPeriods.Next(periodStart, interval))
+        {
+            var inPeriod = byPeriod[periodStart].ToList();
+            var period = new BreakdownPeriod
+            {
+                Start = periodStart,
+                End = BreakdownPeriods.Next(periodStart, interval).AddDays(-1),
+                Label = BreakdownPeriods.Label(periodStart, interval),
+                Count = inPeriod.Count,
+                Spending = inPeriod.Sum(MonthlyRecordsCalculator.SpendingAmount),
+                Income = inPeriod.Where(t => t.Flow == Flow.Income).Sum(t => t.Amount),
+            };
+            period.CumulativeSpending = spending += period.Spending;
+            period.CumulativeIncome = income += period.Income;
+            breakdown.Periods.Add(period);
+        }
+
+        // As on the dashboard: the running period isn't over, so it only counts when no period is.
+        var over = breakdown.Periods.Where(p => p.End < today).ToList();
+        var averaged = over.Count > 0 ? over : breakdown.Periods;
+        breakdown.AveragedPeriods = averaged.Count;
+        breakdown.AverageSpending = averaged.Average(p => p.Spending);
+        breakdown.AverageIncome = averaged.Average(p => p.Income);
+        return breakdown;
+    }
+
+    private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
+
+    /// <summary>
+    /// Spending grouped by merchant: the category rules name merchants, so the keyword of the rule that decides a
+    /// description ("NO FRILLS" for every store of the chain); the description itself when no rule matches.
+    /// </summary>
+    private async Task<List<MerchantTotal>> TopMerchantsAsync(List<Transaction> transactions, CancellationToken cancellationToken)
+    {
+        var matcher = new CategoryMatcher(await categoryRuleRepository.GetAllAsync(cancellationToken));
+        return transactions
+            .Where(t => t.Flow is Flow.Spending or Flow.Refund)
+            .GroupBy(t => matcher.MatchingKeyword(t.Description) ?? string.Join(' ', t.Description.Split(' ', StringSplitOptions.RemoveEmptyEntries)))
+            .Select(g => new MerchantTotal { Name = g.Key, Count = g.Count(), Spending = g.Sum(MonthlyRecordsCalculator.SpendingAmount) })
+            .Where(m => m.Spending > 0)
+            .OrderByDescending(m => m.Spending)
+            .ThenBy(m => m.Name, StringComparer.Ordinal)
+            .Take(TopMerchants)
+            .ToList();
+    }
 
     public async Task<MonthlyCategorizedGraphData> GenerateMonthlySpendCategorizedGraphDataAsync(CancellationToken cancellationToken = default)
     {

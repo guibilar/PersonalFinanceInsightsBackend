@@ -225,6 +225,14 @@ Spending is every `Spending` transaction minus every `Refund`, whichever account
 `GET /api/Reports/cash-flow` gives income, spending, net (income minus spending) and money saved (into savings
 accounts minus out of them) per month of the current year, with monthly averages over the finished months.
 
+`POST /api/Reports/breakdown` `{description?, categoryId?, accountId?, flow?, startDate?, endDate?, interval}` totals
+what the transaction list's criteria pick (a merchant by part of its description, a category, or both; dates
+inclusive) and spreads it over periods: `interval` is `Week` (from Monday), `Month` (the default), `Quarter` or `Year`.
+It returns the count, spending, refunds and income; one entry per period from the first to the last (the first
+matching transaction and today when no dates are given), empty ones included, with running totals; averages per
+period over the finished ones; and the top merchants, grouped by the category rule keyword that matched ("NO FRILLS"
+for every store of the chain) or by description. More than 400 periods, or an end before the start, is a 400.
+
 The dashboard's current month and year follow `Reports:TimeZone` in `appsettings.json`
 (IANA id, default `America/Toronto`; override with `Reports__TimeZone`). An unknown id stops the API at startup.
 

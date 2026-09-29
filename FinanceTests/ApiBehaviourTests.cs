@@ -5,6 +5,7 @@ using System.Net.Http.Json;
 using Finance.Application.Abstractions;
 using Finance.Application.Import;
 using Finance.Application.Services.Interfaces;
+using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
 using Finance.Contracts.Reports;
 using Finance.Domain.Common;
@@ -340,6 +341,9 @@ public class ApiBehaviourTests
 
         public Task<MonthlyCategorizedGraphData> GenerateMonthlySpendCategorizedGraphDataAsync(CancellationToken cancellationToken = default) =>
             GenerateCurrentMonthCategorizedGraphDataAsync(cancellationToken);
+
+        public Task<TransactionBreakdown> GenerateBreakdownAsync(TransactionBreakdownInputDto input, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
 
         public async Task<MonthlyCategorizedGraphData> GenerateCurrentMonthCategorizedGraphDataAsync(CancellationToken cancellationToken = default)
         {
