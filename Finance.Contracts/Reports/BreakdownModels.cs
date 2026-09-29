@@ -42,8 +42,11 @@ public class TransactionBreakdown
     /// <summary>Oldest first, each period once, empty ones included.</summary>
     public List<BreakdownPeriod> Periods { get; set; } = [];
 
-    /// <summary>Where the spending went, largest first (at most eight).</summary>
+    /// <summary>Where the spending went, largest first (at most eight); the rest come from the merchants report.</summary>
     public List<MerchantTotal> TopMerchants { get; set; } = [];
+
+    /// <summary>How many merchants the spending went to, <see cref="TopMerchants"/> included.</summary>
+    public int MerchantCount { get; set; }
 }
 
 public class BreakdownPeriod

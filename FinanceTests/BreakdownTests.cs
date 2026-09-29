@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using Finance.Application.Reports;
 using Finance.Contracts.Reports;
+using Finance.Domain.Common;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Microsoft.Extensions.DependencyInjection;
@@ -128,6 +129,38 @@ public class BreakdownTests
         Assert.Equal(
             [("NO FRILLS", 2, 100m), ("SAFEWAY", 1, 30m), ("FARMERS MARKET", 1, 12m)],
             result.TopMerchants.Select(m => (m.Name, m.Count, m.Spending)));
+        Assert.Equal(3, result.MerchantCount);
+    }
+
+    [Fact]
+    public async Task TheBreakdownShowsTheTopEight_AndTheMerchantsReportPagesThroughThemAll()
+    {
+        await using var factory = FactoryOnSeptember15();
+        // Twelve stores, the first the largest.
+        await factory.SeedAsync(db => db.Transactions.AddRange(
+            Enumerable.Range(1, 12).Select(i => Tx(Day(2026, 9, 1), $"STORE {i:00}", 130 - i * 10))));
+        var client = factory.CreateClient();
+
+        var breakdown = await PostAsync(client, new { description = "store" });
+        var second = await client.PostAsJsonAsync("/api/Reports/merchants", new { description = "store", page = 2, pageSize = 8 });
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+        var page = await second.ReadAsync<PaginatedList<MerchantTotal>>();
+
+        Assert.Equal((8, 12), (breakdown.TopMerchants.Count, breakdown.MerchantCount));
+        Assert.Equal(["STORE 09", "STORE 10", "STORE 11", "STORE 12"], page.Items.Select(m => m.Name));
+        Assert.Equal((12, false), (page.TotalCount, page.HasNextPage));
+    }
+
+    [Theory]
+    [InlineData(0, 8)]
+    [InlineData(1, 0)]
+    public async Task AMerchantsPageOutOfRange_Returns400(int page, int pageSize)
+    {
+        await using var factory = FactoryOnSeptember15();
+
+        var response = await factory.CreateClient().PostAsJsonAsync("/api/Reports/merchants", new { page, pageSize });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
 
     [Fact]
