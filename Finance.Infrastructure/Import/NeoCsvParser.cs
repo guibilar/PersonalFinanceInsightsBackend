@@ -75,7 +75,6 @@ public partial class NeoCsvParser : IStatementParser
                 // Neo pads merchant names and cities with runs of spaces ("CALGARY       CAN").
                 Description = WhitespaceRun().Replace(description.Trim(), " "),
                 Amount = Math.Abs(amount),
-                Category = Category.Other,
                 TransactionType = amount < 0 ? TransactionType.Debit : TransactionType.Credit
             });
         }

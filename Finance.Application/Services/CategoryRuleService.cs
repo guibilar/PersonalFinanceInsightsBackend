@@ -2,13 +2,13 @@ using Finance.Application.Abstractions;
 using Finance.Application.Models;
 using Finance.Application.Services.Interfaces;
 using Finance.Domain.Entities;
-using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
 
 namespace Finance.Application.Services;
 
 public class CategoryRuleService(
     ICategoryRuleRepository ruleRepository,
+    ICategoryRepository categoryRepository,
     ITransactionRepository transactionRepository) : ICategoryRuleService
 {
     private const int PreviewExamples = 5;
@@ -16,11 +16,12 @@ public class CategoryRuleService(
     public Task<List<CategoryRule>> GetAllAsync(CancellationToken cancellationToken = default) =>
         ruleRepository.GetAllAsync(cancellationToken);
 
-    public async Task<CategoryRule> AddAsync(string keyword, Category category, int? position,
+    public async Task<CategoryRule> AddAsync(string keyword, Guid categoryId, int? position,
         CancellationToken cancellationToken = default)
     {
+        var category = await GetCategoryAsync(categoryId, cancellationToken);
         var rules = await ruleRepository.GetAllAsync(cancellationToken);
-        var rule = new CategoryRule { Keyword = CategoryRule.NormalizeKeyword(keyword), Category = category };
+        var rule = new CategoryRule { Keyword = CategoryRule.NormalizeKeyword(keyword), CategoryId = category.Id, Category = category };
         EnsureUnique(rules, rule.Keyword, rule.Id);
 
         rules.Insert(Math.Min(position ?? rules.Count, rules.Count), rule);
@@ -29,15 +30,17 @@ public class CategoryRuleService(
         return rule;
     }
 
-    public async Task<CategoryRule> UpdateAsync(Guid id, string keyword, Category category,
+    public async Task<CategoryRule> UpdateAsync(Guid id, string keyword, Guid categoryId,
         CancellationToken cancellationToken = default)
     {
+        var category = await GetCategoryAsync(categoryId, cancellationToken);
         var rules = await ruleRepository.GetAllAsync(cancellationToken);
         var rule = rules.SingleOrDefault(r => r.Id == id) ?? throw new NotFoundException(nameof(CategoryRule), id);
         var normalized = CategoryRule.NormalizeKeyword(keyword);
         EnsureUnique(rules, normalized, id);
 
         rule.Keyword = normalized;
+        rule.CategoryId = category.Id;
         rule.Category = category;
         await ruleRepository.SaveChangesAsync(cancellationToken);
         return rule;
@@ -65,13 +68,14 @@ public class CategoryRuleService(
         return rules;
     }
 
-    public async Task<CategoryRulePreview> PreviewAsync(string keyword, Category category, Guid? excludeTransactionId,
+    public async Task<CategoryRulePreview> PreviewAsync(string keyword, Guid categoryId, Guid? excludeTransactionId,
         CancellationToken cancellationToken = default)
     {
+        await GetCategoryAsync(categoryId, cancellationToken);
         var normalized = CategoryRule.NormalizeKeyword(keyword);
         // As the rule would be checked first, it decides every description containing its keyword.
         var changed = (await transactionRepository.GetRuleCategorizedAsync(cancellationToken))
-            .Where(t => t.Id != excludeTransactionId && t.Category != category &&
+            .Where(t => t.Id != excludeTransactionId && t.CategoryId != categoryId &&
                         t.Description.ToUpperInvariant().Contains(normalized, StringComparison.Ordinal))
             .ToList();
 
@@ -82,6 +86,10 @@ public class CategoryRuleService(
             .ToList();
         return new CategoryRulePreview(changed.Count, examples);
     }
+
+    private async Task<Category> GetCategoryAsync(Guid id, CancellationToken cancellationToken) =>
+        await categoryRepository.GetByIdAsync(id, cancellationToken)
+        ?? throw new InvalidInputException("categoryId", "That category doesn't exist.");
 
     // The database's unique index is the backstop for concurrent requests; this gives the usual case a clear message.
     private static void EnsureUnique(List<CategoryRule> rules, string keyword, Guid id)

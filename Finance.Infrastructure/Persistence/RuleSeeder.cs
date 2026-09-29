@@ -1,4 +1,5 @@
 using Finance.Application.Import;
+using Finance.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -19,10 +20,11 @@ public static class RuleSeeder
         var db = scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
         var options = scope.ServiceProvider.GetRequiredService<IOptions<ImportOptions>>().Value;
         var seeded = await db.SeedMarkers.Select(m => m.Name).ToListAsync();
+        var categoryId = await CategoryResolverAsync(db, logger);
 
         if (!seeded.Contains(SeedMarker.CategoryRules))
         {
-            var rules = options.ToCategoryRules();
+            var rules = options.ToCategoryRules(categoryId);
             db.CategoryRules.AddRange(rules);
             // Saved together with the rules: either both are stored or neither.
             db.SeedMarkers.Add(new SeedMarker { Name = SeedMarker.CategoryRules, SeededUtc = DateTimeOffset.UtcNow });
@@ -47,7 +49,7 @@ public static class RuleSeeder
             var categoryKeywords = (await db.CategoryRules.Select(r => r.Keyword).ToListAsync()).ToHashSet();
             var nextPosition = await db.CategoryRules.AnyAsync() ? await db.CategoryRules.MaxAsync(r => r.Position) + 1 : 0;
             var flowKeywords = (await db.FlowRules.Select(r => r.Keyword).ToListAsync()).ToHashSet();
-            var categoryRules = pack.ToCategoryRules(categoryKeywords, nextPosition);
+            var categoryRules = pack.ToCategoryRules(categoryKeywords, nextPosition, categoryId);
             var flowRules = pack.ToFlowRules(flowKeywords);
 
             db.CategoryRules.AddRange(categoryRules);
@@ -57,5 +59,27 @@ public static class RuleSeeder
             logger.LogInformation("Stored the {Name} rule pack: {Categories} category and {Flows} flow rules",
                 pack.Name, categoryRules.Count, flowRules.Count);
         }
+    }
+
+    /// <summary>
+    /// The category a name in import-rules.json stands for: the default category first called that, even if renamed
+    /// since, while it exists; otherwise a category called that now. Rules for a name that matches neither (a category
+    /// deleted in the app) are left out rather than recreating it.
+    /// </summary>
+    private static async Task<Func<string, Guid?>> CategoryResolverAsync(FinanceDbContext db, ILogger logger)
+    {
+        var categories = await db.Categories.AsNoTracking().ToListAsync();
+        var ids = categories.Select(c => c.Id).ToHashSet();
+        var unknown = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        return name =>
+        {
+            if (DefaultCategories.IdOf(name) is { } id && ids.Contains(id)) return id;
+            var match = categories.FirstOrDefault(c => string.Equals(c.Name, name.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (match is null && unknown.Add(name))
+            {
+                logger.LogWarning("No category \"{Name}\" for the rules in import-rules.json; they were left out", name);
+            }
+            return match?.Id;
+        };
     }
 }

@@ -10,11 +10,11 @@ namespace FinanceTests;
 /// <summary>Correcting transactions by hand and re-applying the category rules.</summary>
 public class TransactionEditingTests
 {
-    private static Transaction Stored(string description, Category category, AccountType account = AccountType.CreditCard,
+    private static Transaction Stored(string description, Guid category, AccountType account = AccountType.CreditCard,
         bool locked = false) => new()
     {
         Id = Guid.NewGuid(), Date = new DateTime(2026, 3, 10, 0, 0, 0, DateTimeKind.Utc), Description = description, Amount = 10,
-        Category = category, TransactionType = TransactionType.Debit, AccountId = TestAccounts.Id(account),
+        CategoryId = category, TransactionType = TransactionType.Debit, AccountId = TestAccounts.Id(account),
         Flow = TestAccounts.DefaultFlow(account, TransactionType.Debit), Hash = Guid.NewGuid().ToString(),
         CategoryLocked = locked
     };
@@ -29,12 +29,12 @@ public class TransactionEditingTests
         var id = await factory.QueryAsync(db => db.Transactions.Select(t => t.Id).SingleAsync());
 
         var response = await client.PutAsJsonAsync($"/api/Transaction/{id}",
-            new { description = "  Corner store (snacks) ", category = "Groceries" }, FinanceApiFactory.Json);
+            new { description = "  Corner store (snacks) ", categoryId = DefaultCategories.Groceries }, FinanceApiFactory.Json);
         var reimport = await (await client.PostAsync("/api/Transaction/Import", ImportTests.Statement(csv))).ReadAsync<ImportResultDto>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var updated = await response.ReadAsync<TransactionOutputDto>();
-        Assert.Equal(("Corner store (snacks)", Category.Groceries, true), (updated.Description, updated.Category, updated.CategoryLocked));
+        Assert.Equal(("Corner store (snacks)", DefaultCategories.Groceries, true), (updated.Description, updated.Category.Id, updated.CategoryLocked));
         Assert.Equal((0, 1), (reimport.Added, reimport.Skipped));
     }
 
@@ -42,16 +42,16 @@ public class TransactionEditingTests
     public async Task Update_OnlyADescriptionFix_LeavesTheCategoryToTheRules()
     {
         await using var factory = new FinanceApiFactory();
-        var transaction = Stored("WAL-MART #3059", Category.Other);
+        var transaction = Stored("WAL-MART #3059", DefaultCategories.Other);
         await factory.SeedAsync(db => db.Transactions.Add(transaction));
         var client = factory.CreateClient();
 
         var updated = await (await client.PutAsJsonAsync($"/api/Transaction/{transaction.Id}",
-            new { description = "WAL-MART #3059 (groceries run)", category = "Other" })).ReadAsync<TransactionOutputDto>();
+            new { description = "WAL-MART #3059 (groceries run)", categoryId = DefaultCategories.Other })).ReadAsync<TransactionOutputDto>();
         await client.PostAsync("/api/Transaction/ApplyRules", null);
 
         Assert.False(updated.CategoryLocked);
-        Assert.Equal(Category.Groceries, await factory.QueryAsync(db => db.Transactions.Select(t => t.Category).SingleAsync()));
+        Assert.Equal(DefaultCategories.Groceries, await factory.QueryAsync(db => db.Transactions.Select(t => t.CategoryId).SingleAsync()));
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class TransactionEditingTests
     {
         await using var factory = new FinanceApiFactory();
         var budgetId = Guid.NewGuid();
-        var transaction = Stored("HOTEL", Category.Other);
+        var transaction = Stored("HOTEL", DefaultCategories.Other);
         transaction.BudgetId = budgetId;
         await factory.SeedAsync(db =>
         {
@@ -68,7 +68,7 @@ public class TransactionEditingTests
         });
 
         var updated = await (await factory.CreateClient().PutAsJsonAsync($"/api/Transaction/{transaction.Id}",
-            new { description = "Hotel", category = "Entertainment" })).ReadAsync<TransactionOutputDto>();
+            new { description = "Hotel", categoryId = DefaultCategories.Entertainment })).ReadAsync<TransactionOutputDto>();
 
         Assert.Equal("Trip", updated.Budget?.Name);
     }
@@ -80,10 +80,11 @@ public class TransactionEditingTests
     public async Task Update_InvalidValues_Return400(string description, string? category)
     {
         await using var factory = new FinanceApiFactory();
-        var transaction = Stored("LUNCH", Category.Other);
+        var transaction = Stored("LUNCH", DefaultCategories.Other);
         await factory.SeedAsync(db => db.Transactions.Add(transaction));
 
-        var response = await factory.CreateClient().PutAsJsonAsync($"/api/Transaction/{transaction.Id}", new { description, category });
+        var response = await factory.CreateClient().PutAsJsonAsync($"/api/Transaction/{transaction.Id}",
+            new { description, categoryId = category is null ? (Guid?)null : DefaultCategories.IdOf(category) ?? Guid.NewGuid() });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
@@ -94,7 +95,7 @@ public class TransactionEditingTests
         await using var factory = new FinanceApiFactory();
 
         var response = await factory.CreateClient().PutAsJsonAsync($"/api/Transaction/{Guid.NewGuid()}",
-            new { description = "Lunch", category = "Dining" });
+            new { description = "Lunch", categoryId = DefaultCategories.Dining });
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
     }
@@ -103,12 +104,12 @@ public class TransactionEditingTests
     public async Task ApplyRules_RecategorisesOnlyRuleManagedTransactions()
     {
         await using var factory = new FinanceApiFactory();
-        var stale = Stored("WAL-MART #3059", Category.Other);          // rules now say Groceries
-        var alreadyRight = Stored("TIM HORTONS #55", Category.Dining);  // unchanged
-        var handPicked = Stored("METRO #123", Category.Pet, locked: true);
-        var savings = Stored("METRO TRANSFER", Category.Other, AccountType.Savings);
+        var stale = Stored("WAL-MART #3059", DefaultCategories.Other);          // rules now say Groceries
+        var alreadyRight = Stored("TIM HORTONS #55", DefaultCategories.Dining);  // unchanged
+        var handPicked = Stored("METRO #123", DefaultCategories.Pet, locked: true);
+        var savings = Stored("METRO TRANSFER", DefaultCategories.Other, AccountType.Savings);
         // Rent generated before real payments were imported: the migration locked its category.
-        var fixedRent = Stored("Monthly Rent", Category.Rent, AccountType.Chequing, locked: true);
+        var fixedRent = Stored("Monthly Rent", DefaultCategories.Rent, AccountType.Chequing, locked: true);
         await factory.SeedAsync(db => db.Transactions.AddRange(stale, alreadyRight, handPicked, savings, fixedRent));
 
         var result = await (await factory.CreateClient().PostAsync("/api/Transaction/ApplyRules", null))
@@ -116,11 +117,11 @@ public class TransactionEditingTests
 
         // Every one of them has its flow checked; none of the flows changes.
         Assert.Equal((5, 1), (result.Checked, result.Updated));
-        var categories = await factory.QueryAsync(db => db.Transactions.ToDictionaryAsync(t => t.Id, t => t.Category));
-        Assert.Equal(Category.Groceries, categories[stale.Id]);
-        Assert.Equal(Category.Dining, categories[alreadyRight.Id]);
-        Assert.Equal(Category.Pet, categories[handPicked.Id]);
-        Assert.Equal(Category.Other, categories[savings.Id]);
-        Assert.Equal(Category.Rent, categories[fixedRent.Id]);
+        var categories = await factory.QueryAsync(db => db.Transactions.ToDictionaryAsync(t => t.Id, t => t.CategoryId));
+        Assert.Equal(DefaultCategories.Groceries, categories[stale.Id]);
+        Assert.Equal(DefaultCategories.Dining, categories[alreadyRight.Id]);
+        Assert.Equal(DefaultCategories.Pet, categories[handPicked.Id]);
+        Assert.Equal(DefaultCategories.Other, categories[savings.Id]);
+        Assert.Equal(DefaultCategories.Rent, categories[fixedRent.Id]);
     }
 }

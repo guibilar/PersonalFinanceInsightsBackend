@@ -7,7 +7,9 @@ public class Transaction : BaseEntity
     public DateTime Date { get; set; }
     public required string Description { get; set; }
     public decimal Amount { get; set; }
-    public Category Category { get; set; }
+    /// <summary>Other until the rules or a person decide.</summary>
+    public Guid CategoryId { get; set; } = Entities.Category.OtherId;
+    public Category? Category { get; set; }
     public TransactionType? TransactionType { get; set; }
     public Guid AccountId { get; set; }
     public Account? Account { get; set; }

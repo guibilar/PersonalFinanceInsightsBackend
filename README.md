@@ -106,10 +106,10 @@ Transactions are duplicates only within the same account.
 
 ### Adding transactions by hand
 
-`POST /api/Transaction` `{date, description, amount, transactionType, accountId, category?, flow?, allowDuplicate?}`
+`POST /api/Transaction` `{date, description, amount, transactionType, accountId, categoryId?, flow?, allowDuplicate?}`
 adds one transaction, for accounts without an importer (statement format `Manual`) or a purchase that isn't on a
 statement yet. The amount is positive and `transactionType` (`Debit` or `Credit`) says which way the money moved.
-Without `category` and `flow` the rules decide, as for an imported row; a given one is kept when the rules are
+Without `categoryId` and `flow` the rules decide, as for an imported row; a given one is kept when the rules are
 re-applied, and a flow that doesn't fit the direction is a 400. An identical transaction (same account, day, amount
 and description) is a 409 unless `allowDuplicate`, for two purchases that really were the same.
 
@@ -158,11 +158,30 @@ income, savings transfers).
 
 ## Correcting transactions
 
-`PUT /api/Transaction/{id}` `{description, category, flow?}` changes a transaction's description, category and
+`PUT /api/Transaction/{id}` `{description, categoryId, flow?}` changes a transaction's description, category and
 flow (a flow the other way is refused with 400). A category or flow picked by hand is locked:
 `POST /api/Transaction/ApplyRules` re-runs the current category and flow rules over everything else (hidden
 rows are left alone, and so are the categories of savings accounts' rows). Editing never changes the duplicate
 hash, so re-importing the statement still skips the row.
+
+## Categories
+
+Categories are data, edited in the app (the frontend's Categories page). Every database starts with the eleven there
+were before that (Dining, Groceries, Other, Rent...), with fixed ids and the colours the app always gave them; a
+migration moved the stored transactions, rules and budgets onto them.
+
+- `GET /api/Categories`: `{id, name, color, transactionCount, ruleCount, builtInReason}` by name. The counts include
+  deleted transactions, which move with the category too.
+- `POST /api/Categories` `{name, color}`, `PUT /api/Categories/{id}` `{name, color}`: names are trimmed, up to 50
+  characters and unique ignoring case (409 otherwise); `color` is `#RRGGBB`, stored upper-case. Renaming or
+  recolouring shows everywhere at once: everything refers to the category by id.
+- `DELETE /api/Categories/{id}?moveTo={id}`: moves its transactions (deleted ones included) and rules to `moveTo`
+  (`Other` when omitted), then deletes it; a budget that counted it stops counting it. `Other` (where transactions no
+  rule matches go) and `Rent` (whose payments replace the generated monthly rent) are built in: they can be renamed
+  and recoloured, but deleting them is a 409 with the reason, also given as `builtInReason`.
+
+Transactions, rules and budgets take categories by id (`categoryId`, `categoryIds`) and return them as
+`{id, name, color}`. The reports list their categories the same way and key each month's values by category name.
 
 ## Category rules
 
@@ -173,24 +192,26 @@ The rules live in the database and are edited in the app (the frontend's Rules p
 needs no redeploy:
 
 - `GET /api/CategoryRules`: all rules in order, as `{id, keyword, category, position}` (positions run 0..n-1).
-- `POST /api/CategoryRules` `{keyword, category, position?}`: adds a rule at the end, or inserts it at
+- `POST /api/CategoryRules` `{keyword, categoryId, position?}`: adds a rule at the end, or inserts it at
   `position`. Keywords are stored trimmed and upper-case, up to 100 characters, and unique (409 otherwise).
-- `PUT /api/CategoryRules/{id}` `{keyword, category}`, `DELETE /api/CategoryRules/{id}`.
+- `PUT /api/CategoryRules/{id}` `{keyword, categoryId}`, `DELETE /api/CategoryRules/{id}`.
 - `POST /api/CategoryRules/{id}/Move` `{position}`: moves a rule (past the end means last); returns all rules.
-- `POST /api/CategoryRules/Preview` `{keyword, category, excludeTransactionId?}`: how many stored transactions
+- `POST /api/CategoryRules/Preview` `{keyword, categoryId, excludeTransactionId?}`: how many stored transactions
   would change category if the rule were added first and the rules re-applied, with up to five examples.
 
 Changed rules apply to later imports; `POST /api/Transaction/ApplyRules` applies them to stored
 transactions. `CategoryRules` in `import-rules.json` is only the initial set: the API copies it into the
 database (one rule per keyword, in order) the first time it starts on a database, and never again, even after
-every rule was deleted. The CLI has no database, so it still categorises with the file's rules.
+every rule was deleted. The file names categories; a name means the default category first called that (renamed or
+not), and rules for a category deleted in the app are left out. The CLI has no database, so it still categorises
+with the file's rules, into the default categories.
 
 ## Budgets
 
 A budget's `period` is `Total` (everything linked counts, e.g. a trip) or `Monthly` (only transactions dated
 in the current month count, so it starts over every month).
 
-A monthly budget can also have `categories` (a list, sent with the budget on `POST`/`PUT`, returned with it): it
+A monthly budget can also have categories (`categoryIds` on `POST`/`PUT`, returned as `categories`): it
 then counts this month's spending in those categories by itself, with no linking. That is spending as the reports
 count it (`Spending` minus `Refund`, so transfers and ignored rows stay out), deleted transactions excluded, and
 transactions linked to another budget left to that one. A transaction linked to the budget and also in its

@@ -25,8 +25,7 @@ public class TransactionInputDto
     public decimal Amount { get; set; }
 
     /// <summary>Picked by hand when given, so re-applying the rules keeps it.</summary>
-    [EnumDataType(typeof(Category))]
-    public Category? Category { get; set; }
+    public Guid? CategoryId { get; set; }
 
     /// <summary>Picked by hand when given, so re-applying the rules keeps it. Must fit the direction of the money.</summary>
     [EnumDataType(typeof(Flow))]

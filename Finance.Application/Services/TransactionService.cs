@@ -18,6 +18,7 @@ public class TransactionService(
     ICategoryRuleRepository categoryRuleRepository,
     IFlowRuleRepository flowRuleRepository,
     IAccountRepository accountRepository,
+    ICategoryRepository categoryRepository,
     IEnumerable<IStatementParser> statementParsers) : ITransactionService
 {
     private const string DuplicateMessage = "An identical transaction (same account, date, amount and description) already exists.";
@@ -36,8 +37,14 @@ public class TransactionService(
                 ? "Money out can be spending, a transfer or ignored."
                 : "Money in can be income, a refund, a transfer or ignored.");
         }
+        if (transaction.CategoryLocked)
+        {
+            await GetCategoryAsync(transaction.CategoryId, cancellationToken);
+        }
         // What wasn't picked follows the rules, like an imported row's.
         (await GetClassifierAsync(cancellationToken)).Classify(transaction, account.Type);
+        // For the response; the rules only ever give a category that exists.
+        transaction.Category = await categoryRepository.GetByIdAsync(transaction.CategoryId, cancellationToken);
 
         var existing = await transactionRepository.FindByHashAsync(transaction.AccountId, transaction.Hash, cancellationToken);
         if (existing is not null && !allowDuplicate)
@@ -114,7 +121,7 @@ public class TransactionService(
         // so the month counts rent once. Hidden, not deleted: it can be restored. (Other accounts never had it; a
         // rent-category purchase on the card, say a storage unit, is not the apartment's rent.)
         var rentMonths = parsed
-            .Where(t => account.Type == AccountType.Chequing && t is { Category: Category.Rent, TransactionType: TransactionType.Debit })
+            .Where(t => account.Type == AccountType.Chequing && t.CategoryId == Category.RentId && t.TransactionType == TransactionType.Debit)
             .Select(t => new DateTime(t.Date.Year, t.Date.Month, 1, 0, 0, 0, DateTimeKind.Utc))
             .Distinct()
             .ToList();
@@ -184,7 +191,7 @@ public class TransactionService(
         await transactionRepository.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<Transaction> UpdateAsync(Guid id, string description, Category category, Flow? flow,
+    public async Task<Transaction> UpdateAsync(Guid id, string description, Guid categoryId, Flow? flow,
         CancellationToken cancellationToken = default)
     {
         var transaction = await transactionRepository.GetByIdAsync(id, cancellationToken)
@@ -204,9 +211,10 @@ public class TransactionService(
         // The hash is left as imported: it identifies the statement row, so a re-import still recognises it.
         transaction.Description = description.Trim();
         // Only a category the user actually changed is locked; fixing just the description leaves it to the rules.
-        if (transaction.Category != category)
+        if (transaction.CategoryId != categoryId)
         {
-            transaction.Category = category;
+            transaction.Category = await GetCategoryAsync(categoryId, cancellationToken);
+            transaction.CategoryId = categoryId;
             transaction.CategoryLocked = true;
         }
         await transactionRepository.SaveChangesAsync(cancellationToken);
@@ -223,6 +231,10 @@ public class TransactionService(
         logger.LogInformation("Applied the rules: {Checked} checked, {Updated} updated", transactions.Count, updated);
         return new RulesResult(transactions.Count, updated);
     }
+
+    private async Task<Category> GetCategoryAsync(Guid id, CancellationToken cancellationToken) =>
+        await categoryRepository.GetByIdAsync(id, cancellationToken)
+        ?? throw new InvalidInputException("categoryId", "That category doesn't exist.");
 
     private async Task<TransactionClassifier> GetClassifierAsync(CancellationToken cancellationToken) =>
         new(new CategoryMatcher(await categoryRuleRepository.GetAllAsync(cancellationToken)),

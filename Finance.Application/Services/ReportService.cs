@@ -3,6 +3,7 @@ using Finance.Application.Abstractions;
 using Finance.Application.Reports;
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
+using Finance.Contracts.Outputs;
 using Finance.Contracts.Reports;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
@@ -93,21 +94,23 @@ public class ReportService(ITransactionRepository transactionRepository, Reporti
             ? monthlyRecords.Where(m => m.YearMonth < before).ToList()
             : [];
         var averaged = completeMonths.Count > 0 ? completeMonths : monthlyRecords;
+        // The transactions come with their categories; names are unique, so values are keyed by name.
         var categories = transactions
-            .Select(t => t.Category)
-            .Distinct()
-            .OrderBy(c => c)
+            .Select(t => t.Category!)
+            .DistinctBy(c => c.Id)
+            .OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
+        var names = categories.ToDictionary(c => c.Id, c => c.Name);
 
         var graphData = new MonthlyCategorizedGraphData
         {
-            Categories = categories,
+            Categories = categories.Select(c => new CategoryReferenceDto { Id = c.Id, Name = c.Name, Color = c.Color }).ToList(),
             // No transactions yet (e.g. the 1st of the month) is a valid, empty report.
             AverageMonthlyTotal = averaged.Count > 0 ? averaged.Average(m => m.Total) : 0,
             MonthlyData = monthlyRecords.Select(m => new MonthDataPoint
             {
                 Month = m.YearMonth.ToString("MMM yyyy", CultureInfo.InvariantCulture),
-                CategoryValues = m.Categories,
+                CategoryValues = m.Categories.ToDictionary(c => names[c.Key], c => c.Value),
                 Total = m.Total
             }).ToList()
         };

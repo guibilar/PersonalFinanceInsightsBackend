@@ -24,19 +24,19 @@ public class CategoryRuleTests
     {
         var options = new ConfigurationBuilder().AddJsonFile("import-rules.json").Build()
             .GetSection(ImportOptions.SectionName).Get<ImportOptions>()!;
-        var rules = options.ToCategoryRules();
+        var rules = options.ToCategoryRules(DefaultCategories.IdOf);
         foreach (var pack in options.RulePacks)
         {
-            rules.AddRange(pack.ToCategoryRules(rules.Select(r => r.Keyword).ToHashSet(), rules.Count));
+            rules.AddRange(pack.ToCategoryRules(rules.Select(r => r.Keyword).ToHashSet(), rules.Count, DefaultCategories.IdOf));
         }
         return rules;
     }
 
-    private static Transaction Stored(string description, Category category, AccountType account = AccountType.CreditCard,
+    private static Transaction Stored(string description, Guid category, AccountType account = AccountType.CreditCard,
         bool locked = false, bool hidden = false) => new()
     {
         Id = Guid.NewGuid(), Date = new DateTime(2026, 3, 10, 0, 0, 0, DateTimeKind.Utc), Description = description, Amount = 10,
-        Category = category, TransactionType = TransactionType.Debit, AccountId = TestAccounts.Id(account),
+        CategoryId = category, TransactionType = TransactionType.Debit, AccountId = TestAccounts.Id(account),
         Flow = TestAccounts.DefaultFlow(account, TransactionType.Debit), Hash = Guid.NewGuid().ToString(),
         CategoryLocked = locked, Hidden = hidden
     };
@@ -44,9 +44,12 @@ public class CategoryRuleTests
     private static async Task<List<CategoryRuleOutputDto>> GetRulesAsync(HttpClient client) =>
         await (await client.GetAsync(Rules)).ReadAsync<List<CategoryRuleOutputDto>>();
 
+    /// <summary>A default category's id by its name; a made-up id for any other name, and null for null.</summary>
+    private static Guid? CategoryId(string? name) => name is null ? null : DefaultCategories.IdOf(name) ?? Guid.NewGuid();
+
     private static async Task<CategoryRuleOutputDto> AddRuleAsync(HttpClient client, string keyword, string category, int? position = null)
     {
-        var response = await client.PostAsJsonAsync(Rules, new { keyword, category, position });
+        var response = await client.PostAsJsonAsync(Rules, new { keyword, categoryId = CategoryId(category), position });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return await response.ReadAsync<CategoryRuleOutputDto>();
     }
@@ -64,8 +67,8 @@ public class CategoryRuleTests
         var rules = await GetRulesAsync(factory.CreateClient());
 
         Assert.True(SeedRules.Count > 50);
-        Assert.Equal(SeedRules.Select(r => (r.Keyword, r.Category)), rules.Select(r => (r.Keyword, r.Category)));
-        Assert.Equal(("METRO", Category.Groceries), (rules[0].Keyword, rules[0].Category));
+        Assert.Equal(SeedRules.Select(r => (r.Keyword, r.CategoryId)), rules.Select(r => (r.Keyword, r.Category.Id)));
+        Assert.Equal(("METRO", DefaultCategories.Groceries, "Groceries"), (rules[0].Keyword, rules[0].Category.Id, rules[0].Category.Name));
         AssertContiguous(rules);
     }
 
@@ -98,7 +101,7 @@ public class CategoryRuleTests
 
         var added = await AddRuleAsync(client, "  sq *Corner Store ", "Groceries");
 
-        Assert.Equal(("SQ *CORNER STORE", Category.Groceries, SeedRules.Count), (added.Keyword, added.Category, added.Position));
+        Assert.Equal(("SQ *CORNER STORE", DefaultCategories.Groceries, SeedRules.Count), (added.Keyword, added.Category.Id, added.Position));
         var rules = await GetRulesAsync(client);
         Assert.Equal(added.Id, rules[^1].Id);
         AssertContiguous(rules);
@@ -127,7 +130,7 @@ public class CategoryRuleTests
     {
         await using var factory = new FinanceApiFactory();
 
-        var response = await factory.CreateClient().PostAsJsonAsync(Rules, new { keyword, category = "Dining" });
+        var response = await factory.CreateClient().PostAsJsonAsync(Rules, new { keyword, categoryId = DefaultCategories.Dining });
 
         Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
         Assert.Contains("METRO", (await response.ReadAsync<ProblemDetails>()).Detail);
@@ -150,7 +153,7 @@ public class CategoryRuleTests
         await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
 
-        var response = await client.PostAsJsonAsync(Rules, new { keyword, category, position });
+        var response = await client.PostAsJsonAsync(Rules, new { keyword, categoryId = CategoryId(category), position });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(SeedRules.Count, (await GetRulesAsync(client)).Count);
@@ -163,11 +166,11 @@ public class CategoryRuleTests
         var client = factory.CreateClient();
         var metro = (await GetRulesAsync(client))[0];
 
-        var response = await client.PutAsJsonAsync($"{Rules}/{metro.Id}", new { keyword = " metro inc ", category = "Shopping" });
+        var response = await client.PutAsJsonAsync($"{Rules}/{metro.Id}", new { keyword = " metro inc ", categoryId = DefaultCategories.Shopping });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var updated = await response.ReadAsync<CategoryRuleOutputDto>();
-        Assert.Equal(("METRO INC", Category.Shopping, 0), (updated.Keyword, updated.Category, updated.Position));
+        Assert.Equal(("METRO INC", DefaultCategories.Shopping, 0), (updated.Keyword, updated.Category.Id, updated.Position));
         Assert.Equal("METRO INC", (await GetRulesAsync(client))[0].Keyword);
     }
 
@@ -178,8 +181,8 @@ public class CategoryRuleTests
         var client = factory.CreateClient();
         var metro = (await GetRulesAsync(client))[0];
 
-        var taken = await client.PutAsJsonAsync($"{Rules}/{metro.Id}", new { keyword = "grocery", category = "Groceries" });
-        var own = await client.PutAsJsonAsync($"{Rules}/{metro.Id}", new { keyword = "metro", category = "Dining" });
+        var taken = await client.PutAsJsonAsync($"{Rules}/{metro.Id}", new { keyword = "grocery", categoryId = DefaultCategories.Groceries });
+        var own = await client.PutAsJsonAsync($"{Rules}/{metro.Id}", new { keyword = "metro", categoryId = DefaultCategories.Dining });
 
         Assert.Equal(HttpStatusCode.Conflict, taken.StatusCode);
         Assert.Equal(HttpStatusCode.OK, own.StatusCode);
@@ -193,7 +196,7 @@ public class CategoryRuleTests
         var id = Guid.NewGuid();
 
         Assert.Equal(HttpStatusCode.NotFound,
-            (await client.PutAsJsonAsync($"{Rules}/{id}", new { keyword = "X", category = "Dining" })).StatusCode);
+            (await client.PutAsJsonAsync($"{Rules}/{id}", new { keyword = "X", categoryId = DefaultCategories.Dining })).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.DeleteAsync($"{Rules}/{id}")).StatusCode);
         Assert.Equal(HttpStatusCode.NotFound, (await client.PostAsJsonAsync($"{Rules}/{id}/Move", new { position = 0 })).StatusCode);
     }
@@ -249,8 +252,8 @@ public class CategoryRuleTests
         await AddRuleAsync(client, "corner store", "Groceries");
         await client.PostAsync("/api/Transaction/Import", ImportTests.Statement("2026-09-04,SQ *CORNER STORE #12 TORONTO,8.00,"));
 
-        var categories = await factory.QueryAsync(db => db.Transactions.OrderBy(t => t.Date).Select(t => t.Category).ToListAsync());
-        Assert.Equal([Category.Other, Category.Groceries], categories);
+        var categories = await factory.QueryAsync(db => db.Transactions.OrderBy(t => t.Date).Select(t => t.CategoryId).ToListAsync());
+        Assert.Equal([DefaultCategories.Other, DefaultCategories.Groceries], categories);
     }
 
     [Fact]
@@ -266,8 +269,8 @@ public class CategoryRuleTests
             2026-09-04,METRO #123 OSHAWA,40.00,
             """));
 
-        var categories = await factory.QueryAsync(db => db.Transactions.OrderBy(t => t.Date).Select(t => t.Category).ToListAsync());
-        Assert.Equal([Category.Transportation, Category.Groceries], categories);
+        var categories = await factory.QueryAsync(db => db.Transactions.OrderBy(t => t.Date).Select(t => t.CategoryId).ToListAsync());
+        Assert.Equal([DefaultCategories.Transportation, DefaultCategories.Groceries], categories);
     }
 
     [Fact]
@@ -283,10 +286,10 @@ public class CategoryRuleTests
 
         // Nothing generated and nothing dropped: the payments as paid, in whatever category the rules said then.
         var stored = await factory.QueryAsync(db => db.Transactions.OrderBy(t => t.Date)
-            .Select(t => new { t.Date.Month, t.Description, t.Amount, t.Category }).ToListAsync());
+            .Select(t => new { t.Date.Month, t.Description, t.Amount, t.CategoryId }).ToListAsync());
         Assert.Equal([
-            new { Month = 1, Description = "VALIANT RENTAL PAYMENT", Amount = 1900.00m, Category = Category.Rent },
-            new { Month = 2, Description = "VALIANT RENTAL PAYMENT", Amount = 1900.00m, Category = Category.Other },
+            new { Month = 1, Description = "VALIANT RENTAL PAYMENT", Amount = 1900.00m, CategoryId = DefaultCategories.Rent },
+            new { Month = 2, Description = "VALIANT RENTAL PAYMENT", Amount = 1900.00m, CategoryId = DefaultCategories.Other },
         ], stored);
     }
 
@@ -295,13 +298,13 @@ public class CategoryRuleTests
     {
         await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
-        var corner = Stored("SQ *CORNER STORE #12", Category.Other);
-        var walmart = Stored("WAL-MART #3059", Category.Groceries);           // its seeded rule is deleted below
-        var handPicked = Stored("CORNER STORE #9", Category.Pet, locked: true);
-        var savings = Stored("CORNER STORE TRANSFER", Category.Other, AccountType.Savings);
-        var hidden = Stored("CORNER STORE #3", Category.Other, hidden: true);
+        var corner = Stored("SQ *CORNER STORE #12", DefaultCategories.Other);
+        var walmart = Stored("WAL-MART #3059", DefaultCategories.Groceries);           // its seeded rule is deleted below
+        var handPicked = Stored("CORNER STORE #9", DefaultCategories.Pet, locked: true);
+        var savings = Stored("CORNER STORE TRANSFER", DefaultCategories.Other, AccountType.Savings);
+        var hidden = Stored("CORNER STORE #3", DefaultCategories.Other, hidden: true);
         // Rent generated before real payments were imported: the migration locked its category.
-        var fixedRent = Stored("Monthly Rent", Category.Rent, AccountType.Chequing, locked: true);
+        var fixedRent = Stored("Monthly Rent", DefaultCategories.Rent, AccountType.Chequing, locked: true);
         await factory.SeedAsync(db => db.Transactions.AddRange(corner, walmart, handPicked, savings, hidden, fixedRent));
 
         await AddRuleAsync(client, "CORNER STORE", "Groceries");
@@ -311,29 +314,29 @@ public class CategoryRuleTests
 
         // Checked: everything visible whose category or flow the rules decide; the hand-picked categories still get their flow checked.
         Assert.Equal((5, 2), (result.Checked, result.Updated));
-        var categories = await factory.QueryAsync(db => db.Transactions.IgnoreQueryFilters().ToDictionaryAsync(t => t.Id, t => t.Category));
-        Assert.Equal(Category.Groceries, categories[corner.Id]);
-        Assert.Equal(Category.Other, categories[walmart.Id]);
-        Assert.Equal(Category.Pet, categories[handPicked.Id]);
-        Assert.Equal(Category.Other, categories[savings.Id]);
-        Assert.Equal(Category.Other, categories[hidden.Id]);
-        Assert.Equal(Category.Rent, categories[fixedRent.Id]);
+        var categories = await factory.QueryAsync(db => db.Transactions.IgnoreQueryFilters().ToDictionaryAsync(t => t.Id, t => t.CategoryId));
+        Assert.Equal(DefaultCategories.Groceries, categories[corner.Id]);
+        Assert.Equal(DefaultCategories.Other, categories[walmart.Id]);
+        Assert.Equal(DefaultCategories.Pet, categories[handPicked.Id]);
+        Assert.Equal(DefaultCategories.Other, categories[savings.Id]);
+        Assert.Equal(DefaultCategories.Other, categories[hidden.Id]);
+        Assert.Equal(DefaultCategories.Rent, categories[fixedRent.Id]);
     }
 
     [Fact]
     public async Task Preview_CountsWhatApplyingTheRuleFirstWouldChange()
     {
         await using var factory = new FinanceApiFactory();
-        var edited = Stored("SQ *CORNER STORE #12", Category.Other);
-        var others = Enumerable.Range(1, 6).Select(n => Stored($"SQ *CORNER STORE #{n % 3}", Category.Other)).ToList();
-        var seededRuleSaysShopping = Stored("CORNER STORE @ WALMART", Category.Shopping);
-        var alreadyGroceries = Stored("CORNER STORE #7", Category.Groceries);
+        var edited = Stored("SQ *CORNER STORE #12", DefaultCategories.Other);
+        var others = Enumerable.Range(1, 6).Select(n => Stored($"SQ *CORNER STORE #{n % 3}", DefaultCategories.Other)).ToList();
+        var seededRuleSaysShopping = Stored("CORNER STORE @ WALMART", DefaultCategories.Shopping);
+        var alreadyGroceries = Stored("CORNER STORE #7", DefaultCategories.Groceries);
         var skipped = new[]
         {
-            Stored("CORNER STORE #9", Category.Pet, locked: true),
-            Stored("CORNER STORE TRANSFER", Category.Other, AccountType.Savings),
-            Stored("CORNER STORE #3", Category.Other, hidden: true),
-            Stored("SOMEWHERE ELSE", Category.Other),
+            Stored("CORNER STORE #9", DefaultCategories.Pet, locked: true),
+            Stored("CORNER STORE TRANSFER", DefaultCategories.Other, AccountType.Savings),
+            Stored("CORNER STORE #3", DefaultCategories.Other, hidden: true),
+            Stored("SOMEWHERE ELSE", DefaultCategories.Other),
         };
         await factory.SeedAsync(db =>
         {
@@ -341,7 +344,7 @@ public class CategoryRuleTests
         });
 
         var response = await factory.CreateClient().PostAsJsonAsync($"{Rules}/Preview",
-            new { keyword = " corner store ", category = "Groceries", excludeTransactionId = edited.Id });
+            new { keyword = " corner store ", categoryId = DefaultCategories.Groceries, excludeTransactionId = edited.Id });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var preview = await response.ReadAsync<CategoryRulePreviewDto>();
@@ -358,10 +361,10 @@ public class CategoryRuleTests
     {
         await using var factory = new FinanceApiFactory();
         await factory.SeedAsync(db => db.Transactions.AddRange(
-            Enumerable.Range(1, 8).Select(n => Stored($"BAKERY #{n}", Category.Other))));
+            Enumerable.Range(1, 8).Select(n => Stored($"BAKERY #{n}", DefaultCategories.Other))));
 
         var preview = await (await factory.CreateClient().PostAsJsonAsync($"{Rules}/Preview",
-            new { keyword = "bakery", category = "Dining" })).ReadAsync<CategoryRulePreviewDto>();
+            new { keyword = "bakery", categoryId = DefaultCategories.Dining })).ReadAsync<CategoryRulePreviewDto>();
 
         Assert.Equal((8, 5), (preview.Count, preview.Examples.Count));
     }
@@ -371,7 +374,7 @@ public class CategoryRuleTests
     {
         await using var factory = new FinanceApiFactory();
 
-        var response = await factory.CreateClient().PostAsJsonAsync($"{Rules}/Preview", new { keyword = "", category = "Dining" });
+        var response = await factory.CreateClient().PostAsJsonAsync($"{Rules}/Preview", new { keyword = "", categoryId = DefaultCategories.Dining });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }

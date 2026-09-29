@@ -8,7 +8,7 @@ public class TransactionOutputDto
     public DateTime Date { get; set; }
     public required string Description { get; set; }
     public decimal Amount { get; set; }
-    public Category Category { get; set; }
+    public required CategoryReferenceDto Category { get; set; }
     public bool CategoryLocked { get; set; }
     public bool Hidden { get; set; }
     public TransactionType? TransactionType { get; set; }

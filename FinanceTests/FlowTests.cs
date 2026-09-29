@@ -39,7 +39,7 @@ public class FlowTests
         DateTime? date = null, Flow? flow = null, bool flowLocked = false) => new()
     {
         Id = Guid.NewGuid(), Date = date ?? new DateTime(2026, 3, 10, 0, 0, 0, DateTimeKind.Utc), Description = description,
-        Amount = amount, Category = Category.Other, TransactionType = direction, AccountId = TestAccounts.Id(account),
+        Amount = amount, CategoryId = DefaultCategories.Other, TransactionType = direction, AccountId = TestAccounts.Id(account),
         Flow = flow ?? TestAccounts.DefaultFlow(account, direction), FlowLocked = flowLocked, Hash = Guid.NewGuid().ToString()
     };
 
@@ -152,9 +152,9 @@ public class FlowTests
         await factory.SeedAsync(db => db.Transactions.Add(transaction));
 
         var picked = await (await client.PutAsJsonAsync($"/api/Transaction/{transaction.Id}",
-            new { description = "Dinner paid back", category = "Dining", flow = "Refund" })).ReadAsync<TransactionOutputDto>();
+            new { description = "Dinner paid back", categoryId = DefaultCategories.Dining, flow = "Refund" })).ReadAsync<TransactionOutputDto>();
         var descriptionOnly = await (await client.PutAsJsonAsync($"/api/Transaction/{transaction.Id}",
-            new { description = "Dinner paid back by Sam", category = "Dining" })).ReadAsync<TransactionOutputDto>();
+            new { description = "Dinner paid back by Sam", categoryId = DefaultCategories.Dining })).ReadAsync<TransactionOutputDto>();
         await client.PostAsync("/api/Transaction/ApplyRules", null);
 
         Assert.Equal((Flow.Refund, true), (picked.Flow, picked.FlowLocked));
@@ -170,7 +170,7 @@ public class FlowTests
         await factory.SeedAsync(db => db.Transactions.Add(transaction));
 
         var updated = await (await factory.CreateClient().PutAsJsonAsync($"/api/Transaction/{transaction.Id}",
-            new { description = "METRO", category = "Groceries", flow = "Spending" })).ReadAsync<TransactionOutputDto>();
+            new { description = "METRO", categoryId = DefaultCategories.Groceries, flow = "Spending" })).ReadAsync<TransactionOutputDto>();
 
         Assert.False(updated.FlowLocked);
     }
@@ -187,7 +187,7 @@ public class FlowTests
         await factory.SeedAsync(db => db.Transactions.Add(transaction));
 
         var response = await factory.CreateClient().PutAsJsonAsync($"/api/Transaction/{transaction.Id}",
-            new { description = "SOMETHING", category = "Other", flow });
+            new { description = "SOMETHING", categoryId = DefaultCategories.Other, flow });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("flow", (await response.ReadAsync<HttpValidationProblemDetails>()).Errors.Keys);

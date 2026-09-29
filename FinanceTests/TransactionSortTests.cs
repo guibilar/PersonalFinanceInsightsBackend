@@ -15,17 +15,17 @@ public class TransactionSortTests : IAsyncLifetime
     public async ValueTask InitializeAsync()
     {
         _client = _factory.CreateClient();
-        Transaction Tx(string description, decimal amount, int day, Category category) => new()
+        Transaction Tx(string description, decimal amount, int day, Guid category) => new()
         {
-            Id = Guid.NewGuid(), Description = description, Amount = amount, Category = category,
+            Id = Guid.NewGuid(), Description = description, Amount = amount, CategoryId = category,
             Date = new DateTime(2026, 3, day, 0, 0, 0, DateTimeKind.Utc), Hash = Guid.NewGuid().ToString(),
             AccountId = Account.DefaultCreditCardId, TransactionType = TransactionType.Debit
         };
         await _factory.SeedAsync(db => db.Transactions.AddRange(
-            Tx("Bravo", 20, 2, Category.Shopping),
-            Tx("alpha", 5, 3, Category.Dining),
-            Tx("Charlie", 50, 1, Category.Groceries),
-            Tx("Delta", 20, 4, Category.Utilities)));
+            Tx("Bravo", 20, 2, DefaultCategories.Shopping),
+            Tx("alpha", 5, 3, DefaultCategories.Dining),
+            Tx("Charlie", 50, 1, DefaultCategories.Groceries),
+            Tx("Delta", 20, 4, DefaultCategories.Utilities)));
     }
 
     public ValueTask DisposeAsync() => _factory.DisposeAsync();

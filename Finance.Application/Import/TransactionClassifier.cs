@@ -15,8 +15,8 @@ public class TransactionClassifier(CategoryMatcher categories, FlowMatcher flows
         if (!transaction.CategoryLocked && account != AccountType.Savings)
         {
             var category = categories.Categorize(transaction.Description);
-            changed |= category != transaction.Category;
-            transaction.Category = category;
+            changed |= category != transaction.CategoryId;
+            transaction.CategoryId = category;
         }
         if (!transaction.FlowLocked)
         {

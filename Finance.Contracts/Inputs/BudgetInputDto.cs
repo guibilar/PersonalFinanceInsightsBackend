@@ -24,5 +24,5 @@ public class BudgetInputDto
     /// Categories the budget counts by itself: this month's spending in them, with no linking. Monthly budgets
     /// only, and a category belongs to one budget at most.
     /// </summary>
-    public List<Category> Categories { get; set; } = [];
+    public List<Guid> CategoryIds { get; set; } = [];
 }

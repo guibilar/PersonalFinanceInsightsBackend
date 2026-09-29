@@ -22,7 +22,7 @@ class Program
         var parser = new CibcCsvParser();
         // No database here: the rules in import-rules.json, not the ones edited in the app.
         var classifier = new TransactionClassifier(
-            new CategoryMatcher(options.ToCategoryRules()), new FlowMatcher(options.ToFlowRules()));
+            new CategoryMatcher(options.ToCategoryRules(DefaultCategories.IdOf)), new FlowMatcher(options.ToFlowRules()));
 
         List<Transaction> Read(string file, AccountType account)
         {
@@ -54,7 +54,7 @@ class Program
         var all = creditCard.Concat(chequing).Concat(recordsSavings).ToList();
         // Spending: purchases minus refunds, whichever account (transfers and income stay out).
         var records = all.Where(t => t.Flow is Flow.Spending or Flow.Refund).ToList();
-        var recordsWithOutRent = records.Where(t => t.Category != Category.Rent).ToList();
+        var recordsWithOutRent = records.Where(t => t.CategoryId != Category.RentId).ToList();
         var recordsIncome = all.Where(t => t.Flow == Flow.Income).ToList();
 
         // Group totals per month/category
@@ -72,8 +72,12 @@ class Program
         SpendingCalculator.GenerateMonthlyTotalsGraph(monthly, avgMonthlyTotal, income, "MonthlyTrend");
         SpendingCalculator.GenerateMonthlyTotalsGraph(monthlyWithOutRent, avgMonthlyTotalWithOutRent, income, "MonthlyTrendWithoutRent");
 
-        var categories = records.Select(r => r.Category).Distinct().OrderBy(c => c).ToList();
-        var categoriesWithOutRent = recordsWithOutRent.Select(r => r.Category).Distinct().OrderBy(c => c).ToList();
+        // No database: the only categories are the defaults, which the rules in the file name.
+        List<Category> CategoriesOf(List<Transaction> transactions) => DefaultCategories.Create()
+            .Where(c => transactions.Any(t => t.CategoryId == c.Id))
+            .ToList();
+        var categories = CategoriesOf(records);
+        var categoriesWithOutRent = CategoriesOf(recordsWithOutRent);
 
         // ================= Savings Chart: Savings Totals =================
         SavingsCalculator.GenerateMonthlyTotalsSavingsGraph(monthlySavings, "MonthlySavingsTrend");

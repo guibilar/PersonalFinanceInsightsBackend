@@ -1,5 +1,4 @@
 using System.ComponentModel.DataAnnotations;
-using Finance.Domain.Enums;
 
 namespace Finance.Contracts.Inputs;
 
@@ -9,6 +8,6 @@ public class CategoryRuleUpdateDto
     [Required(AllowEmptyStrings = false), MaxLength(TextLimits.CategoryRuleKeyword)]
     public string Keyword { get; set; } = string.Empty;
 
-    [Required, EnumDataType(typeof(Category))]
-    public Category? Category { get; set; }
+    [Required]
+    public Guid? CategoryId { get; set; }
 }

@@ -10,6 +10,6 @@ public class CategoryRuleRepository(FinanceDbContext dbContext)
 {
     public Task<List<CategoryRule>> GetAllAsync(CancellationToken cancellationToken = default)
     {
-        return DbContext.CategoryRules.OrderBy(r => r.Position).ThenBy(r => r.Keyword).ToListAsync(cancellationToken);
+        return DbContext.CategoryRules.Include(r => r.Category).OrderBy(r => r.Position).ThenBy(r => r.Keyword).ToListAsync(cancellationToken);
     }
 }

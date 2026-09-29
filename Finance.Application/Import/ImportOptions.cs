@@ -31,15 +31,11 @@ public class ImportOptions
     /// <see cref="CategoryRules"/> as one rule per keyword, in order (rule order, then keyword order). A keyword
     /// that appears again later is left out: the first one always wins anyway.
     /// </summary>
-    public List<CategoryRule> ToCategoryRules()
-    {
-        var keywords = new HashSet<string>();
-        return CategoryRules
-            .SelectMany(rule => rule.Keywords.Select(keyword => (Keyword: CategoryRule.NormalizeKeyword(keyword), rule.Category)))
-            .Where(rule => rule.Keyword.Length > 0 && keywords.Add(rule.Keyword))
-            .Select((rule, position) => new CategoryRule { Keyword = rule.Keyword, Category = rule.Category, Position = position })
-            .ToList();
-    }
+    /// <param name="categoryId">
+    /// The category a name in the file stands for, or null when there is none (its rules are then left out).
+    /// </param>
+    public List<CategoryRule> ToCategoryRules(Func<string, Guid?> categoryId) =>
+        CategoryKeywords.ToRules(CategoryRules, new HashSet<string>(), 0, categoryId);
 
     /// <summary>
     /// <see cref="FlowRules"/> as one rule per keyword. A keyword that appears again later is left out, and so are
@@ -67,16 +63,12 @@ public class RulePack
     public List<CategoryKeywords> CategoryRules { get; set; } = [];
     public List<FlowKeywords> FlowRules { get; set; } = [];
 
-    /// <summary>One rule per keyword, positioned from <paramref name="firstPosition"/> on; keywords in <paramref name="existing"/> are left out.</summary>
-    public List<CategoryRule> ToCategoryRules(ISet<string> existing, int firstPosition)
-    {
-        var seen = new HashSet<string>(existing);
-        return CategoryRules
-            .SelectMany(rule => rule.Keywords.Select(keyword => (Keyword: CategoryRule.NormalizeKeyword(keyword), rule.Category)))
-            .Where(rule => rule.Keyword.Length > 0 && seen.Add(rule.Keyword))
-            .Select((rule, index) => new CategoryRule { Keyword = rule.Keyword, Category = rule.Category, Position = firstPosition + index })
-            .ToList();
-    }
+    /// <summary>
+    /// One rule per keyword, positioned from <paramref name="firstPosition"/> on; keywords in <paramref name="existing"/>
+    /// are left out, and so are rules for a category name <paramref name="categoryId"/> doesn't know.
+    /// </summary>
+    public List<CategoryRule> ToCategoryRules(ISet<string> existing, int firstPosition, Func<string, Guid?> categoryId) =>
+        CategoryKeywords.ToRules(CategoryRules, new HashSet<string>(existing), firstPosition, categoryId);
 
     /// <summary>One rule per keyword; keywords in <paramref name="existing"/> and spending rules are left out.</summary>
     public List<FlowRule> ToFlowRules(ISet<string> existing)
@@ -94,8 +86,20 @@ public class RulePack
 /// <summary>An initial category rule from import-rules.json: any of the keywords gives the category.</summary>
 public class CategoryKeywords
 {
-    public Category Category { get; set; }
+    /// <summary>The category's name (one of the default categories', see <see cref="DefaultCategories"/>).</summary>
+    public string Category { get; set; } = string.Empty;
     public List<string> Keywords { get; set; } = [];
+
+    /// <summary>One rule per keyword, skipping keywords already in <paramref name="seen"/> and unknown categories.</summary>
+    internal static List<CategoryRule> ToRules(IEnumerable<CategoryKeywords> rules, HashSet<string> seen, int firstPosition,
+        Func<string, Guid?> categoryId) =>
+        rules
+            .Select(rule => (Rule: rule, CategoryId: categoryId(rule.Category)))
+            .Where(rule => rule.CategoryId is not null)
+            .SelectMany(rule => rule.Rule.Keywords.Select(keyword => (Keyword: CategoryRule.NormalizeKeyword(keyword), CategoryId: rule.CategoryId!.Value)))
+            .Where(rule => rule.Keyword.Length > 0 && seen.Add(rule.Keyword))
+            .Select((rule, index) => new CategoryRule { Keyword = rule.Keyword, CategoryId = rule.CategoryId, Position = firstPosition + index })
+            .ToList();
 }
 
 /// <summary>An initial flow rule from import-rules.json: any of the keywords gives the flow.</summary>

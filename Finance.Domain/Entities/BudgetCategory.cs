@@ -1,5 +1,3 @@
-using Finance.Domain.Enums;
-
 namespace Finance.Domain.Entities;
 
 /// <summary>
@@ -8,7 +6,8 @@ namespace Finance.Domain.Entities;
 /// </summary>
 public class BudgetCategory
 {
-    public Category Category { get; set; }
+    public Guid CategoryId { get; set; }
+    public Category? Category { get; set; }
     public Guid BudgetId { get; set; }
     public Budget? Budget { get; set; }
 }

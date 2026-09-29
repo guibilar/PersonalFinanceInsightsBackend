@@ -16,7 +16,7 @@ public class TransactionFilterDto
     /// <summary>Inclusive: transactions on this date are returned.</summary>
     public DateTime? EndDate { get; set; }
     public string? Description { get; set; }
-    public Category? Category { get; set; }
+    public Guid? CategoryId { get; set; }
     public Guid? BudgetId { get; set; }
     /// <summary>True: only hidden (deleted) transactions, to restore one. False (the default): only visible ones.</summary>
     public bool Hidden { get; set; }

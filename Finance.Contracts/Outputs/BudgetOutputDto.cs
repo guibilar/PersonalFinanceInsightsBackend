@@ -9,7 +9,8 @@ public class BudgetOutputDto
     public required string Description { get; set; }
     public Status Status { get; set; }
     public BudgetPeriod Period { get; set; }
-    public List<Category> Categories { get; set; } = [];
+    /// <summary>What it counts by itself (monthly budgets only), by name.</summary>
+    public List<CategoryReferenceDto> Categories { get; set; } = [];
     public decimal TotalAmount { get; set; }
     public decimal TotalRemaining { get; set; }
     public decimal TotalSpent { get; set; }

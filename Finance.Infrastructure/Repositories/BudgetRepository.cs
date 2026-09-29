@@ -26,14 +26,14 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
         return DbContext.Budgets.Include(x => x.Categories).SingleOrDefaultAsync(x => x.Id == id, cancellationToken);
     }
 
-    public async Task<Dictionary<Category, string>> GetCategoryOwnersAsync(
-        IReadOnlyCollection<Category> categories, Guid exceptBudgetId, CancellationToken cancellationToken = default)
+    public async Task<Dictionary<string, string>> GetCategoryOwnersAsync(
+        IReadOnlyCollection<Guid> categoryIds, Guid exceptBudgetId, CancellationToken cancellationToken = default)
     {
         var owners = await DbContext.Set<BudgetCategory>()
-            .Where(c => categories.Contains(c.Category) && c.BudgetId != exceptBudgetId)
-            .Select(c => new { c.Category, c.Budget!.Name })
+            .Where(c => categoryIds.Contains(c.CategoryId) && c.BudgetId != exceptBudgetId)
+            .Select(c => new { Category = c.Category!.Name, Budget = c.Budget!.Name })
             .ToListAsync(cancellationToken);
-        return owners.ToDictionary(o => o.Category, o => o.Name);
+        return owners.ToDictionary(o => o.Category, o => o.Budget);
     }
 
     public Task<BudgetSummary?> GetSummaryAsync(Guid id, DateTime monthStart, CancellationToken cancellationToken = default)
@@ -64,9 +64,9 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
                 + DbContext.Transactions
                     .Where(t => t.BudgetId == null && t.Date >= monthStart && t.Date < nextMonth
                                 && (t.Flow == Flow.Spending || t.Flow == Flow.Refund)
-                                && b.Categories.Any(c => c.Category == t.Category))
+                                && b.Categories.Any(c => c.CategoryId == t.CategoryId))
                     .Sum(t => t.Flow == Flow.Refund ? -t.Amount : t.Amount),
-                b.Categories.Select(c => c.Category).ToList()));
+                b.Categories.Select(c => c.Category!).OrderBy(c => c.Name).ToList()));
     }
 
     private IQueryable<Budget> FilterQuery(BudgetFilterDto filter)

@@ -28,7 +28,7 @@ public class TransactionRepository(FinanceDbContext dbContext)
     // Tracked, with its budget so the response after an edit still shows the link.
     public override Task<Transaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return DbContext.Transactions.Include(t => t.Budget).Include(t => t.Account)
+        return DbContext.Transactions.Include(t => t.Budget).Include(t => t.Account).Include(t => t.Category)
             .SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
     }
 
@@ -49,14 +49,14 @@ public class TransactionRepository(FinanceDbContext dbContext)
 
     public Task<Transaction?> GetIncludingHiddenAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return DbContext.Transactions.IgnoreQueryFilters().Include(t => t.Budget).Include(t => t.Account)
+        return DbContext.Transactions.IgnoreQueryFilters().Include(t => t.Budget).Include(t => t.Account).Include(t => t.Category)
             .SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
     }
 
     public async Task<int> HideLegacyMonthlyRentAsync(IReadOnlyCollection<DateTime> months, CancellationToken cancellationToken = default)
     {
         var rows = await DbContext.Transactions
-            .Where(t => t.Account!.Type == AccountType.Chequing && t.Category == Category.Rent &&
+            .Where(t => t.Account!.Type == AccountType.Chequing && t.CategoryId == Category.RentId &&
                         t.Description == LegacyMonthlyRent.Description && months.Contains(t.Date))
             .ToListAsync(cancellationToken);
         rows.ForEach(t => t.Hidden = true);
@@ -122,7 +122,8 @@ public class TransactionRepository(FinanceDbContext dbContext)
         query = query
             .AsNoTracking()
             .Include(x => x.Budget)
-            .Include(x => x.Account);
+            .Include(x => x.Account)
+            .Include(x => x.Category);
 
         if (filter.TransactionId.HasValue)
         {
@@ -164,9 +165,9 @@ public class TransactionRepository(FinanceDbContext dbContext)
             query = query.Where(x => x.Description.ToLower().Contains(filter.Description.ToLower()));
         }
 
-        if (filter.Category.HasValue)
+        if (filter.CategoryId.HasValue)
         {
-            query = query.Where(x => x.Category == filter.Category.Value);
+            query = query.Where(x => x.CategoryId == filter.CategoryId.Value);
         }
 
         if (filter.BudgetId.HasValue)
@@ -184,8 +185,7 @@ public class TransactionRepository(FinanceDbContext dbContext)
         {
             TransactionSortField.Description => ascending ? query.OrderBy(x => x.Description) : query.OrderByDescending(x => x.Description),
             TransactionSortField.Amount => ascending ? query.OrderBy(x => x.Amount) : query.OrderByDescending(x => x.Amount),
-            // Stored as text, so this sorts by category name.
-            TransactionSortField.Category => ascending ? query.OrderBy(x => x.Category) : query.OrderByDescending(x => x.Category),
+            TransactionSortField.Category => ascending ? query.OrderBy(x => x.Category!.Name) : query.OrderByDescending(x => x.Category!.Name),
             _ => ascending ? query.OrderBy(x => x.Date) : query.OrderByDescending(x => x.Date),
         };
 

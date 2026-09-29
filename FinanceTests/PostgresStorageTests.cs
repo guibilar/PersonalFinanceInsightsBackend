@@ -21,17 +21,17 @@ public class PostgresStorageTests
             db.Transactions.Add(new Transaction
             {
                 Id = Guid.NewGuid(), Date = DateTime.UtcNow, Description = "Coffee", Amount = 2, Hash = "h",
-                Category = Category.Dining, TransactionType = TransactionType.Debit, AccountId = Account.DefaultCreditCardId
+                CategoryId = DefaultCategories.Dining, TransactionType = TransactionType.Debit, AccountId = Account.DefaultCreditCardId
             });
         });
 
         var stored = await factory.QueryAsync(db => db.Database
-            .SqlQueryRaw<string>("""SELECT "Category" || ',' || "TransactionType" || ',' || "Flow" AS "Value" FROM "Transactions" """)
+            .SqlQueryRaw<string>("""SELECT "TransactionType" || ',' || "Flow" AS "Value" FROM "Transactions" """)
             .SingleAsync());
         var status = await factory.QueryAsync(db => db.Database
             .SqlQueryRaw<string>("""SELECT "Status" AS "Value" FROM "Budgets" """).SingleAsync());
 
-        Assert.Equal("Dining,Debit,Spending", stored);
+        Assert.Equal("Debit,Spending", stored);
         Assert.Equal("Inactive", status);
     }
 }

@@ -148,12 +148,12 @@ public class NeoImportTests
         var listed = await (await client.PostAsJsonAsync("/api/Transaction/Filter", new { accountId, pageSize = 50 }))
             .ReadAsync<PaginatedList<TransactionOutputDto>>();
         var byDescription = listed.Items.GroupBy(t => t.Description).ToDictionary(g => g.Key, g => g.First());
-        Assert.Equal((Category.Groceries, Flow.Spending), (byDescription["FARMER'S FRIDGE CALGAR CALGARY CAN"].Category, byDescription["FARMER'S FRIDGE CALGAR CALGARY CAN"].Flow));
-        Assert.Equal(Category.Transportation, byDescription["AIR CAN* WINNIPEG CAN"].Category);
-        Assert.Equal(Category.Shopping, byDescription["BEST BUY EXPRESS 118 CALGARY CAN"].Category);
-        Assert.Equal(Category.Groceries, byDescription["CYNTHIA'S NO FRILLS 69 CALGARY CAN"].Category);
+        Assert.Equal((DefaultCategories.Groceries, Flow.Spending), (byDescription["FARMER'S FRIDGE CALGAR CALGARY CAN"].Category.Id, byDescription["FARMER'S FRIDGE CALGAR CALGARY CAN"].Flow));
+        Assert.Equal(DefaultCategories.Transportation, byDescription["AIR CAN* WINNIPEG CAN"].Category.Id);
+        Assert.Equal(DefaultCategories.Shopping, byDescription["BEST BUY EXPRESS 118 CALGARY CAN"].Category.Id);
+        Assert.Equal(DefaultCategories.Groceries, byDescription["CYNTHIA'S NO FRILLS 69 CALGARY CAN"].Category.Id);
         // The shipped rules come first: "SHOPPERS" is a Shopping rule there, and a pack never overrides them.
-        Assert.Equal(Category.Shopping, byDescription["SHOPPERS DRUG MART #23 CALGARY CAN"].Category);
+        Assert.Equal(DefaultCategories.Shopping, byDescription["SHOPPERS DRUG MART #23 CALGARY CAN"].Category.Id);
         // Paying the card off is a transfer, not a refund that would cut the month's spending.
         Assert.Equal(Flow.Transfer, byDescription["Payment Received - Thank you"].Flow);
         Assert.Equal(Flow.Refund, byDescription["SHOPPERS DRUG MART #23 CALGARY CAN"].Flow);
@@ -189,7 +189,7 @@ public class NeoImportTests
         var rules = await (await client.GetAsync("/api/CategoryRules")).ReadAsync<List<CategoryRuleOutputDto>>();
         var flows = await (await client.GetAsync("/api/FlowRules")).ReadAsync<List<FlowRuleOutputDto>>();
 
-        Assert.Equal(Category.Pet, rules.Single(r => r.Keyword == "TRUPANION").Category);
+        Assert.Equal(DefaultCategories.Pet, rules.Single(r => r.Keyword == "TRUPANION").Category.Id);
         Assert.Equal(Flow.Transfer, flows.Single(r => r.Keyword == "PAYMENT RECEIVED - THANK YOU").Flow);
         Assert.Equal(Enumerable.Range(0, rules.Count), rules.Select(r => r.Position));
         // After the shipped rules, so a keyword both would match is still decided by them.
@@ -199,11 +199,11 @@ public class NeoImportTests
         var trupanion = rules.Single(r => r.Keyword == "TRUPANION");
         await client.DeleteAsync($"/api/CategoryRules/{trupanion.Id}");
         var telus = rules.Single(r => r.Keyword == "TELUS");
-        await client.PutAsJsonAsync($"/api/CategoryRules/{telus.Id}", new { keyword = "TELUS", category = "Other" });
+        await client.PutAsJsonAsync($"/api/CategoryRules/{telus.Id}", new { keyword = "TELUS", categoryId = DefaultCategories.Other });
         await factory.Services.SeedRulesAsync(NullLogger.Instance);
         var after = await (await client.GetAsync("/api/CategoryRules")).ReadAsync<List<CategoryRuleOutputDto>>();
         Assert.DoesNotContain(after, r => r.Keyword == "TRUPANION");
-        Assert.Equal(Category.Other, after.Single(r => r.Keyword == "TELUS").Category);
+        Assert.Equal(DefaultCategories.Other, after.Single(r => r.Keyword == "TELUS").Category.Id);
     }
 
     [Fact]
@@ -216,7 +216,7 @@ public class NeoImportTests
         var before = await (await client.GetAsync("/api/CategoryRules")).ReadAsync<List<CategoryRuleOutputDto>>();
         var packKeywords = new[] { "TRUPANION", "MINISO", "ENMAX" };
         foreach (var rule in before.Where(r => packKeywords.Contains(r.Keyword))) await client.DeleteAsync($"/api/CategoryRules/{rule.Id}");
-        await client.PostAsJsonAsync("/api/CategoryRules", new { keyword = "ENMAX", category = "Entertainment" });
+        await client.PostAsJsonAsync("/api/CategoryRules", new { keyword = "ENMAX", categoryId = DefaultCategories.Entertainment });
         var flow = (await (await client.GetAsync("/api/FlowRules")).ReadAsync<List<FlowRuleOutputDto>>())
             .Single(r => r.Keyword == "PAYMENT RECEIVED - THANK YOU");
         await client.DeleteAsync($"/api/FlowRules/{flow.Id}");
@@ -226,8 +226,8 @@ public class NeoImportTests
         await factory.Services.SeedRulesAsync(NullLogger.Instance);
 
         var rules = await (await client.GetAsync("/api/CategoryRules")).ReadAsync<List<CategoryRuleOutputDto>>();
-        Assert.Equal(Category.Pet, rules.Single(r => r.Keyword == "TRUPANION").Category);
-        Assert.Equal(Category.Entertainment, rules.Single(r => r.Keyword == "ENMAX").Category);   // the user's rule wins
+        Assert.Equal(DefaultCategories.Pet, rules.Single(r => r.Keyword == "TRUPANION").Category.Id);
+        Assert.Equal(DefaultCategories.Entertainment, rules.Single(r => r.Keyword == "ENMAX").Category.Id);   // the user's rule wins
         Assert.Equal(rules.Count, rules.Select(r => r.Keyword).Distinct().Count());
         Assert.Equal(Enumerable.Range(0, rules.Count), rules.Select(r => r.Position));
         Assert.Contains(await (await client.GetAsync("/api/FlowRules")).ReadAsync<List<FlowRuleOutputDto>>(),
@@ -239,12 +239,12 @@ public class NeoImportTests
     {
         var pack = new RulePack
         {
-            CategoryRules = [new CategoryKeywords { Category = Category.Shopping, Keywords = ["miniso", " Simons ", "MINISO", ""] }],
+            CategoryRules = [new CategoryKeywords { Category = "Shopping", Keywords = ["miniso", " Simons ", "MINISO", ""] }],
             FlowRules = [new FlowKeywords { Flow = Flow.Spending, Keywords = ["NEVER"] },
                          new FlowKeywords { Flow = Flow.Transfer, Keywords = ["CARD PAYMENT", "card payment"] }]
         };
 
-        var categories = pack.ToCategoryRules(new HashSet<string> { "SIMONS" }, firstPosition: 7);
+        var categories = pack.ToCategoryRules(new HashSet<string> { "SIMONS" }, firstPosition: 7, DefaultCategories.IdOf);
         var flows = pack.ToFlowRules(new HashSet<string>());
 
         Assert.Equal([("MINISO", 7)], categories.Select(r => (r.Keyword, r.Position)));

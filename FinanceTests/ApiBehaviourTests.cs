@@ -27,7 +27,7 @@ public class ApiBehaviourTests
         Description = description,
         Amount = amount,
         Date = DateTime.SpecifyKind(date, DateTimeKind.Utc),
-        Category = Category.Dining,
+        CategoryId = DefaultCategories.Dining,
         TransactionType = TransactionType.Debit,
         AccountId = Account.DefaultCreditCardId,
         Hash = Guid.NewGuid().ToString(),
@@ -136,25 +136,25 @@ public class ApiBehaviourTests
         var now = new DateTimeOffset(2026, 2, 15, 17, 0, 0, TimeSpan.Zero);
         await using var factory = new FinanceApiFactory(services =>
             services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FixedTimeProvider(now))));
-        Transaction Tx(string description, decimal amount, TransactionType type, AccountType account, Category category) => new()
+        Transaction Tx(string description, decimal amount, TransactionType type, AccountType account, Guid category) => new()
         {
             Id = Guid.NewGuid(), Description = description, Amount = amount, TransactionType = type,
             AccountId = TestAccounts.Id(account), Flow = TestAccounts.DefaultFlow(account, type),
-            Category = category, Date = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc), Hash = Guid.NewGuid().ToString()
+            CategoryId = category, Date = new DateTime(2026, 2, 10, 0, 0, 0, DateTimeKind.Utc), Hash = Guid.NewGuid().ToString()
         };
         await factory.SeedAsync(db => db.Transactions.AddRange(
-            Tx("WAL-MART", 120, TransactionType.Debit, AccountType.CreditCard, Category.Groceries),
-            Tx("WAL-MART", 20, TransactionType.Credit, AccountType.CreditCard, Category.Groceries),
-            Tx("NETFLIX", 17, TransactionType.Debit, AccountType.CreditCard, Category.Subscriptions),
-            Tx("Deel Canada PAYROLL", 4200, TransactionType.Credit, AccountType.Chequing, Category.Other)));
+            Tx("WAL-MART", 120, TransactionType.Debit, AccountType.CreditCard, DefaultCategories.Groceries),
+            Tx("WAL-MART", 20, TransactionType.Credit, AccountType.CreditCard, DefaultCategories.Groceries),
+            Tx("NETFLIX", 17, TransactionType.Debit, AccountType.CreditCard, DefaultCategories.Subscriptions),
+            Tx("Deel Canada PAYROLL", 4200, TransactionType.Credit, AccountType.Chequing, DefaultCategories.Other)));
 
         var month = await (await factory.CreateClient().GetAsync("/api/Reports/current-month-categorized-graph"))
             .ReadAsync<MonthlyCategorizedGraphData>();
 
         var feb = Assert.Single(month.MonthlyData);
         Assert.Equal(117m, feb.Total);
-        Assert.Equal(100m, feb.CategoryValues[Category.Groceries]);
-        Assert.DoesNotContain(Category.Other, month.Categories);
+        Assert.Equal(100m, feb.CategoryValues["Groceries"]);
+        Assert.DoesNotContain(DefaultCategories.Other, month.Categories.Select(c => c.Id));
     }
 
     [Fact]

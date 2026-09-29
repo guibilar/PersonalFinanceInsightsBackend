@@ -31,7 +31,7 @@ public static class MonthlyRecordsCalculator
             .Select(g => new MonthlyRecords
             {
                 YearMonth = new DateTime(g.Key.Year, g.Key.Month, 1),
-                Categories = g.GroupBy(r => r.Category)
+                Categories = g.GroupBy(r => r.CategoryId)
                     .ToDictionary(c => c.Key, c => c.Sum(amount)),
                 Total = g.Sum(amount)
             })

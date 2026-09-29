@@ -17,7 +17,7 @@ public static class BudgetMapping
             Status = dto.Status,
             Amount = dto.Amount,
             Period = dto.Period,
-            Categories = dto.Categories.Distinct().Select(c => new BudgetCategory { Category = c }).ToList(),
+            Categories = dto.CategoryIds.Distinct().Select(id => new BudgetCategory { CategoryId = id }).ToList(),
         };
     }
 
@@ -31,7 +31,7 @@ public static class BudgetMapping
             Description = budget.Description,
             Status = budget.Status,
             Period = budget.Period,
-            Categories = categories.Order().ToList(),
+            Categories = categories.Select(c => c.ToReference()).ToList(),
             TotalAmount = budget.Amount,
             TotalSpent = totalSpent,
             TotalRemaining = budget.Amount - totalSpent,

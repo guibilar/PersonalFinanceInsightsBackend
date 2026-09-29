@@ -8,7 +8,7 @@ public static class CategoryRuleMapping
 {
     public static CategoryRuleOutputDto ToOutput(this CategoryRule rule)
     {
-        return new CategoryRuleOutputDto { Id = rule.Id, Keyword = rule.Keyword, Category = rule.Category, Position = rule.Position };
+        return new CategoryRuleOutputDto { Id = rule.Id, Keyword = rule.Keyword, Category = rule.Category.ToReference(), Position = rule.Position };
     }
 
     public static CategoryRulePreviewDto ToOutput(this CategoryRulePreview preview)

@@ -9,7 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
@@ -30,6 +30,8 @@ public class FinanceApiFactory(
 {
     private static string? PostgresServer => TestDatabase.PostgresServer;
     private readonly string _databaseName = $"finance_test_{Guid.NewGuid():N}";
+    // Shared by the app's contexts and the one that creates the in-memory database before the app starts.
+    private readonly InMemoryDatabaseRoot _inMemoryRoot = new();
     private bool _createdDatabase;
 
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
@@ -57,7 +59,7 @@ public class FinanceApiFactory(
             {
                 if (PostgresServer is null)
                 {
-                    options.UseInMemoryDatabase(_databaseName);
+                    options.UseInMemoryDatabase(_databaseName, _inMemoryRoot);
                 }
                 else
                 {
@@ -75,22 +77,17 @@ public class FinanceApiFactory(
 
     protected override IHost CreateHost(IHostBuilder builder)
     {
+        if (PostgresServer is null)
+        {
+            // What the migrations insert on PostgreSQL (the default accounts and categories), in place before the app
+            // starts, as its startup work (the rules it seeds) relies on them. A second host on the same database
+            // finds it created already.
+            using var db = new FinanceDbContext(new DbContextOptionsBuilder<FinanceDbContext>()
+                .UseInMemoryDatabase(_databaseName, _inMemoryRoot).Options);
+            db.Database.EnsureCreated();
+        }
         var host = base.CreateHost(builder);
         _createdDatabase = PostgresServer is not null;
-        using var scope = host.Services.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<FinanceDbContext>();
-        // What the migrations insert on PostgreSQL (once: a test can start a second host on the same database).
-        // EnsureCreated would, but the app has already stored its first user, and an in-memory database with data
-        // counts as created.
-        if (PostgresServer is null && !db.Accounts.Any())
-        {
-            db.Accounts.AddRange(db.GetService<IDesignTimeModel>().Model.FindEntityType(typeof(Account))!.GetSeedData().Select(seed => new Account
-            {
-                Id = (Guid)seed[nameof(Account.Id)]!, Name = (string)seed[nameof(Account.Name)]!, Type = (AccountType)seed[nameof(Account.Type)]!,
-                Format = (StatementFormat)seed[nameof(Account.Format)]!
-            }));
-            db.SaveChanges();
-        }
         return host;
     }
 

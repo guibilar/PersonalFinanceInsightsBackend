@@ -1,7 +1,6 @@
 using Finance.Domain.Entities;
-using Finance.Domain.Enums;
 
 namespace Finance.Application.Models;
 
-/// <summary>A budget with its spending totalled in the database.</summary>
+/// <summary>A budget with its spending totalled in the database, and the categories it counts by itself.</summary>
 public record BudgetSummary(Budget Budget, decimal TotalSpent, IReadOnlyList<Category> Categories);
