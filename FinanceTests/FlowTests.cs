@@ -222,7 +222,7 @@ public class FlowTests
     }
 
     [Fact]
-    public async Task CashFlow_IncomeSpendingNetAndSavedPerMonth_AveragedOverFinishedMonths()
+    public async Task CashFlow_IncomeSpendingNetAndSavingsChangePerMonth_AveragedOverFinishedMonths()
     {
         await using var factory = FactoryAt("2026-03-15T17:00:00Z");
         await factory.SeedAsync(db => db.Transactions.AddRange(
@@ -249,8 +249,94 @@ public class FlowTests
             ("Jan 2026", 4000m, 900m, 3100m, 500m),
             ("Feb 2026", 4005m, 2000m, 2005m, -295m),
             ("Mar 2026", 0m, 80m, -80m, 0m)
-        ], report.Months.Select(m => (m.Month, m.Income, m.Spending, m.Net, m.Saved)));
-        Assert.Equal((4002.5m, 1450m, 102.5m), (report.AverageMonthlyIncome, report.AverageMonthlySpending, report.AverageMonthlySaved));
+        ], report.Months.Select(m => (m.Month, m.Income, m.Spending, m.Net, m.SavingsChange)));
+        Assert.Equal((4002.5m, 1450m, 2552.5m, 102.5m),
+            (report.AverageMonthlyIncome, report.AverageMonthlySpending, report.AverageMonthlyNet, report.AverageMonthlySavingsChange));
+        Assert.Equal((2, false), (report.AveragedMonths, report.AveragesIncludeCurrentMonth));
+    }
+
+    [Fact]
+    public async Task CashFlow_WithoutASavingsAccount_StillSaysWhatWasLeftOver()
+    {
+        await using var factory = FactoryAt("2026-03-15T17:00:00Z");
+        // Nothing is recorded on a savings account, so the savings change is 0; the 500 to savings is a transfer out.
+        await factory.SeedAsync(db => db.Transactions.AddRange(
+            Stored("PAYROLL", 4000, TransactionType.Credit, AccountType.Chequing, Day(1, 15)),
+            Stored("RENT", 1500, TransactionType.Debit, AccountType.Chequing, Day(1, 1)),
+            Stored("TO SAVINGS", 500, TransactionType.Debit, AccountType.Chequing, Day(1, 16), flow: Flow.Transfer),
+            Stored("PAYROLL", 4000, TransactionType.Credit, AccountType.Chequing, Day(2, 15)),
+            Stored("TRIP", 4500, TransactionType.Debit, AccountType.CreditCard, Day(2, 10))));
+
+        var report = await (await factory.CreateClient().GetAsync("/api/Reports/cash-flow")).ReadAsync<CashFlowReport>();
+
+        Assert.Equal(
+        [
+            ("Jan 2026", 2500m, 0m),
+            ("Feb 2026", -500m, 0m)    // spent more than came in
+        ], report.Months.Select(m => (m.Month, m.Net, m.SavingsChange)));
+        Assert.Equal((1000m, 4000m, 3000m), (report.AverageMonthlyNet, report.AverageMonthlyIncome, report.AverageMonthlySpending));
+    }
+
+    [Fact]
+    public async Task CashFlow_AMonthOfNothingButTransfersAndHolds_IsNotAMonth()
+    {
+        await using var factory = FactoryAt("2026-04-15T17:00:00Z");
+        await factory.SeedAsync(db => db.Transactions.AddRange(
+            Stored("PAYROLL", 4000, TransactionType.Credit, AccountType.Chequing, Day(1, 15)),
+            Stored("RENT", 1000, TransactionType.Debit, AccountType.Chequing, Day(1, 1)),
+            // February: only a card payment and a pending hold (a savings hold, too).
+            Stored("PAYMENT THANK YOU", 800, TransactionType.Credit, AccountType.CreditCard, Day(2, 3), flow: Flow.Transfer),
+            Stored("UBER* PENDING", 12, TransactionType.Debit, AccountType.CreditCard, Day(2, 4), flow: Flow.Ignored),
+            Stored("HOLD", 50, TransactionType.Debit, AccountType.Savings, Day(2, 5), flow: Flow.Ignored),
+            Stored("PAYROLL", 2000, TransactionType.Credit, AccountType.Chequing, Day(3, 15))));
+
+        var report = await (await factory.CreateClient().GetAsync("/api/Reports/cash-flow")).ReadAsync<CashFlowReport>();
+
+        Assert.Equal(["Jan 2026", "Mar 2026"], report.Months.Select(m => m.Month));
+        // January and March are the finished months; a February of zeros would have made these 2000, 333 and 1667.
+        Assert.Equal((3000m, 500m, 2500m, 2),
+            (report.AverageMonthlyIncome, report.AverageMonthlySpending, report.AverageMonthlyNet, report.AveragedMonths));
+    }
+
+    [Fact]
+    public async Task CashFlow_TakingMoneyOutOfSavingsToSpendIt_IsSpendingAndASavingsDrop()
+    {
+        await using var factory = FactoryAt("2026-03-15T17:00:00Z");
+        await factory.SeedAsync(db => db.Transactions.AddRange(
+            Stored("BOILER", 900, TransactionType.Debit, AccountType.Savings, Day(1, 12), flow: Flow.Spending),
+            Stored("INTEREST", 4, TransactionType.Credit, AccountType.Savings, Day(1, 31), flow: Flow.Income)));
+
+        var month = Assert.Single((await (await factory.CreateClient().GetAsync("/api/Reports/cash-flow")).ReadAsync<CashFlowReport>()).Months);
+
+        Assert.Equal((4m, 900m, -896m, -896m), (month.Income, month.Spending, month.Net, month.SavingsChange));
+    }
+
+    [Fact]
+    public async Task CashFlow_TheRunningMonthIsTheOneInTheReportingTimeZone_NotUtc()
+    {
+        // 02:00 UTC on April 1st is still March 31st in Toronto: March is running, February is the only finished month.
+        await using var factory = FactoryAt("2026-04-01T02:00:00Z");
+        await factory.SeedAsync(db => db.Transactions.AddRange(
+            Stored("PAYROLL", 3000, TransactionType.Credit, AccountType.Chequing, Day(2, 15)),
+            Stored("RENT", 1000, TransactionType.Debit, AccountType.Chequing, Day(2, 1)),
+            Stored("RENT", 5000, TransactionType.Debit, AccountType.Chequing, Day(3, 1))));
+
+        var report = await (await factory.CreateClient().GetAsync("/api/Reports/cash-flow")).ReadAsync<CashFlowReport>();
+
+        Assert.Equal((1, false, 1000m, 2000m), (report.AveragedMonths, report.AveragesIncludeCurrentMonth, report.AverageMonthlySpending, report.AverageMonthlyNet));
+    }
+
+    [Fact]
+    public async Task CashFlow_WithOnlyTheRunningMonth_AveragesIt()
+    {
+        await using var factory = FactoryAt("2026-03-15T17:00:00Z");
+        await factory.SeedAsync(db => db.Transactions.AddRange(
+            Stored("PAYROLL", 3000, TransactionType.Credit, AccountType.Chequing, Day(3, 1)),
+            Stored("RENT", 1000, TransactionType.Debit, AccountType.Chequing, Day(3, 2))));
+
+        var report = await (await factory.CreateClient().GetAsync("/api/Reports/cash-flow")).ReadAsync<CashFlowReport>();
+
+        Assert.Equal((1, true, 2000m), (report.AveragedMonths, report.AveragesIncludeCurrentMonth, report.AverageMonthlyNet));
     }
 
     [Fact]
@@ -261,6 +347,8 @@ public class FlowTests
         var report = await (await factory.CreateClient().GetAsync("/api/Reports/cash-flow")).ReadAsync<CashFlowReport>();
 
         Assert.Empty(report.Months);
-        Assert.Equal((0m, 0m, 0m), (report.AverageMonthlyIncome, report.AverageMonthlySpending, report.AverageMonthlySaved));
+        Assert.Equal((0m, 0m, 0m, 0m, 0, false),
+            (report.AverageMonthlyIncome, report.AverageMonthlySpending, report.AverageMonthlyNet, report.AverageMonthlySavingsChange,
+                report.AveragedMonths, report.AveragesIncludeCurrentMonth));
     }
 }

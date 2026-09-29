@@ -227,8 +227,14 @@ several budgets, e.g. "No Frills" a month and a year.
 ## Reports
 
 Spending is every `Spending` transaction minus every `Refund`, whichever account it is on.
-`GET /api/Reports/cash-flow` gives income, spending, net (income minus spending) and money saved (into savings
-accounts minus out of them) per month of the current year, with monthly averages over the finished months.
+`GET /api/Reports/cash-flow` gives, per month of the current year: `income` (`Income` flows), `spending`, `net` (income
+minus spending: what was left over, negative when more went out than came in) and `savingsChange` (money into savings
+accounts minus money out of them, interest included; 0 when nothing is recorded on a savings account, which is not the
+same as nothing being saved, so `net` is the number to read for "how much did I keep"). A month is listed when
+something in it counts (income, spending or refunds, or a savings account row); a month of nothing but transfers and
+ignored rows isn't a month. The averages (`averageMonthly…`) are over the finished months, or over the running one
+while none is finished; `averagedMonths` and `averagesIncludeCurrentMonth` say which. Which month is running follows
+`Reports:TimeZone`.
 
 `POST /api/Reports/breakdown` `{description?, categoryId?, accountId?, flow?, startDate?, endDate?, interval}` totals
 what the transaction list's criteria pick (a merchant by part of its description, a category, or both; dates

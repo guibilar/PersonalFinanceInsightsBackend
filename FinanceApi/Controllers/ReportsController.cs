@@ -46,7 +46,7 @@ public class ReportsController(IReportService reportService) : ControllerBase
         return reportService.GetMerchantsAsync(input, cancellationToken);
     }
 
-    /// <summary>Income, spending and money saved per month of the current year.</summary>
+    /// <summary>Income, spending, what was left over and how the savings accounts changed, per month of the current year.</summary>
     [HttpGet("cash-flow")]
     public Task<CashFlowReport> GenerateCashFlowReport(CancellationToken cancellationToken)
     {
