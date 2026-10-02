@@ -11,7 +11,7 @@ public interface ITransactionRepository : IBaseRepository<Transaction>
     /// <summary>Tracked: every transaction whose category the rules decide (not hand-picked, not on a savings account).</summary>
     Task<List<Transaction>> GetRuleCategorizedAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Tracked, with their account: every transaction whose category or flow the rules decide.</summary>
+    /// <summary>Tracked, with their account: every transaction whose category or flow the rules decide, deleted ones included.</summary>
     Task<List<Transaction>> GetRuleManagedAsync(CancellationToken cancellationToken = default);
 
     /// <summary>Tracked, hidden or not.</summary>

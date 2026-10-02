@@ -41,7 +41,8 @@ public class TransactionRepository(FinanceDbContext dbContext)
 
     public Task<List<Transaction>> GetRuleManagedAsync(CancellationToken cancellationToken = default)
     {
-        return DbContext.Transactions
+        // Deleted ones too, so one restored later comes back as the rules have it now.
+        return DbContext.Transactions.IgnoreQueryFilters()
             .Include(t => t.Account)
             .Where(t => !t.CategoryLocked || !t.FlowLocked)
             .ToListAsync(cancellationToken);
