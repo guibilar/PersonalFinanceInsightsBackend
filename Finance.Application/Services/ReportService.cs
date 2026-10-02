@@ -48,12 +48,20 @@ public class ReportService(
         DateTime? last = end ?? (transactions.Count > 0 ? Max(transactions.Max(t => t.Date), today) : start is null ? null : Max(start.Value, today));
         if (first is null || last is null) return breakdown;
 
+        // Too many periods to chart (years of weeks): the next longer interval, as the totals above don't depend on
+        // it and failing would lose them too. The breakdown says which interval it used.
         var count = BreakdownPeriods.Count(first.Value, last.Value, interval);
+        while (count > MaxPeriods && interval < BreakdownInterval.Year)
+        {
+            interval++;
+            count = BreakdownPeriods.Count(first.Value, last.Value, interval);
+        }
         if (count > MaxPeriods)
         {
-            throw new InvalidInputException("interval",
-                $"That is {count} {interval.ToString().ToLowerInvariant()}s; choose a longer interval or a shorter period.");
+            throw new InvalidInputException("startDate",
+                $"That is {count} years; choose a shorter period.");
         }
+        breakdown.Interval = interval;
 
         var byPeriod = transactions.ToLookup(t => BreakdownPeriods.StartOf(t.Date, interval));
         decimal spending = 0, income = 0;

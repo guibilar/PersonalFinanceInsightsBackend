@@ -16,7 +16,8 @@ public static class TransactionMapping
         return new Transaction
         {
             Date = date,
-            Description = dto.Description,
+            // As an edit stores it: "  Coffee " and "Coffee" are the same transaction (the hash says so too).
+            Description = dto.Description.Trim(),
             Amount = dto.Amount,
             CategoryId = dto.CategoryId ?? Category.OtherId,
             CategoryLocked = dto.CategoryId is not null,

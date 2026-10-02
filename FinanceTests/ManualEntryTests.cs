@@ -128,4 +128,36 @@ public class ManualEntryTests
         var hashes = await factory.QueryAsync(db => db.Transactions.Select(t => t.Hash).ToListAsync());
         Assert.Equal(3, hashes.Distinct().Count());
     }
+
+    [Fact]
+    public async Task TheDescription_IsStoredWithoutSurroundingSpaces()
+    {
+        await using var factory = new FinanceApiFactory();
+        var client = factory.CreateClient();
+        var accountId = await AddManualAccountAsync(client);
+
+        var response = await client.PostAsJsonAsync("/api/Transaction", Tx(accountId, "  FARMERS FRIDGE  "), FinanceApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal("FARMERS FRIDGE", (await response.ReadAsync<TransactionOutputDto>()).Description);
+        Assert.Equal("FARMERS FRIDGE", await factory.QueryAsync(db => db.Transactions.Select(t => t.Description).SingleAsync()));
+    }
+
+    [Theory]
+    [InlineData("/api/Transaction")]
+    [InlineData("/api/Budget")]
+    public async Task AnAmountWithAFractionOfACent_Returns400(string endpoint)
+    {
+        await using var factory = new FinanceApiFactory();
+        var client = factory.CreateClient();
+        var accountId = await AddManualAccountAsync(client);
+        object body = endpoint == "/api/Budget"
+            ? new { name = "Food", description = "d", status = "Active", amount = 100.005m }
+            : new { date = "2026-09-10", description = "COFFEE", amount = 1.005m, transactionType = "Debit", accountId };
+
+        var response = await client.PostAsJsonAsync(endpoint, body, FinanceApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("at most 2 decimal places", await response.Content.ReadAsStringAsync());
+    }
 }

@@ -186,8 +186,23 @@ public class BreakdownTests
         Assert.Empty(result.TopMerchants);
     }
 
+    [Fact]
+    public async Task YearsOfWeeks_AreShownByTheNextLongerIntervalThatFits_TotalsIncluded()
+    {
+        await using var factory = FactoryOnSeptember15();
+        await factory.SeedAsync(db => db.Transactions.Add(Tx(Day(2026, 9, 1), "GYM", 50)));
+        var client = factory.CreateClient();
+
+        // 2010 to 2026: over 800 weeks, but 200 months.
+        var months = await PostAsync(client, new { startDate = "2010-01-01", endDate = "2026-09-01", interval = "Week" });
+        // A typo'd year: 2,000 years of months and quarters still don't fit, so years... and those don't either.
+        var tooLong = await client.PostAsJsonAsync(Breakdown, new { startDate = "0026-09-01", endDate = "2026-09-01", interval = "Week" });
+
+        Assert.Equal((BreakdownInterval.Month, 201, 50m), (months.Interval, months.Periods.Count, months.Spending));
+        Assert.Equal(HttpStatusCode.BadRequest, tooLong.StatusCode);
+    }
+
     [Theory]
-    [InlineData("2010-01-01", "2026-09-01", "Week")]   // over 800 weeks
     [InlineData("2026-09-10", "2026-09-01", "Month")]  // ends before it starts
     [InlineData("2026-09-01", "2026-09-10", "Fortnight")]
     public async Task UnusableCriteria_Return400(string startDate, string endDate, string interval)

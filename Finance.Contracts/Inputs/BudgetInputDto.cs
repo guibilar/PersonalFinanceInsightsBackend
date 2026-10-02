@@ -13,7 +13,7 @@ public class BudgetInputDto
 
     public Status Status { get; set; }
 
-    [Range(typeof(decimal), "0.01", "79228162514264337593543950335")]
+    [Range(typeof(decimal), "0.01", "79228162514264337593543950335"), Cents]
     public decimal Amount { get; set; }
 
     /// <summary>Optional; <see cref="BudgetPeriod.Total"/> when omitted.</summary>
