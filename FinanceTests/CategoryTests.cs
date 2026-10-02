@@ -56,7 +56,7 @@ public class CategoryTests
     }
 
     [Fact]
-    public async Task TheList_CountsTransactions_DeletedOnesIncluded()
+    public async Task TheList_CountsTransactions_DeletedOnesLeftOut()
     {
         await using var factory = new FinanceApiFactory();
         await factory.SeedAsync(db => db.Transactions.AddRange(
@@ -64,7 +64,7 @@ public class CategoryTests
 
         var dining = (await ListAsync(factory.CreateClient())).Single(c => c.Id == DefaultCategories.Dining);
 
-        Assert.Equal(2, dining.TransactionCount);
+        Assert.Equal(1, dining.TransactionCount);
     }
 
     // ---- Adding and editing

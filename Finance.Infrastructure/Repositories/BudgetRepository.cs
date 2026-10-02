@@ -48,7 +48,8 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
     }
 
     // Totals are summed in SQL instead of loading every linked transaction. Amounts are stored positive,
-    // so credits (refunds) linked to a budget give money back instead of counting as spending.
+    // so credits (refunds) linked to a budget give money back instead of counting as spending. Linked transfers and
+    // ignored rows stay out, as they do everywhere else: paying the card isn't spending.
     // A period limits which transactions count by their date: the current month, the current year, or the budget's
     // own days (both ends included); earlier ones stay linked but no longer count. A total budget has no limit.
     // A budget with a period also counts the period's spending in its categories, or at its merchant (part of the
@@ -76,7 +77,8 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
                     : (DateTime?)null,
             })
             .Select(w => new BudgetSummary(w.Budget, w.Budget.Transactions
-                .Where(t => (w.From == null || t.Date >= w.From) && (w.To == null || t.Date < w.To))
+                .Where(t => (w.From == null || t.Date >= w.From) && (w.To == null || t.Date < w.To)
+                            && t.Flow != Flow.Transfer && t.Flow != Flow.Ignored)
                 .Sum(t => t.TransactionType == TransactionType.Credit ? -t.Amount : t.Amount)
                 + DbContext.Transactions
                     .Where(t => t.BudgetId == null && w.From != null && t.Date >= w.From && t.Date < w.To

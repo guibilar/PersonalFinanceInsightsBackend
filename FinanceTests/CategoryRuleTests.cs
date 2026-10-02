@@ -294,7 +294,7 @@ public class CategoryRuleTests
     }
 
     [Fact]
-    public async Task ApplyRules_UsesTheStoredRules_AndStillSkipsHandPickedSavingsHiddenAndGeneratedRent()
+    public async Task ApplyRules_UsesTheStoredRules_AndStillSkipsHandPickedSavingsAndGeneratedRent()
     {
         await using var factory = new FinanceApiFactory();
         var client = factory.CreateClient();
@@ -319,7 +319,8 @@ public class CategoryRuleTests
         Assert.Equal(DefaultCategories.Other, categories[walmart.Id]);
         Assert.Equal(DefaultCategories.Pet, categories[handPicked.Id]);
         Assert.Equal(DefaultCategories.Other, categories[savings.Id]);
-        Assert.Equal(DefaultCategories.Other, categories[hidden.Id]);
+        // Deleted ones follow the rules too, so a restore brings back the category the rules give now; they aren't counted.
+        Assert.Equal(DefaultCategories.Groceries, categories[hidden.Id]);
         Assert.Equal(DefaultCategories.Rent, categories[fixedRent.Id]);
     }
 

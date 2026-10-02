@@ -15,7 +15,7 @@ public class CategoryRepository(FinanceDbContext dbContext) : BaseRepository<Cat
 
     public async Task<List<CategorySummary>> GetSummariesAsync(CancellationToken cancellationToken = default)
     {
-        var transactions = await DbContext.Transactions.IgnoreQueryFilters()
+        var transactions = await DbContext.Transactions
             .GroupBy(t => t.CategoryId)
             .Select(g => new { CategoryId = g.Key, Count = g.Count() })
             .ToDictionaryAsync(x => x.CategoryId, x => x.Count, cancellationToken);
@@ -31,7 +31,7 @@ public class CategoryRepository(FinanceDbContext dbContext) : BaseRepository<Cat
 
     public async Task<CategorySummary> GetSummaryAsync(Category category, CancellationToken cancellationToken = default)
     {
-        var transactions = await DbContext.Transactions.IgnoreQueryFilters().CountAsync(t => t.CategoryId == category.Id, cancellationToken);
+        var transactions = await DbContext.Transactions.CountAsync(t => t.CategoryId == category.Id, cancellationToken);
         var rules = await DbContext.CategoryRules.CountAsync(r => r.CategoryId == category.Id, cancellationToken);
         return new CategorySummary(category, transactions, rules);
     }

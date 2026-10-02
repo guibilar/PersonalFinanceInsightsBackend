@@ -2,7 +2,9 @@ using Finance.Domain.Entities;
 
 namespace Finance.Application.Models;
 
-/// <param name="TransactionCount">Deleted (hidden) ones included: deleting the category moves them too.</param>
+/// <param name="TransactionCount">
+/// The ones the transactions list shows. Deleted (hidden) ones are left out, though deleting the category moves them too.
+/// </param>
 public record CategorySummary(Category Category, int TransactionCount, int RuleCount)
 {
     /// <summary>Why the category can't be deleted, for the two the app relies on; null for the rest.</summary>

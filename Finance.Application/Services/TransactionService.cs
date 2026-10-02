@@ -225,11 +225,13 @@ public class TransactionService(
     {
         var classifier = await GetClassifierAsync(cancellationToken);
         var transactions = await transactionRepository.GetRuleManagedAsync(cancellationToken);
-        var updated = transactions.Count(t => classifier.Classify(t, t.Account!.Type));
+        // Every one is classified, deleted ones included; the counts are of those the list shows.
+        var updated = transactions.Count(t => classifier.Classify(t, t.Account!.Type) && !t.Hidden);
+        var visible = transactions.Count(t => !t.Hidden);
 
         await transactionRepository.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Applied the rules: {Checked} checked, {Updated} updated", transactions.Count, updated);
-        return new RulesResult(transactions.Count, updated);
+        logger.LogInformation("Applied the rules: {Checked} checked, {Updated} updated", visible, updated);
+        return new RulesResult(visible, updated);
     }
 
     private async Task<Category> GetCategoryAsync(Guid id, CancellationToken cancellationToken) =>

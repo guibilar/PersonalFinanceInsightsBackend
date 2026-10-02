@@ -56,6 +56,35 @@ public class BudgetPeriodTests
     }
 
     [Fact]
+    public async Task LinkedTransfersAndIgnoredRows_DoNotCount()
+    {
+        await using var factory = FactoryOnMarch31();
+        var budgetId = Guid.NewGuid();
+        await factory.SeedAsync(db =>
+        {
+            db.Budgets.Add(new Budget { Id = budgetId, Name = "Trip", Description = "d", Amount = 100, Status = Status.Active, Period = BudgetPeriod.Total });
+            foreach (var (flow, type, amount) in new[]
+                     {
+                         (Flow.Spending, TransactionType.Debit, 40m), (Flow.Refund, TransactionType.Credit, 10m),
+                         (Flow.Transfer, TransactionType.Debit, 500m), (Flow.Ignored, TransactionType.Debit, 40m)
+                     })
+            {
+                db.Transactions.Add(new Transaction
+                {
+                    Id = Guid.NewGuid(), Date = DateTime.SpecifyKind(new DateTime(2026, 3, 10), DateTimeKind.Utc), Description = "SHOP",
+                    Amount = amount, TransactionType = type, Flow = flow, AccountId = Account.DefaultCreditCardId,
+                    Hash = Guid.NewGuid().ToString(), BudgetId = budgetId
+                });
+            }
+        });
+        var client = factory.CreateClient();
+
+        var budget = await (await client.GetAsync($"/api/Budget/{budgetId}")).ReadAsync<BudgetOutputDto>();
+
+        Assert.Equal((30m, 70m), (budget.TotalSpent, budget.TotalRemaining));
+    }
+
+    [Fact]
     public async Task Period_DefaultsToTotal_AndCanBeChanged()
     {
         await using var factory = new FinanceApiFactory();
