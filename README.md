@@ -242,8 +242,8 @@ inclusive) and spreads it over periods: `interval` is `Week` (from Monday), `Mon
 It returns the count, spending, refunds and income; one entry per period from the first to the last (the first
 matching transaction and today when no dates are given), empty ones included, with running totals; averages per
 period over the finished ones; and the top 8 merchants, grouped by the category rule keyword that matched ("NO FRILLS"
-for every store of the chain) or by description, with `merchantCount` for all of them. More than 400 periods, or an
-end before the start, is a 400.
+for every store of the chain) or by description, with `merchantCount` for all of them. More than 400 periods are charted by the
+next longer interval that fits (the response's `interval` says which); 400 years, or an end before the start, is a 400.
 
 `POST /api/Reports/merchants` takes the same criteria with `page` and `pageSize` (default 8) and pages through all of
 those merchants, largest first, as a paginated list: page 1 is the breakdown's top 8.

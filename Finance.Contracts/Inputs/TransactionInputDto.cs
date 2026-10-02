@@ -21,7 +21,7 @@ public class TransactionInputDto
     public required string Description { get; set; }
 
     /// <summary>Always positive; <see cref="TransactionType"/> says which way the money moved.</summary>
-    [Range(typeof(decimal), "0.01", "79228162514264337593543950335")]
+    [Range(typeof(decimal), "0.01", "79228162514264337593543950335"), Cents]
     public decimal Amount { get; set; }
 
     /// <summary>Picked by hand when given, so re-applying the rules keeps it.</summary>
