@@ -109,6 +109,11 @@ public class BreakdownTests
         Assert.Equal(
             [("Aug 31", 20m, 0m), ("Sep 7", 30m, 12m)],
             result.Periods.Select(p => (p.Label, p.Spending, p.Income)));
+        // The weeks run Monday to Sunday, but their days stay within those asked for: listing the first week (or where
+        // its money went) mustn't take in August 31, which its bar doesn't count.
+        Assert.Equal(
+            [(Day(2026, 9, 1), Day(2026, 9, 6)), (Day(2026, 9, 7), Day(2026, 9, 7))],
+            result.Periods.Select(p => (p.Start, p.End)));
     }
 
     [Fact]
