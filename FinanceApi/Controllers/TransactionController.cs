@@ -1,3 +1,4 @@
+using Finance.Application.Models;
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
@@ -120,6 +121,21 @@ public class TransactionController(ITransactionService transactionService) : Con
     {
         await transactionService.RestoreAsync(id, cancellationToken);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Sets a category, a flow or a budget on many transactions at once (up to 500). A flow that doesn't fit a
+    /// transaction's direction leaves that one's as it is; the notes say how many.
+    /// </summary>
+    [HttpPost("Bulk")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    public async Task<ActionResult<BulkUpdateResultDto>> Bulk(TransactionBulkUpdateDto update, CancellationToken cancellationToken)
+    {
+        var result = await transactionService.BulkUpdateAsync(
+            new BulkUpdate(update.TransactionIds, update.CategoryId, update.Flow, update.BudgetId, update.UnlinkBudget), cancellationToken);
+        return new BulkUpdateResultDto { Updated = result.Updated, Skipped = result.Skipped, Notes = result.Notes.ToList() };
     }
 
     [HttpPost("LinkTransaction")]

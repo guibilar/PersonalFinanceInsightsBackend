@@ -1,4 +1,5 @@
 using Finance.Application.Import;
+using Finance.Application.Models;
 using Finance.Contracts.Inputs;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
@@ -37,5 +38,6 @@ public interface ITransactionService
     /// </summary>
     Task<RulesResult> ApplyRulesAsync(CancellationToken cancellationToken = default);
     Task LinkTransactionToBudgetAsync(Guid budgetId, Guid transactionId, CancellationToken cancellationToken = default);
+    Task<BulkUpdateResult> BulkUpdateAsync(BulkUpdate update, CancellationToken cancellationToken = default);
     Task UnlinkTransactionFromBudgetAsync(Guid transactionId, CancellationToken cancellationToken = default);
 }
