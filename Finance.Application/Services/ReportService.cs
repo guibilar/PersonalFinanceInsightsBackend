@@ -71,8 +71,10 @@ public class ReportService(
             var inPeriod = byPeriod[periodStart].ToList();
             var period = new BreakdownPeriod
             {
-                Start = periodStart,
-                End = BreakdownPeriods.Next(periodStart, interval).AddDays(-1),
+                // The days it covers of those asked for: a range starting mid-week has a first week from that day. Whole
+                // weeks reached past the range, so listing a period (or its merchants) took in days the bar didn't count.
+                Start = start is { } from ? Max(periodStart, from) : periodStart,
+                End = Min(BreakdownPeriods.Next(periodStart, interval).AddDays(-1), end),
                 Label = BreakdownPeriods.Label(periodStart, interval),
                 Count = inPeriod.Count,
                 Spending = inPeriod.Sum(MonthlyRecordsCalculator.SpendingAmount),
@@ -135,6 +137,8 @@ public class ReportService(
         }, cancellationToken);
 
     private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
+
+    private static DateTime Min(DateTime a, DateTime? b) => b is { } other && other < a ? other : a;
 
     /// <summary>
     /// Spending grouped by merchant: the category rules name merchants, so the keyword of the rule that decides a

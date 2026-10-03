@@ -51,10 +51,10 @@ public class TransactionBreakdown
 
 public class BreakdownPeriod
 {
-    /// <summary>First day.</summary>
+    /// <summary>First day: the period's own, or the range's when the range starts within it.</summary>
     public DateTime Start { get; set; }
 
-    /// <summary>Last day (inclusive).</summary>
+    /// <summary>Last day (inclusive): the period's own, or the range's when the range ends within it.</summary>
     public DateTime End { get; set; }
 
     /// <summary>"Sep 1" for a week (its Monday), "Sep 2026", "Q3 2026", "2026".</summary>
