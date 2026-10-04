@@ -37,6 +37,10 @@ public class TransactionInputDto
     [Required]
     public Guid? AccountId { get; set; }
 
+    /// <summary>The person's own words about it.</summary>
+    [MaxLength(TextLimits.TransactionNote)]
+    public string? Note { get; set; }
+
     /// <summary>
     /// Adds the transaction although an identical one (same account, day, amount and description) exists, like
     /// two coffees at the same price on the same day.

@@ -19,4 +19,8 @@ public class TransactionOutputDto
     public bool FlowLocked { get; set; }
     public Guid? BudgetId { get; set; }
     public BudgetReferenceDto? Budget { get; set; }
+    public string? Note { get; set; }
+
+    /// <summary>By name.</summary>
+    public List<TagReferenceDto> Tags { get; set; } = [];
 }

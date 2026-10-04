@@ -19,6 +19,7 @@ public static class TransactionMapping
             // As an edit stores it: "  Coffee " and "Coffee" are the same transaction (the hash says so too).
             Description = dto.Description.Trim(),
             Amount = dto.Amount,
+            Note = string.IsNullOrWhiteSpace(dto.Note) ? null : dto.Note.Trim(),
             CategoryId = dto.CategoryId ?? Category.OtherId,
             CategoryLocked = dto.CategoryId is not null,
             Flow = dto.Flow ?? default,
@@ -48,7 +49,12 @@ public static class TransactionMapping
             Flow = transaction.Flow,
             FlowLocked = transaction.FlowLocked,
             BudgetId = transaction.BudgetId,
-            Budget = transaction.Budget?.ToReference()
+            Budget = transaction.Budget?.ToReference(),
+            Note = transaction.Note,
+            Tags = transaction.Tags
+                .OrderBy(t => t.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(t => new TagReferenceDto { Id = t.Id, Name = t.Name })
+                .ToList(),
         };
     }
 }

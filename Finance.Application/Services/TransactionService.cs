@@ -20,6 +20,7 @@ public class TransactionService(
     IFlowRuleRepository flowRuleRepository,
     IAccountRepository accountRepository,
     ICategoryRepository categoryRepository,
+    ITagRepository tagRepository,
     IEnumerable<IStatementParser> statementParsers) : ITransactionService
 {
     private const string DuplicateMessage = "An identical transaction (same account, date, amount and description) already exists.";
@@ -192,8 +193,8 @@ public class TransactionService(
         await transactionRepository.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task<Transaction> UpdateAsync(Guid id, string description, Guid categoryId, Flow? flow,
-        CancellationToken cancellationToken = default)
+    public async Task<Transaction> UpdateAsync(Guid id, string description, Guid categoryId, Flow? flow, string? note = null,
+        IReadOnlyCollection<Guid>? tagIds = null, CancellationToken cancellationToken = default)
     {
         var transaction = await transactionRepository.GetByIdAsync(id, cancellationToken)
                           ?? throw new NotFoundException(nameof(Transaction), id);
@@ -218,6 +219,8 @@ public class TransactionService(
             transaction.CategoryId = categoryId;
             transaction.CategoryLocked = true;
         }
+        if (note is not null) transaction.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
+        if (tagIds is not null) transaction.Tags = await GetTagsAsync(tagIds, cancellationToken);
         await transactionRepository.SaveChangesAsync(cancellationToken);
         return transaction;
     }
@@ -233,6 +236,14 @@ public class TransactionService(
         await transactionRepository.SaveChangesAsync(cancellationToken);
         logger.LogInformation("Applied the rules: {Checked} checked, {Updated} updated", visible, updated);
         return new RulesResult(visible, updated);
+    }
+
+    private async Task<List<Tag>> GetTagsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
+    {
+        var distinct = ids.Distinct().ToList();
+        var tags = await tagRepository.GetByIdsAsync(distinct, cancellationToken);
+        if (tags.Count != distinct.Count) throw new InvalidInputException("tagIds", "A tag doesn't exist (deleted meanwhile?).");
+        return tags;
     }
 
     private async Task<Category> GetCategoryAsync(Guid id, CancellationToken cancellationToken) =>
@@ -266,7 +277,7 @@ public class TransactionService(
     }
 
     /// <summary>
-    /// Sets a category, a flow or a budget on many transactions at once, with the same rules as one by one: a category or
+    /// Sets a category, a flow, a budget or a tag on many transactions at once, with the same rules as one by one: a category or
     /// flow set this way is kept from the rules, a flow only where it fits the direction, and only active budgets.
     /// </summary>
     public async Task<BulkUpdateResult> BulkUpdateAsync(BulkUpdate update, CancellationToken cancellationToken = default)
@@ -280,6 +291,9 @@ public class TransactionService(
             if (budget.Status != Status.Active)
                 throw new ConflictException($"Budget '{budget.Name}' is inactive; activate it before linking transactions.");
         }
+
+        var addTag = update.AddTagId is { } addId ? (await GetTagsAsync([addId], cancellationToken))[0] : null;
+        var removeTag = update.RemoveTagId;
 
         var ids = update.TransactionIds.Distinct().ToList();
         var transactions = await transactionRepository.GetByIdsAsync(ids, cancellationToken);
@@ -316,6 +330,15 @@ public class TransactionService(
             if (update.UnlinkBudget && transaction.BudgetId is not null)
             {
                 transaction.BudgetId = null;
+                changed = true;
+            }
+            if (addTag is not null && transaction.Tags.All(t => t.Id != addTag.Id))
+            {
+                transaction.Tags.Add(addTag);
+                changed = true;
+            }
+            if (removeTag is not null && transaction.Tags.RemoveAll(t => t.Id == removeTag) > 0)
+            {
                 changed = true;
             }
             if (changed) updated++;

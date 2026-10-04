@@ -7,12 +7,15 @@ namespace Finance.Contracts.Inputs;
 /// <summary>The transaction list's criteria (all optional), without its paging and sorting.</summary>
 public class TransactionCriteriaInputDto
 {
-    /// <summary>Part of the description, ignoring case: a merchant, say.</summary>
+    /// <summary>Part of the description (or the note), ignoring case: a merchant, say.</summary>
     [MaxLength(TextLimits.TransactionDescription)]
     public string? Description { get; set; }
 
     public Guid? CategoryId { get; set; }
     public Guid? AccountId { get; set; }
+
+    /// <summary>Only the transactions with this tag.</summary>
+    public Guid? TagId { get; set; }
 
     [EnumDataType(typeof(Flow))]
     public Flow? Flow { get; set; }

@@ -31,4 +31,9 @@ public class Transaction : BaseEntity
     public bool Hidden { get; set; }
     public Guid? BudgetId { get; set; }
     public Budget? Budget { get; set; }
+
+    /// <summary>The person's own words about it ("Gift for mom"); searched along with the description.</summary>
+    public string? Note { get; set; }
+
+    public List<Tag> Tags { get; set; } = [];
 }

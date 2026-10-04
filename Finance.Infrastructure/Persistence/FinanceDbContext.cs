@@ -22,6 +22,7 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
     public DbSet<Budget> Budgets { get; set; } = null!;
     public DbSet<Account> Accounts { get; set; } = null!;
     public DbSet<Category> Categories { get; set; } = null!;
+    public DbSet<Tag> Tags { get; set; } = null!;
     public DbSet<CategoryRule> CategoryRules { get; set; } = null!;
     public DbSet<FlowRule> FlowRules { get; set; } = null!;
     public DbSet<SeedMarker> SeedMarkers { get; set; } = null!;
@@ -58,6 +59,17 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
             // Hidden (deleted) transactions exist only for duplicate detection unless a query asks for them
             // with IgnoreQueryFilters.
             entity.HasQueryFilter(t => !t.Hidden);
+            entity.Property(t => t.Note).HasMaxLength(TextLimits.TransactionNote);
+            // Deleting a tag (or a transaction) removes just the pairing.
+            entity.HasMany(t => t.Tags).WithMany(t => t.Transactions).UsingEntity("TransactionTags");
+        });
+
+        modelBuilder.Entity<Tag>(entity =>
+        {
+            entity.HasKey(t => t.Id);
+            entity.Property(t => t.Name).IsRequired().HasMaxLength(TextLimits.TagName);
+            // Case-sensitive here; the service also refuses names differing only in case.
+            entity.HasIndex(t => t.Name).IsUnique();
         });
 
         modelBuilder.Entity<UserSession>(entity =>

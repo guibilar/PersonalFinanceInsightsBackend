@@ -131,6 +131,7 @@ public class ReportService(
             Description = string.IsNullOrWhiteSpace(input.Description) ? null : input.Description.Trim(),
             CategoryId = input.CategoryId,
             AccountId = input.AccountId,
+            TagId = input.TagId,
             Flow = input.Flow,
             StartDate = start,
             EndDate = end?.AddDays(1),

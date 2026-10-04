@@ -271,6 +271,25 @@ namespace Finance.Infrastructure.Migrations
                     b.ToTable("FlowRules");
                 });
 
+            modelBuilder.Entity("Finance.Domain.Entities.Tag", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique();
+
+                    b.ToTable("Tags");
+                });
+
             modelBuilder.Entity("Finance.Domain.Entities.Transaction", b =>
                 {
                     b.Property<Guid>("Id")
@@ -312,6 +331,10 @@ namespace Finance.Infrastructure.Migrations
 
                     b.Property<bool>("Hidden")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("TransactionType")
                         .HasColumnType("text");
@@ -586,6 +609,21 @@ namespace Finance.Infrastructure.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("TransactionTags", b =>
+                {
+                    b.Property<Guid>("TagsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("TransactionsId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("TagsId", "TransactionsId");
+
+                    b.HasIndex("TransactionsId");
+
+                    b.ToTable("TransactionTags");
+                });
+
             modelBuilder.Entity("Finance.Domain.Entities.BudgetCategory", b =>
                 {
                     b.HasOne("Finance.Domain.Entities.Budget", "Budget")
@@ -697,6 +735,21 @@ namespace Finance.Infrastructure.Migrations
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityUser", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("TransactionTags", b =>
+                {
+                    b.HasOne("Finance.Domain.Entities.Tag", null)
+                        .WithMany()
+                        .HasForeignKey("TagsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Finance.Domain.Entities.Transaction", null)
+                        .WithMany()
+                        .HasForeignKey("TransactionsId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

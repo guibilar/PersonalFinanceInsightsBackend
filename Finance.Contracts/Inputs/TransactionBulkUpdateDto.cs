@@ -4,7 +4,7 @@ using Finance.Domain.Enums;
 namespace Finance.Contracts.Inputs;
 
 /// <summary>
-/// One change for many transactions at once: a category, a flow, a budget to count towards, or none. Only what is set
+/// One change for many transactions at once: a category, a flow, a budget to count towards (or none), a tag added or taken off. Only what is set
 /// changes; a category or flow set this way is kept from the rules, as when edited one by one.
 /// </summary>
 public class TransactionBulkUpdateDto : IValidatableObject
@@ -26,11 +26,21 @@ public class TransactionBulkUpdateDto : IValidatableObject
     /// <summary>Unlinks them from their budgets.</summary>
     public bool UnlinkBudget { get; set; }
 
+    /// <summary>Adds this tag to the ones that don't have it.</summary>
+    public Guid? AddTagId { get; set; }
+
+    /// <summary>Takes this tag off the ones that have it.</summary>
+    public Guid? RemoveTagId { get; set; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        if (CategoryId is null && Flow is null && BudgetId is null && !UnlinkBudget)
+        if (CategoryId is null && Flow is null && BudgetId is null && !UnlinkBudget && AddTagId is null && RemoveTagId is null)
         {
-            yield return new ValidationResult("Choose what to change: a category, a flow or a budget.", [nameof(TransactionIds)]);
+            yield return new ValidationResult("Choose what to change: a category, a flow, a budget or a tag.", [nameof(TransactionIds)]);
+        }
+        if (AddTagId is not null && AddTagId == RemoveTagId)
+        {
+            yield return new ValidationResult("Add a tag or take it off, not both.", [nameof(AddTagId)]);
         }
         if (BudgetId is not null && UnlinkBudget)
         {

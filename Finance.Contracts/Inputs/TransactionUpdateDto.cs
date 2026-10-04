@@ -18,4 +18,11 @@ public class TransactionUpdateDto
     /// <summary>Unchanged when omitted. Spending only for money out, income and refunds only for money in.</summary>
     [EnumDataType(typeof(Flow))]
     public Flow? Flow { get; set; }
+
+    /// <summary>Unchanged when omitted; empty clears it.</summary>
+    [MaxLength(TextLimits.TransactionNote)]
+    public string? Note { get; set; }
+
+    /// <summary>All its tags (replacing the ones it has); unchanged when omitted, none when empty.</summary>
+    public List<Guid>? TagIds { get; set; }
 }
