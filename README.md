@@ -248,6 +248,37 @@ next longer interval that fits (the response's `interval` says which); 400 years
 `POST /api/Reports/merchants` takes the same criteria with `page` and `pageSize` (default 8) and pages through all of
 those merchants, largest first, as a paginated list: page 1 is the breakdown's top 8.
 
+### Recurring payments, the forecast, what no rule sorts, reviews
+
+`GET /api/Reports/recurring` finds payments that come again and again in the last two years of spending: a merchant
+(its category rule's keyword, or the start of its description: "SQ *CORNER STORE #12" is "CORNER STORE") charged at a
+steady interval (weekly, every two weeks, monthly, quarterly, yearly; three of every four intervals must fit, a missing
+charge allowed) for a steady amount (within 15% for weekly ones, 35% for the rest, so weekly groceries don't pass). A
+merchant billing several (an app store) is looked at price by price. Each has its `amount` (the latest for a fixed
+price, the average of the last three when it varies, with `variableAmount`), `nextDate`, `monthlyCost` and
+`yearlyCost`, a `priceChange` `{from, to, since}` when a fixed price changed with the latest charge, and a `status`:
+`Active`, `Late` (past due, not by a whole period yet) or `Stopped` (listed for a year after the last charge). The
+totals are of the active and late ones.
+
+`GET /api/Reports/forecast` projects this month: what is `spent` so far, the recurring payments still due (`upcoming`),
+and `dailyRate` (day-to-day spending a day over the last three complete months, recurring payments left out; this
+month's pace before there is a complete month) for the days left. `usual` is the average of those months. Active
+monthly and yearly budgets that count by category or merchant get a `projected` end too, at their own pace over those
+months; ones that only count what is linked aren't projected.
+
+`GET /api/Reports/uncategorised` lists the merchants whose spending was left in Other because no rule names them (not
+picked by hand, not on a savings account), most transactions first, each with a `keyword` to make a rule of.
+
+`GET /api/Reports/review?year=&month=` looks back on a month (or a year, without `month`; the last complete month
+without either) against the one before: spending and income, purchases, days without one, every category with both
+periods' spending, the top 5 merchants, the biggest purchase, each month of a year, the recurring payments as of
+today, and `earliest` (the first month with data). A period that hasn't started is a 400.
+
+`POST /api/Transaction/Bulk` `{transactionIds, categoryId?, flow?, budgetId?, unlinkBudget?}` (up to 500) sets a
+category, flow or budget on many at once, with the same rules as one by one: the category and flow are kept from the
+rules, a flow only where it fits the direction (the others keep theirs, and `notes` say how many), and only an active
+budget (409), moving any linked to another.
+
 The dashboard's current month and year follow `Reports:TimeZone` in `appsettings.json`
 (IANA id, default `America/Toronto`; override with `Reports__TimeZone`). An unknown id stops the API at startup.
 

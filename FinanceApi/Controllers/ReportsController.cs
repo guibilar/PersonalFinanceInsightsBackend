@@ -2,6 +2,7 @@ using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Reports;
 using Finance.Domain.Common;
+using Finance.Domain.Exceptions;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FinanceApi.Controllers;
@@ -9,8 +10,42 @@ namespace FinanceApi.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Produces("application/json")]
-public class ReportsController(IReportService reportService) : ControllerBase
+public class ReportsController(IReportService reportService, IInsightService insightService) : ControllerBase
 {
+    /// <summary>Payments that come again and again (subscriptions, bills, rent): what they cost, when the next is due, price changes.</summary>
+    [HttpGet("recurring")]
+    public Task<RecurringReport> GetRecurring(CancellationToken cancellationToken)
+    {
+        return insightService.GetRecurringAsync(cancellationToken);
+    }
+
+    /// <summary>Where this month's spending is heading, the recurring payments still due, and each monthly and yearly budget.</summary>
+    [HttpGet("forecast")]
+    public Task<SpendingForecast> GetForecast(CancellationToken cancellationToken)
+    {
+        return insightService.GetForecastAsync(cancellationToken);
+    }
+
+    /// <summary>Merchants whose spending is left in Other because no rule names them, each with a keyword for a rule.</summary>
+    [HttpGet("uncategorised")]
+    public Task<UncategorisedReport> GetUncategorised(CancellationToken cancellationToken)
+    {
+        return insightService.GetUncategorisedAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// A month (<paramref name="year"/> and <paramref name="month"/>) or a year (<paramref name="year"/> alone) looked
+    /// back on, against the one before; the last complete month without either.
+    /// </summary>
+    [HttpGet("review")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public Task<ReviewReport> GetReview([FromQuery] int? year, [FromQuery] int? month, CancellationToken cancellationToken)
+    {
+        if (year is null && month is not null) throw new InvalidInputException("year", "Choose the month's year too.");
+        return insightService.GetReviewAsync(year, month, cancellationToken);
+    }
+
     [HttpGet("monthly-categorized-graph")]
     public Task<MonthlyCategorizedGraphData> GenerateMonthlyCategorizedGraph(CancellationToken cancellationToken)
     {

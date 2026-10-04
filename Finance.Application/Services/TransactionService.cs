@@ -1,4 +1,5 @@
 using Finance.Application.Abstractions;
+using Finance.Application.Models;
 using Finance.Application.Import;
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
@@ -262,6 +263,78 @@ public class TransactionService(
 
         transaction.BudgetId = budgetId;
         await transactionRepository.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Sets a category, a flow or a budget on many transactions at once, with the same rules as one by one: a category or
+    /// flow set this way is kept from the rules, a flow only where it fits the direction, and only active budgets.
+    /// </summary>
+    public async Task<BulkUpdateResult> BulkUpdateAsync(BulkUpdate update, CancellationToken cancellationToken = default)
+    {
+        var category = update.CategoryId is { } categoryId ? await GetCategoryAsync(categoryId, cancellationToken) : null;
+        Budget? budget = null;
+        if (update.BudgetId is { } budgetId)
+        {
+            budget = await budgetRepository.GetByIdAsync(budgetId, cancellationToken)
+                     ?? throw new InvalidInputException("budgetId", "That budget doesn't exist.");
+            if (budget.Status != Status.Active)
+                throw new ConflictException($"Budget '{budget.Name}' is inactive; activate it before linking transactions.");
+        }
+
+        var ids = update.TransactionIds.Distinct().ToList();
+        var transactions = await transactionRepository.GetByIdsAsync(ids, cancellationToken);
+        var updated = 0;
+        var refusedFlow = 0;
+        foreach (var transaction in transactions)
+        {
+            var changed = false;
+            if (category is not null && transaction.CategoryId != category.Id)
+            {
+                transaction.CategoryId = category.Id;
+                transaction.Category = category;
+                transaction.CategoryLocked = true;
+                changed = true;
+            }
+            if (update.Flow is { } flow && flow != transaction.Flow)
+            {
+                if (FlowMatcher.IsAllowed(flow, transaction.TransactionType))
+                {
+                    transaction.Flow = flow;
+                    transaction.FlowLocked = true;
+                    changed = true;
+                }
+                else
+                {
+                    refusedFlow++;
+                }
+            }
+            if (budget is not null && transaction.BudgetId != budget.Id)
+            {
+                transaction.BudgetId = budget.Id;
+                changed = true;
+            }
+            if (update.UnlinkBudget && transaction.BudgetId is not null)
+            {
+                transaction.BudgetId = null;
+                changed = true;
+            }
+            if (changed) updated++;
+        }
+        await transactionRepository.SaveChangesAsync(cancellationToken);
+
+        var missing = ids.Count - transactions.Count;
+        var notes = new List<string>();
+        if (refusedFlow > 0)
+        {
+            notes.Add($"{refusedFlow} kept {(refusedFlow == 1 ? "its" : "their")} flow: money out can be spending, a transfer or ignored, " +
+                      "money in income, a refund, a transfer or ignored.");
+        }
+        if (missing > 0)
+        {
+            notes.Add($"{missing} {(missing == 1 ? "wasn't" : "weren't")} found: deleted meanwhile, perhaps.");
+        }
+        logger.LogInformation("Bulk update: {Updated} of {Count} transactions changed", updated, ids.Count);
+        return new BulkUpdateResult(updated, refusedFlow + missing, notes);
     }
 
     public async Task UnlinkTransactionFromBudgetAsync(Guid transactionId, CancellationToken cancellationToken = default)

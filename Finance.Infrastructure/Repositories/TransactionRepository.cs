@@ -26,6 +26,11 @@ public class TransactionRepository(FinanceDbContext dbContext)
     }
 
     // Tracked, with its budget so the response after an edit still shows the link.
+    public Task<List<Transaction>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
+    {
+        return DbContext.Transactions.Where(t => ids.Contains(t.Id)).ToListAsync(cancellationToken);
+    }
+
     public override Task<Transaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
         return DbContext.Transactions.Include(t => t.Budget).Include(t => t.Account).Include(t => t.Category)
