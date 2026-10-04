@@ -158,11 +158,23 @@ income, savings transfers).
 
 ## Correcting transactions
 
-`PUT /api/Transaction/{id}` `{description, categoryId, flow?}` changes a transaction's description, category and
-flow (a flow the other way is refused with 400). A category or flow picked by hand is locked:
+`PUT /api/Transaction/{id}` `{description, categoryId, flow?, note?, tagIds?}` changes a transaction's description,
+category and flow (a flow the other way is refused with 400), its note (up to 500 characters; empty clears it, left
+out keeps it) and its tags (the full set; left out keeps them, a tag that doesn't exist is a 400). A category or flow picked by hand is locked:
 `POST /api/Transaction/ApplyRules` re-runs the current category and flow rules over everything else (hidden
 rows are left alone, and so are the categories of savings accounts' rows). Editing never changes the duplicate
 hash, so re-importing the statement still skips the row.
+
+### Notes and tags
+
+Tags are free labels across categories ("Vacation 2026", "Tax deductible"): `GET /api/Tags` lists them by name
+with how many visible transactions carry each, `POST /api/Tags` `{name}` adds one (201; a name already used,
+ignoring case, is a 409), `PUT /api/Tags/{id}` renames it and `DELETE /api/Tags/{id}` removes it from every
+transaction (204). Names are trimmed, single-spaced and up to 40 characters.
+
+Transactions carry `note` and `tags` (`{id, name}`, by name). `GET /api/Transaction?tagId=` keeps those with a tag,
+and so do the breakdown and the reports' transaction criteria; the description search also looks in notes. A
+`note` can be given when adding a transaction by hand.
 
 ## Categories
 
@@ -274,8 +286,8 @@ without either) against the one before: spending and income, purchases, days wit
 periods' spending, the top 5 merchants, the biggest purchase, each month of a year, the recurring payments as of
 today, and `earliest` (the first month with data). A period that hasn't started is a 400.
 
-`POST /api/Transaction/Bulk` `{transactionIds, categoryId?, flow?, budgetId?, unlinkBudget?}` (up to 500) sets a
-category, flow or budget on many at once, with the same rules as one by one: the category and flow are kept from the
+`POST /api/Transaction/Bulk` `{transactionIds, categoryId?, flow?, budgetId?, unlinkBudget?, addTagId?, removeTagId?}`
+(up to 500) sets a category, flow or budget, or adds or removes a tag, on many at once, with the same rules as one by one: the category and flow are kept from the
 rules, a flow only where it fits the direction (the others keep theirs, and `notes` say how many), and only an active
 budget (409), moving any linked to another.
 

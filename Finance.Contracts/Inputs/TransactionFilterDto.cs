@@ -18,6 +18,8 @@ public class TransactionFilterDto
     public string? Description { get; set; }
     public Guid? CategoryId { get; set; }
     public Guid? BudgetId { get; set; }
+    /// <summary>Only the transactions with this tag.</summary>
+    public Guid? TagId { get; set; }
     /// <summary>True: only hidden (deleted) transactions, to restore one. False (the default): only visible ones.</summary>
     public bool Hidden { get; set; }
 

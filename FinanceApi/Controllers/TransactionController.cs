@@ -84,7 +84,7 @@ public class TransactionController(ITransactionService transactionService) : Con
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<TransactionOutputDto>> Update(Guid id, TransactionUpdateDto update, CancellationToken cancellationToken)
     {
-        var transaction = await transactionService.UpdateAsync(id, update.Description, update.CategoryId!.Value, update.Flow, cancellationToken);
+        var transaction = await transactionService.UpdateAsync(id, update.Description, update.CategoryId!.Value, update.Flow, update.Note, update.TagIds, cancellationToken);
         return transaction.ToOutput();
     }
 
@@ -134,7 +134,7 @@ public class TransactionController(ITransactionService transactionService) : Con
     public async Task<ActionResult<BulkUpdateResultDto>> Bulk(TransactionBulkUpdateDto update, CancellationToken cancellationToken)
     {
         var result = await transactionService.BulkUpdateAsync(
-            new BulkUpdate(update.TransactionIds, update.CategoryId, update.Flow, update.BudgetId, update.UnlinkBudget), cancellationToken);
+            new BulkUpdate(update.TransactionIds, update.CategoryId, update.Flow, update.BudgetId, update.UnlinkBudget, update.AddTagId, update.RemoveTagId), cancellationToken);
         return new BulkUpdateResultDto { Updated = result.Updated, Skipped = result.Skipped, Notes = result.Notes.ToList() };
     }
 

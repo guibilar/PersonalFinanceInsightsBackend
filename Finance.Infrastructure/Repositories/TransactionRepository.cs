@@ -28,12 +28,12 @@ public class TransactionRepository(FinanceDbContext dbContext)
     // Tracked, with its budget so the response after an edit still shows the link.
     public Task<List<Transaction>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken = default)
     {
-        return DbContext.Transactions.Where(t => ids.Contains(t.Id)).ToListAsync(cancellationToken);
+        return DbContext.Transactions.Include(t => t.Tags).Where(t => ids.Contains(t.Id)).ToListAsync(cancellationToken);
     }
 
     public override Task<Transaction?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return DbContext.Transactions.Include(t => t.Budget).Include(t => t.Account).Include(t => t.Category)
+        return DbContext.Transactions.Include(t => t.Budget).Include(t => t.Account).Include(t => t.Category).Include(t => t.Tags)
             .SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
     }
 
@@ -55,7 +55,7 @@ public class TransactionRepository(FinanceDbContext dbContext)
 
     public Task<Transaction?> GetIncludingHiddenAsync(Guid id, CancellationToken cancellationToken = default)
     {
-        return DbContext.Transactions.IgnoreQueryFilters().Include(t => t.Budget).Include(t => t.Account).Include(t => t.Category)
+        return DbContext.Transactions.IgnoreQueryFilters().Include(t => t.Budget).Include(t => t.Account).Include(t => t.Category).Include(t => t.Tags)
             .SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
     }
 
@@ -129,7 +129,8 @@ public class TransactionRepository(FinanceDbContext dbContext)
             .AsNoTracking()
             .Include(x => x.Budget)
             .Include(x => x.Account)
-            .Include(x => x.Category);
+            .Include(x => x.Category)
+            .Include(x => x.Tags);
 
         if (filter.TransactionId.HasValue)
         {
@@ -168,7 +169,9 @@ public class TransactionRepository(FinanceDbContext dbContext)
 
         if (!string.IsNullOrEmpty(filter.Description))
         {
-            query = query.Where(x => x.Description.ToLower().Contains(filter.Description.ToLower()));
+            // The note too: "gift" finds the purchase noted "Gift for mom".
+            var text = filter.Description.ToLower();
+            query = query.Where(x => x.Description.ToLower().Contains(text) || (x.Note != null && x.Note.ToLower().Contains(text)));
         }
 
         if (filter.CategoryId.HasValue)
@@ -179,6 +182,11 @@ public class TransactionRepository(FinanceDbContext dbContext)
         if (filter.BudgetId.HasValue)
         {
             query = query.Where(x => x.BudgetId == filter.BudgetId.Value);
+        }
+
+        if (filter.TagId.HasValue)
+        {
+            query = query.Where(x => x.Tags.Any(t => t.Id == filter.TagId.Value));
         }
 
         return Sort(query, filter.SortBy, filter.SortDirection);
