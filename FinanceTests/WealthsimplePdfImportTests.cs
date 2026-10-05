@@ -77,6 +77,22 @@ public class WealthsimplePdfImportTests
     }
 
     [Fact]
+    public void Parser_ReadsInteracETransfers_AsDeposits_AndKeepsWrappedLinesWithPrices()
+    {
+        var parsed = Parse(Build("2026-06-01 - 2026-06-30", 4_380.73m, 0, 0.02m,
+        [
+            new("2026-06-13", "E_TRFIN", "Interac e-Transfer Received", 0, 500m, 500m),
+            new("2026-06-16", "BUY", "VFV - Vanguard S&P 500 Index ETF: Bought\n1.0626 shares at $188.20 per share (executed at 2026-06-15)", 499.98m, 0, 0.02m),
+        ]));
+
+        Assert.Equal(
+        [
+            ("E_TRFIN Interac e-Transfer Received", false),
+            ("BUY VFV - Vanguard S&P 500 Index ETF: Bought 1.0626 shares at $188.20 per share (executed at 2026-06-15)", true),
+        ], parsed.Select(t => (t.Description, t.FlowLocked)));
+    }
+
+    [Fact]
     public void Parser_RefusesAStatementWhoseRowsDontAddUp_AndOtherPdfs()
     {
         var wrongRow = Build("2026-03-01 - 2026-03-31", 100m, 0, 50m,
