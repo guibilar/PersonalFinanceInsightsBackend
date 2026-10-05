@@ -106,13 +106,17 @@ public class InvestmentTests
         await client.PostAsJsonAsync(url, new { date = "2026-09-30", amount = 10500.25m });
         await client.PostAsJsonAsync(url, new { date = "2026-10-14", amount = 10800m });
         var replaced = await (await client.PostAsJsonAsync(url, new { date = "2026-10-14", amount = 10750m })).ReadAsync<AccountBalanceOutputDto>();
-        var future = await client.PostAsJsonAsync(url, new { date = "2026-10-16", amount = 1m });
+        var future = await client.PostAsJsonAsync(url, new { date = "2026-10-17", amount = 1m });
 
         var listed = await (await client.GetAsync(url)).ReadAsync<List<AccountBalanceOutputDto>>();
         Assert.Equal([(Day(2026, 10, 14), 10750m), (Day(2026, 9, 30), 10500.25m)], listed.Select(b => (b.Date, b.Amount)));
         Assert.Equal(listed[0].Id, replaced.Id);
         Assert.Contains("future", await RefusalAsync(future, "date"));
         Assert.Equal((Day(2026, 10, 14), 10750m), ((await GetAsync(client, tfsa.Id)).Balance!.Date, (await GetAsync(client, tfsa.Id)).Balance!.Amount));
+
+        // A device already on tomorrow (east of Toronto) enters today's.
+        var tomorrow = await (await client.PostAsJsonAsync(url, new { date = "2026-10-16", amount = 10900m })).ReadAsync<AccountBalanceOutputDto>();
+        Assert.Equal(Day(2026, 10, 15), tomorrow.Date);
 
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"{url}/{listed[1].Id}")).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync($"/api/Accounts/{tfsa.Id}")).StatusCode);

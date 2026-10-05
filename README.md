@@ -93,7 +93,7 @@ A balance is what an account holds at the end of a day, as its bank or broker sh
 
 - `GET /api/Accounts/{id}/Balances`: newest first.
 - `POST /api/Accounts/{id}/Balances` `{date, amount}`: one per day, so entering another for the day replaces it; not in
-  the future (400).
+  the future (400), though tomorrow is taken as today (a device east of `Reports:TimeZone` can already be there).
 - `DELETE /api/Accounts/{id}/Balances/{balanceId}`.
 
 `GET /api/Reports/net-worth` gives each account's balance today, the assets, what the cards owe and the net worth, and

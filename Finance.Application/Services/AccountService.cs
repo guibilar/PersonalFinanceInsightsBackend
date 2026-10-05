@@ -90,7 +90,10 @@ public class AccountService(IAccountRepository accountRepository, ReportingCalen
     {
         await EnsureExistsAsync(accountId, cancellationToken);
         var day = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
-        if (day > calendar.Today()) throw new InvalidInputException("date", "A balance can't be in the future.");
+        var today = calendar.Today();
+        // A phone or browser east of the reporting time zone can already be on tomorrow: that is today here.
+        if (day > today.AddDays(1)) throw new InvalidInputException("date", "A balance can't be in the future.");
+        if (day > today) day = today;
 
         var balance = await accountRepository.GetBalanceAsync(accountId, day, cancellationToken);
         if (balance is null)

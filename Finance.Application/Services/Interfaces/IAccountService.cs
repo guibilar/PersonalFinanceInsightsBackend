@@ -21,7 +21,10 @@ public interface IAccountService
     /// <summary>Newest first.</summary>
     Task<List<AccountBalance>> GetBalancesAsync(Guid accountId, CancellationToken cancellationToken = default);
 
-    /// <summary>The balance at the end of <paramref name="date"/>, replacing one entered for that day before.</summary>
+    /// <summary>
+    /// The balance at the end of <paramref name="date"/>, replacing one entered for that day before. Tomorrow (a device
+    /// in a time zone already there) is taken as today; later is refused.
+    /// </summary>
     Task<AccountBalance> SetBalanceAsync(Guid accountId, DateOnly date, decimal amount, CancellationToken cancellationToken = default);
 
     Task RemoveBalanceAsync(Guid accountId, Guid balanceId, CancellationToken cancellationToken = default);
