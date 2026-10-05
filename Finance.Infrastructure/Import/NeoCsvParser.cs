@@ -13,7 +13,8 @@ namespace Finance.Infrastructure.Import;
 /// <summary>
 /// Neo Financial CSV exports (card, chequing and savings): a header line, then one row per movement with the
 /// transaction date, an optional status and posted date, the description, and one signed amount: negative is money
-/// out, positive is money in. Columns are found by name, so their order doesn't matter.
+/// out, positive is money in. Columns are found by name, so their order doesn't matter. Neo's monthly PDF statements
+/// are read too (see <see cref="NeoPdfParser"/>).
 /// </summary>
 public partial class NeoCsvParser : IStatementParser
 {
@@ -29,7 +30,12 @@ public partial class NeoCsvParser : IStatementParser
 
     public ParsedStatement Parse(Stream statement)
     {
-        using var reader = new StringReader(StatementText.Read(statement));
+        using var buffer = new MemoryStream();
+        statement.CopyTo(buffer);
+        var bytes = buffer.ToArray();
+        if (NeoPdfParser.IsPdf(bytes)) return new ParsedStatement(NeoPdfParser.Parse(bytes), IsCreditCardExport: false);
+
+        using var reader = new StringReader(StatementText.Read(new MemoryStream(bytes)));
         using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
         {
             HasHeaderRecord = true,

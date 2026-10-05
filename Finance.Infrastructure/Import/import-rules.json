@@ -237,6 +237,17 @@
             ]
           }
         ]
+      },
+      {
+        "Name": "Neo statements",
+        "FlowRules": [
+          {
+            "Flow": "Transfer",
+            "Keywords": [
+              "PAYMENT TO CREDIT"
+            ]
+          }
+        ]
       }
     ]
   }

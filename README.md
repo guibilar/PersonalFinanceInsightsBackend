@@ -115,7 +115,7 @@ and description) is a 409 unless `allowDuplicate`, for two purchases that really
 
 ### Neo Financial
 
-Neo only exports its credit card (the chequing and savings accounts have no export, so use `Manual` for them). The
+Neo exports CSV for its credit card and for Everyday and Savings accounts (from the website: Download CSV). The
 export starts with a header line and has one signed amount per row, negative for
 money out. Columns are found by name (`Transaction Date`, `Description`, `Amount`; `Status` and `Posted Date` are
 optional), so their order doesn't matter. The date is the transaction date, not the day it posted. Only `Posted` rows
@@ -124,6 +124,16 @@ names ("CALGARY       CAN") are collapsed to one.
 
 Neo card payments read "Payment Received - Thank you"; a flow rule makes them transfers, so paying the card doesn't
 count as a refund.
+
+Neo's monthly **PDF statements** (Savings, Everyday, Chequing: in the app, Accounts → the account → Manage →
+Statements) import into a `Neo` account too, so months the CSV doesn't reach can be filled in. The file is recognised
+as a PDF by its first bytes. Rows come from the transactions table (the transaction date, with the year from the
+statement's period, so a December row in a statement running into January keeps its year; the description, wrapped
+lines joined; credits as money in and the negative debits as money out). Each row must take the previous balance to
+its own and the last to the closing balance, starting from the summary's opening balance: when they don't, the
+statement is refused (400, naming the row) and nothing is imported. As with CSV files, rows already imported are
+skipped, so overlapping months add nothing twice. Paying the Neo card from Everyday ("Payment to Credit") is a
+transfer.
 
 ## Flows
 
