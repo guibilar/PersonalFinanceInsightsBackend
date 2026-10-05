@@ -146,7 +146,7 @@ public class TransactionService(
         if (statement.IsCreditCardExport && account.Type != AccountType.CreditCard)
         {
             throw new AccountMismatchException(
-                $"This file is a credit card export, but \"{account.Name}\" is a {Describe(account.Type)} account.");
+                $"This file is a credit card export, but \"{account.Name}\" is {Describe(account.Type)} account.");
         }
 
         var hashes = statement.Transactions.Select(t => t.Hash).ToList();
@@ -165,10 +165,12 @@ public class TransactionService(
         }
     }
 
+    /// <summary>"a credit card", "an investment".</summary>
     private static string Describe(AccountType type) => type switch
     {
-        AccountType.CreditCard => "credit card",
-        _ => type.ToString().ToLowerInvariant()
+        AccountType.CreditCard => "a credit card",
+        AccountType.Investment => "an investment",
+        _ => "a " + type.ToString().ToLowerInvariant()
     };
 
     public Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default)

@@ -18,4 +18,15 @@ public class Account : BaseEntity
 
     /// <summary>How its bank lays out statement files. Can be corrected while the account is in use.</summary>
     public StatementFormat Format { get; set; }
+
+    /// <summary>The registered plan it is held in (savings and investment accounts only).</summary>
+    public RegisteredPlan Plan { get; set; }
+
+    /// <summary>
+    /// The plan's contribution room for <see cref="ContributionRoomYear"/>, as the CRA gives it (for a TFSA, the room on
+    /// January 1, before that year's deposits). Null when not given.
+    /// </summary>
+    public decimal? ContributionRoom { get; set; }
+
+    public int? ContributionRoomYear { get; set; }
 }

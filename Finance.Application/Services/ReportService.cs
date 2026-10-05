@@ -197,7 +197,7 @@ public class ReportService(
                 var income = g.Where(t => t.Flow == Flow.Income).Sum(t => t.Amount);
                 var spending = g.Sum(MonthlyRecordsCalculator.SpendingAmount);
                 // What went into savings accounts, from anywhere, minus what came out.
-                var savingsChange = g.Where(t => t.Account!.Type == AccountType.Savings)
+                var savingsChange = g.Where(t => t.Account!.Type.HoldsSavings())
                     .Sum(t => t.TransactionType == TransactionType.Credit ? t.Amount : -t.Amount);
                 return (YearMonth: g.Key, Month: new CashFlowMonth
                 {
@@ -225,10 +225,10 @@ public class ReportService(
         };
     }
 
-    /// <summary>Whether a transaction changes any of the cash-flow figures: income, spending, or a savings account.</summary>
+    /// <summary>Whether a transaction changes any of the cash-flow figures: income, spending, or savings and investments.</summary>
     private static bool CountsInCashFlow(Transaction transaction) =>
         transaction.Flow is Flow.Spending or Flow.Refund or Flow.Income
-        || (transaction.Account!.Type == AccountType.Savings && transaction.Flow != Flow.Ignored);
+        || (transaction.Account!.Type.HoldsSavings() && transaction.Flow != Flow.Ignored);
 
     /// <summary>Spending and refunds (which reduce spending), on any account; income and transfers stay out.</summary>
     private async Task<List<Transaction>> SpendingAsync(DateTime start, DateTime end, CancellationToken cancellationToken)

@@ -40,7 +40,7 @@ public class TransactionRepository(FinanceDbContext dbContext)
     public Task<List<Transaction>> GetRuleCategorizedAsync(CancellationToken cancellationToken = default)
     {
         return DbContext.Transactions
-            .Where(t => !t.CategoryLocked && t.Account!.Type != AccountType.Savings)
+            .Where(t => !t.CategoryLocked && t.Account!.Type != AccountType.Savings && t.Account.Type != AccountType.Investment)
             .ToListAsync(cancellationToken);
     }
 

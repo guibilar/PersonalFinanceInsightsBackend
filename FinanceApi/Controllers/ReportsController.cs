@@ -10,7 +10,7 @@ namespace FinanceApi.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Produces("application/json")]
-public class ReportsController(IReportService reportService, IInsightService insightService) : ControllerBase
+public class ReportsController(IReportService reportService, IInsightService insightService, INetWorthService netWorthService) : ControllerBase
 {
     /// <summary>Payments that come again and again (subscriptions, bills, rent): what they cost, when the next is due, price changes.</summary>
     [HttpGet("recurring")]
@@ -86,5 +86,12 @@ public class ReportsController(IReportService reportService, IInsightService ins
     public Task<CashFlowReport> GenerateCashFlowReport(CancellationToken cancellationToken)
     {
         return reportService.GenerateCashFlowReportAsync(cancellationToken);
+    }
+
+    /// <summary>What every account holds or owes today and at the end of each of the last twelve months, and the total.</summary>
+    [HttpGet("net-worth")]
+    public Task<NetWorthReport> GetNetWorth(CancellationToken cancellationToken)
+    {
+        return netWorthService.GetAsync(cancellationToken);
     }
 }

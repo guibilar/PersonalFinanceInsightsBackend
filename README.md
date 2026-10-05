@@ -65,15 +65,43 @@ your network can reach the API directly.
 Statements are imported into accounts. Every database starts with three, one per kind: "Chequing",
 "Savings" and "Credit card" (transactions stored before accounts existed are on them). Add more for a second
 card or bank account, rename them, or delete one that has no transactions (deleted ones included: they are
-what keeps a re-import from adding them back). An account's kind (`Chequing`, `Savings`, `CreditCard`) never
-changes; it decides what its transactions mean when no flow rule says otherwise.
+what keeps a re-import from adding them back). An account's kind (`Chequing`, `Savings`, `CreditCard`,
+`Investment`) never changes; it decides what its transactions mean when no flow rule says otherwise. Savings and
+investment movements are transfers by default, keep their category, and make the cash-flow report's savings change.
 
-- `GET /api/Accounts`: `{id, name, type, format, transactionCount}`, by kind then name.
-- `POST /api/Accounts` `{name, type, format?}`, `PUT /api/Accounts/{id}` `{name, format?}`: names are trimmed, up to
-  100 characters, and unique ignoring case (409 otherwise). `format` is the layout of the bank's statement files,
-  `Cibc` (the default), `Neo` or `Manual` (no statement files: transactions are added by hand, and importing into it
-  is refused); it can be corrected later, the kind can't.
-- `DELETE /api/Accounts/{id}`: 409 while it has transactions.
+- `GET /api/Accounts`: `{id, name, type, format, transactionCount, plan, contributionRoom, contributionRoomYear,
+  depositedThisYear, withdrawnThisYear, roomLeft, balance}`, by kind then name.
+- `POST /api/Accounts` `{name, type, format?, plan?, contributionRoom?, contributionRoomYear?}`, `PUT /api/Accounts/{id}`
+  (the same without `type`): names are trimmed, up to 100 characters, and unique ignoring case (409 otherwise).
+  `format` is the layout of the bank's statement files, `Cibc` (the default), `Neo` or `Manual` (no statement files:
+  transactions are added by hand, and importing into it is refused); it can be corrected later, the kind can't. Fields
+  left out of a `PUT` stay as they are.
+- `DELETE /api/Accounts/{id}`: 409 while it has transactions; its balances go with it.
+
+### Registered plans and contribution room
+
+A savings or investment account can be held in a registered plan, `plan`: `Tfsa`, `Rrsp` or `Fhsa` (`None` clears it,
+and its room; other kinds are a 400). `contributionRoom` is the plan's room for `contributionRoomYear` (this year when
+left out; 2009 to this year), as the CRA's My Account shows it: for a TFSA, the room on January 1. The account then
+says this year's transfers in (`depositedThisYear`: the contributions) and out (`withdrawnThisYear`: for a TFSA, room
+again next January), and `roomLeft`: this year's room less this year's deposits, or null until this year's room is
+entered.
+
+### Balances and net worth
+
+A balance is what an account holds at the end of a day, as its bank or broker shows it (for a card, what it owes):
+
+- `GET /api/Accounts/{id}/Balances`: newest first.
+- `POST /api/Accounts/{id}/Balances` `{date, amount}`: one per day, so entering another for the day replaces it; not in
+  the future (400).
+- `DELETE /api/Accounts/{id}/Balances/{balanceId}`.
+
+`GET /api/Reports/net-worth` gives each account's balance today, the assets, what the cards owe and the net worth, and
+the same at the end of each of the last twelve months. After a balance, the account's transactions carry it on (not the
+ignored ones); before its first one, a bank account's or card's transactions carry it back to just before the first
+transaction imported. An investment's value also moves with the market, so it is known only from its first balance, and
+only money in and out of it (transfers) moves it between balances: enter its balance now and then. `movedSince` says a
+balance today includes transactions after the last one entered.
 
 ## Import bank statements
 

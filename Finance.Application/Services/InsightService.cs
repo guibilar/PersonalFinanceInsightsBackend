@@ -105,7 +105,7 @@ public class InsightService(
         // Left in Other by the rules (not picked by hand), and not savings, whose movements stay in Other on purpose.
         // A rule that names Other on purpose isn't missing.
         var unsorted = (await transactionRepository.FilterNoPaginationAsync(new TransactionFilterDto { CategoryId = Category.OtherId }, cancellationToken))
-            .Where(t => !t.CategoryLocked && t.Account!.Type != AccountType.Savings && t.Flow is Flow.Spending or Flow.Refund
+            .Where(t => !t.CategoryLocked && !t.Account!.Type.HoldsSavings() && t.Flow is Flow.Spending or Flow.Refund
                         && matcher.MatchingKeyword(t.Description) is null)
             .ToList();
         return new UncategorisedReport

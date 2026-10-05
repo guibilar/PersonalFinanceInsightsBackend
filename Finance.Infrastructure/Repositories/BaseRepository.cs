@@ -24,7 +24,7 @@ public class BaseRepository<T>(FinanceDbContext dbContext) : IBaseRepository<T> 
         return DbContext.Set<T>().SingleOrDefaultAsync(e => e.Id == id, cancellationToken);
     }
 
-    public async Task RemoveAsync(T entity, CancellationToken cancellationToken = default)
+    public virtual async Task RemoveAsync(T entity, CancellationToken cancellationToken = default)
     {
         DbContext.Set<T>().Remove(entity);
         await SaveChangesAsync(cancellationToken);
