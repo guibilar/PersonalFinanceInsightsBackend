@@ -28,6 +28,12 @@ namespace Finance.Infrastructure.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<decimal?>("ContributionRoom")
+                        .HasColumnType("numeric");
+
+                    b.Property<int?>("ContributionRoomYear")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Format")
                         .IsRequired()
                         .HasColumnType("text");
@@ -36,6 +42,13 @@ namespace Finance.Infrastructure.Migrations
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("Plan")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasDefaultValue("None");
 
                     b.Property<string>("Type")
                         .IsRequired()
@@ -54,6 +67,7 @@ namespace Finance.Infrastructure.Migrations
                             Id = new Guid("5b0c4b8e-3f5e-4c1a-9d53-0c2f7a1e8a01"),
                             Format = "Cibc",
                             Name = "Chequing",
+                            Plan = "None",
                             Type = "Chequing"
                         },
                         new
@@ -61,6 +75,7 @@ namespace Finance.Infrastructure.Migrations
                             Id = new Guid("5b0c4b8e-3f5e-4c1a-9d53-0c2f7a1e8a02"),
                             Format = "Cibc",
                             Name = "Savings",
+                            Plan = "None",
                             Type = "Savings"
                         },
                         new
@@ -68,8 +83,32 @@ namespace Finance.Infrastructure.Migrations
                             Id = new Guid("5b0c4b8e-3f5e-4c1a-9d53-0c2f7a1e8a03"),
                             Format = "Cibc",
                             Name = "Credit card",
+                            Plan = "None",
                             Type = "CreditCard"
                         });
+                });
+
+            modelBuilder.Entity("Finance.Domain.Entities.AccountBalance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AccountId", "Date")
+                        .IsUnique();
+
+                    b.ToTable("AccountBalances");
                 });
 
             modelBuilder.Entity("Finance.Domain.Entities.Budget", b =>
@@ -622,6 +661,17 @@ namespace Finance.Infrastructure.Migrations
                     b.HasIndex("TransactionsId");
 
                     b.ToTable("TransactionTags");
+                });
+
+            modelBuilder.Entity("Finance.Domain.Entities.AccountBalance", b =>
+                {
+                    b.HasOne("Finance.Domain.Entities.Account", "Account")
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Account");
                 });
 
             modelBuilder.Entity("Finance.Domain.Entities.BudgetCategory", b =>

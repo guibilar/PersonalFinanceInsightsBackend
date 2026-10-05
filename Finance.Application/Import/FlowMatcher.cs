@@ -40,8 +40,8 @@ public class FlowMatcher
     {
         // Rows from before transactions had a direction were never counted.
         (_, null) => Flow.Ignored,
-        // Money goes in and out of savings from your other accounts; interest can be made income with a rule.
-        (AccountType.Savings, _) => Flow.Transfer,
+        // Money goes in and out of savings and investments from your other accounts; interest can be made income with a rule.
+        (AccountType.Savings or AccountType.Investment, _) => Flow.Transfer,
         (_, TransactionType.Debit) => Flow.Spending,
         (AccountType.CreditCard, TransactionType.Credit) => Flow.Refund,
         _ => Flow.Income

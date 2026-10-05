@@ -11,8 +11,8 @@ public class TransactionClassifier(CategoryMatcher categories, FlowMatcher flows
     public bool Classify(Transaction transaction, AccountType account)
     {
         var changed = false;
-        // Savings movements are transfers, not purchases: their category stays as it is (Other when imported).
-        if (!transaction.CategoryLocked && account != AccountType.Savings)
+        // Savings and investment movements are transfers, not purchases: their category stays as it is (Other when imported).
+        if (!transaction.CategoryLocked && !account.HoldsSavings())
         {
             var category = categories.Categorize(transaction.Description);
             changed |= category != transaction.CategoryId;

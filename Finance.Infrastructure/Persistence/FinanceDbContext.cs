@@ -21,6 +21,7 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
     public DbSet<Transaction> Transactions { get; set; } = null!;
     public DbSet<Budget> Budgets { get; set; } = null!;
     public DbSet<Account> Accounts { get; set; } = null!;
+    public DbSet<AccountBalance> AccountBalances { get; set; } = null!;
     public DbSet<Category> Categories { get; set; } = null!;
     public DbSet<Tag> Tags { get; set; } = null!;
     public DbSet<CategoryRule> CategoryRules { get; set; } = null!;
@@ -34,6 +35,7 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
     {
         configurationBuilder.Properties<TransactionType>().HaveConversion<string>();
         configurationBuilder.Properties<AccountType>().HaveConversion<string>();
+        configurationBuilder.Properties<RegisteredPlan>().HaveConversion<string>();
         configurationBuilder.Properties<Status>().HaveConversion<string>();
         configurationBuilder.Properties<BudgetPeriod>().HaveConversion<string>();
         configurationBuilder.Properties<Flow>().HaveConversion<string>();
@@ -108,6 +110,7 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
         {
             entity.HasKey(a => a.Id);
             entity.Property(a => a.Name).IsRequired().HasMaxLength(TextLimits.AccountName);
+            entity.Property(a => a.Plan).HasMaxLength(10).HasDefaultValue(RegisteredPlan.None).HasSentinel(RegisteredPlan.None);
             // Case-sensitive here; the service also refuses names differing only in case.
             entity.HasIndex(a => a.Name).IsUnique();
             // Every database starts with the three accounts there were before accounts were data; a migration
@@ -116,6 +119,15 @@ public class FinanceDbContext : IdentityDbContext<IdentityUser>, IDataProtection
                 new Account { Id = Account.DefaultChequingId, Name = "Chequing", Type = AccountType.Chequing, Format = StatementFormat.Cibc },
                 new Account { Id = Account.DefaultSavingsId, Name = "Savings", Type = AccountType.Savings, Format = StatementFormat.Cibc },
                 new Account { Id = Account.DefaultCreditCardId, Name = "Credit card", Type = AccountType.CreditCard, Format = StatementFormat.Cibc });
+        });
+
+        modelBuilder.Entity<AccountBalance>(entity =>
+        {
+            entity.HasKey(b => b.Id);
+            // One balance a day per account: entering another for the day replaces it.
+            entity.HasIndex(b => new { b.AccountId, b.Date }).IsUnique();
+            // An account can only be deleted while it has no transactions; its balances go with it.
+            entity.HasOne(b => b.Account).WithMany().HasForeignKey(b => b.AccountId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<FlowRule>(entity =>

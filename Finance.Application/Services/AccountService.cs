@@ -1,5 +1,6 @@
 using Finance.Application.Abstractions;
 using Finance.Application.Models;
+using Finance.Application.Reports;
 using Finance.Application.Services.Interfaces;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
@@ -7,32 +8,63 @@ using Finance.Domain.Exceptions;
 
 namespace Finance.Application.Services;
 
-public class AccountService(IAccountRepository accountRepository) : IAccountService
+public class AccountService(IAccountRepository accountRepository, ReportingCalendar calendar) : IAccountService
 {
-    public Task<List<AccountSummary>> GetAllAsync(CancellationToken cancellationToken = default) =>
-        accountRepository.GetSummariesAsync(cancellationToken);
+    /// <summary>The TFSA's first year: no room is older.</summary>
+    private const int FirstRoomYear = 2009;
 
-    public async Task<AccountSummary> AddAsync(string name, AccountType type, StatementFormat format,
-        CancellationToken cancellationToken = default)
+    public Task<List<AccountSummary>> GetAllAsync(CancellationToken cancellationToken = default) =>
+        accountRepository.GetSummariesAsync(calendar.Today().Year, cancellationToken);
+
+    public async Task<AccountSummary> AddAsync(AccountType type, AccountDetails details, CancellationToken cancellationToken = default)
     {
-        var account = new Account { Name = name.Trim(), Type = type, Format = format };
+        var account = new Account { Name = details.Name.Trim(), Type = type, Format = details.Format ?? StatementFormat.Cibc };
         EnsureUnique(await accountRepository.GetAllAsync(cancellationToken), account.Name, account.Id);
+        Apply(account, details);
         await accountRepository.AddAsync(account, cancellationToken);
         return new AccountSummary(account, 0);
     }
 
-    public async Task<AccountSummary> UpdateAsync(Guid id, string name, StatementFormat? format,
-        CancellationToken cancellationToken = default)
+    public async Task<AccountSummary> UpdateAsync(Guid id, AccountDetails details, CancellationToken cancellationToken = default)
     {
         var accounts = await accountRepository.GetAllAsync(cancellationToken);
         var account = accounts.SingleOrDefault(a => a.Id == id) ?? throw new NotFoundException(nameof(Account), id);
-        var trimmed = name.Trim();
+        var trimmed = details.Name.Trim();
         EnsureUnique(accounts, trimmed, id);
 
         account.Name = trimmed;
-        if (format is { } newFormat) account.Format = newFormat;
+        if (details.Format is { } newFormat) account.Format = newFormat;
+        Apply(account, details);
         await accountRepository.SaveChangesAsync(cancellationToken);
-        return new AccountSummary(account, await accountRepository.CountTransactionsAsync(id, cancellationToken));
+        return await accountRepository.GetSummaryAsync(account, calendar.Today().Year, cancellationToken);
+    }
+
+    /// <summary>The plan and its room: only savings and investments are held in one, and only a plan has room.</summary>
+    private void Apply(Account account, AccountDetails details)
+    {
+        if (details.Plan is { } plan)
+        {
+            if (plan != RegisteredPlan.None && !account.Type.HoldsSavings())
+            {
+                throw new InvalidInputException("plan", "Only savings and investment accounts can be held in a registered plan.");
+            }
+            account.Plan = plan;
+            if (plan == RegisteredPlan.None) (account.ContributionRoom, account.ContributionRoomYear) = (null, null);
+        }
+        if (details.ContributionRoom is { } room)
+        {
+            if (account.Plan == RegisteredPlan.None)
+            {
+                throw new InvalidInputException("contributionRoom", "Contribution room is for an account held in a registered plan.");
+            }
+            var thisYear = calendar.Today().Year;
+            var year = details.ContributionRoomYear ?? thisYear;
+            if (year < FirstRoomYear || year > thisYear)
+            {
+                throw new InvalidInputException("contributionRoomYear", $"Choose a year from {FirstRoomYear} to {thisYear}.");
+            }
+            (account.ContributionRoom, account.ContributionRoomYear) = (room, year);
+        }
     }
 
     public async Task RemoveAsync(Guid id, CancellationToken cancellationToken = default)
@@ -46,6 +78,47 @@ public class AccountService(IAccountRepository accountRepository) : IAccountServ
                 $"\"{account.Name}\" has {transactions} transaction{(transactions == 1 ? "" : "s")} (deleted ones included); only an empty account can be deleted.");
         }
         await accountRepository.RemoveAsync(account, cancellationToken);
+    }
+
+    public async Task<List<AccountBalance>> GetBalancesAsync(Guid accountId, CancellationToken cancellationToken = default)
+    {
+        await EnsureExistsAsync(accountId, cancellationToken);
+        return await accountRepository.GetBalancesAsync(accountId, cancellationToken);
+    }
+
+    public async Task<AccountBalance> SetBalanceAsync(Guid accountId, DateOnly date, decimal amount, CancellationToken cancellationToken = default)
+    {
+        await EnsureExistsAsync(accountId, cancellationToken);
+        var day = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+        var today = calendar.Today();
+        // A phone or browser east of the reporting time zone can already be on tomorrow: that is today here.
+        if (day > today.AddDays(1)) throw new InvalidInputException("date", "A balance can't be in the future.");
+        if (day > today) day = today;
+
+        var balance = await accountRepository.GetBalanceAsync(accountId, day, cancellationToken);
+        if (balance is null)
+        {
+            balance = new AccountBalance { AccountId = accountId, Date = day, Amount = amount };
+            await accountRepository.AddBalanceAsync(balance, cancellationToken);
+        }
+        else
+        {
+            balance.Amount = amount;
+            await accountRepository.SaveChangesAsync(cancellationToken);
+        }
+        return balance;
+    }
+
+    public async Task RemoveBalanceAsync(Guid accountId, Guid balanceId, CancellationToken cancellationToken = default)
+    {
+        var balance = await accountRepository.GetBalanceByIdAsync(accountId, balanceId, cancellationToken)
+                      ?? throw new NotFoundException(nameof(AccountBalance), balanceId);
+        await accountRepository.RemoveBalanceAsync(balance, cancellationToken);
+    }
+
+    private async Task EnsureExistsAsync(Guid accountId, CancellationToken cancellationToken)
+    {
+        _ = await accountRepository.GetByIdAsync(accountId, cancellationToken) ?? throw new NotFoundException(nameof(Account), accountId);
     }
 
     // The database's unique index is the backstop for concurrent requests; this gives the usual case a clear message.
