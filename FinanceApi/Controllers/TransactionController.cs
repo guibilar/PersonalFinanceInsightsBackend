@@ -47,7 +47,14 @@ public class TransactionController(ITransactionService transactionService) : Con
 
         await using var stream = file.OpenReadStream();
         var result = await transactionService.ImportAsync(stream, import.AccountId!.Value, import.Confirmed, cancellationToken);
-        return new ImportResultDto { Read = result.Read, Added = result.Added, Skipped = result.Skipped };
+        return new ImportResultDto
+        {
+            Read = result.Read,
+            Added = result.Added,
+            Skipped = result.Skipped,
+            Balance = result.Balance?.Amount,
+            BalanceDate = result.Balance?.Date,
+        };
     }
 
     [HttpPost("Filter")]

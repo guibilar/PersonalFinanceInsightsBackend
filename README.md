@@ -73,7 +73,7 @@ investment movements are transfers by default, keep their category, and make the
   depositedThisYear, withdrawnThisYear, roomLeft, balance}`, by kind then name.
 - `POST /api/Accounts` `{name, type, format?, plan?, contributionRoom?, contributionRoomYear?}`, `PUT /api/Accounts/{id}`
   (the same without `type`): names are trimmed, up to 100 characters, and unique ignoring case (409 otherwise).
-  `format` is the layout of the bank's statement files, `Cibc` (the default), `Neo` or `Manual` (no statement files:
+  `format` is the layout of the bank's statement files, `Cibc` (the default), `Neo`, `Wealthsimple` or `Manual` (no statement files:
   transactions are added by hand, and importing into it is refused); it can be corrected later, the kind can't. Fields
   left out of a `PUT` stay as they are.
 - `DELETE /api/Accounts/{id}`: 409 while it has transactions; its balances go with it.
@@ -85,7 +85,8 @@ and its room; other kinds are a 400). `contributionRoom` is the plan's room for 
 left out; 2009 to this year), as the CRA's My Account shows it: for a TFSA, the room on January 1. The account then
 says this year's transfers in (`depositedThisYear`: the contributions) and out (`withdrawnThisYear`: for a TFSA, room
 again next January), and `roomLeft`: this year's room less this year's deposits, or null until this year's room is
-entered.
+entered. A transfer straight from or to another plan of the same kind (Wealthsimple's `TRFINTF`, `TRFOUTTF` and
+`WIREINTF` rows) is neither: it uses no room and gives none back.
 
 ### Balances and net worth
 
@@ -162,6 +163,24 @@ its own and the last to the closing balance, starting from the summary's opening
 statement is refused (400, naming the row) and nothing is imported. As with CSV files, rows already imported are
 skipped, so overlapping months add nothing twice. Paying the Neo card from Everyday ("Payment to Credit") is a
 transfer.
+
+### Wealthsimple
+
+Wealthsimple has no export, but its monthly **PDF statements** (Documents → Statements: TFSA, RRSP, FHSA,
+non-registered) import into a `Wealthsimple` account. Rows come from the Activity table: the date, the statement code
+(`CONT`, `BUY`, `DIV`, …; the list is on the statement's last page) and the description, imported as one description
+starting with the code ("CONT Contribution (executed at 2026-03-02)"), the debit as money out and the credit as money
+in. Rows that move no cash (a stock dividend) are left out. Each row must take the cash balance to its own, from the
+summary's last statement cash balance to its closing cash balance, or the statement is refused and nothing is
+imported.
+
+Only cash moves, so the code decides what a row means, and the rules can't change it: deposits, contributions and
+withdrawals (`CONT`, `DEP`, `TRFIN`, `TRFINTF`, `WIREIN`, `WIREINTF`, `WD`, `WDQ`, `TRFOUT`, `TRFOUTTF`, `HBP`, `LLP`,
+`OBP`) follow the flow rules like any other (transfers, for an investment account); fees and taxes are spending;
+bonuses and grants are income; everything else (buying and selling, dividends, interest, currency exchange) stays inside
+the account and is ignored. The statement's portfolio value ("Total Portfolio", at market value) becomes the account's
+balance on the period's last day, replacing one entered for that day; the import's response says it (`balance`,
+`balanceDate`), so a month without activity still moves the net worth.
 
 ## Flows
 

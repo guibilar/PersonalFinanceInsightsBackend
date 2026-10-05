@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<ITagRepository, TagRepository>();
         services.AddScoped<IStatementParser, CibcCsvParser>();
         services.AddScoped<IStatementParser, NeoCsvParser>();
+        services.AddScoped<IStatementParser, WealthsimplePdfParser>();
         return services;
     }
 

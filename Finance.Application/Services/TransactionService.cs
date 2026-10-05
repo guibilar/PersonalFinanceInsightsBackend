@@ -133,8 +133,24 @@ public class TransactionService(
             if (replaced > 0) logger.LogInformation("Hid {Count} generated monthly rent rows replaced by real payments", replaced);
         }
 
+        // The statement's own figure for what the account was worth replaces any typed in for that day.
+        if (statementRows.ClosingBalance is { } closing)
+        {
+            var balance = await accountRepository.GetBalanceAsync(account.Id, closing.Date, cancellationToken);
+            if (balance is null)
+            {
+                await accountRepository.AddBalanceAsync(
+                    new AccountBalance { AccountId = account.Id, Date = closing.Date, Amount = closing.Amount }, cancellationToken);
+            }
+            else
+            {
+                balance.Amount = closing.Amount;
+                await accountRepository.SaveChangesAsync(cancellationToken);
+            }
+        }
+
         logger.LogInformation("Imported {Account} statement: {Read} read, {Added} added", account.Name, parsed.Count, added);
-        return new ImportResult(parsed.Count, added, parsed.Count - added);
+        return new ImportResult(parsed.Count, added, parsed.Count - added, statementRows.ClosingBalance);
     }
 
     /// <summary>
