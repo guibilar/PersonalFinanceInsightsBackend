@@ -31,8 +31,8 @@
   </ItemGroup>
 
   <ItemGroup Label="CLI">
-    <PackageVersion Include="ClosedXML" Version="0.105.0" />
-    <PackageVersion Include="ScottPlot" Version="5.0.56" />
+    <PackageVersion Include="ClosedXML" Version="0.105.1" />
+    <PackageVersion Include="ScottPlot" Version="5.1.59" />
   </ItemGroup>
 
   <ItemGroup Label="Tests">
