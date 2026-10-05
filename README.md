@@ -69,8 +69,10 @@ what keeps a re-import from adding them back). An account's kind (`Chequing`, `S
 `Investment`) never changes; it decides what its transactions mean when no flow rule says otherwise. Savings and
 investment movements are transfers by default, keep their category, and make the cash-flow report's savings change.
 
-- `GET /api/Accounts`: `{id, name, type, format, transactionCount, plan, contributionRoom, contributionRoomYear,
-  depositedThisYear, withdrawnThisYear, roomLeft, balance}`, by kind then name.
+- `GET /api/Accounts`: `{id, name, type, format, transactionCount, lastTransactionDate, plan, contributionRoom,
+  contributionRoomYear, depositedThisYear, withdrawnThisYear, roomLeft, balance}`, by kind then name.
+  `lastTransactionDate` (the latest row, deleted ones included) and the latest balance's date say how far the account's
+  imported statements reach.
 - `POST /api/Accounts` `{name, type, format?, plan?, contributionRoom?, contributionRoomYear?}`, `PUT /api/Accounts/{id}`
   (the same without `type`): names are trimmed, up to 100 characters, and unique ignoring case (409 otherwise).
   `format` is the layout of the bank's statement files, `Cibc` (the default), `Neo`, `Wealthsimple` or `Manual` (no statement files:

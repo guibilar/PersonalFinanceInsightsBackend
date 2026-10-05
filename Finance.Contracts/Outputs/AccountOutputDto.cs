@@ -12,6 +12,12 @@ public class AccountOutputDto
     /// <summary>Including deleted (hidden) ones; an account can only be deleted when this is 0.</summary>
     public int TransactionCount { get; set; }
 
+    /// <summary>
+    /// The day of its latest transaction (deleted ones included), at midnight UTC; null without any. With the latest
+    /// balance's date, how far its imported statements reach.
+    /// </summary>
+    public DateTime? LastTransactionDate { get; set; }
+
     public RegisteredPlan Plan { get; set; }
 
     /// <summary>The plan's contribution room for <see cref="ContributionRoomYear"/>, as entered.</summary>
