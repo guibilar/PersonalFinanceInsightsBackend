@@ -30,8 +30,8 @@ public partial class WealthsimplePdfParser : IStatementParser
     /// <summary>Codes that move money between the account and the person's other accounts: left to the flow rules (transfers by default).</summary>
     private static readonly HashSet<string> MoneyInOrOut =
     [
-        "CONT", "DEP", "TRFIN", "TRFINTF", "WIREIN", "WIREINTF", // in
-        "WD", "WDQ", "TRFOUT", "TRFOUTTF", "HBP", "LLP", "OBP" // out
+        "CONT", "DEP", "TRFIN", "TRFINTF", "WIREIN", "WIREINTF", "E_TRFIN", // in (E_: Interac e-Transfer)
+        "WD", "WDQ", "TRFOUT", "TRFOUTTF", "HBP", "LLP", "OBP", "E_TRFOUT" // out
     ];
 
     /// <summary>Money the account earned or got as a bonus.</summary>
@@ -88,7 +88,7 @@ public partial class WealthsimplePdfParser : IStatementParser
             foreach (var lines in pages)
             {
                 Row? last = null;
-                double lastY = 0, descriptionLeft = 0;
+                double lastY = 0, descriptionLeft = 0, amountsLeft = double.MaxValue;
                 foreach (var line in lines)
                 {
                     if (IsHeader(line))
@@ -96,6 +96,7 @@ public partial class WealthsimplePdfParser : IStatementParser
                         // The table goes on over the next pages, under the same header (or none).
                         inTable = true;
                         descriptionLeft = line.Words.First(w => w.Text == "Description").BoundingBox.Left;
+                        amountsLeft = line.Words.First(w => w.Text == "Debit").BoundingBox.Left;
                         last = null;
                         continue;
                     }
@@ -106,9 +107,9 @@ public partial class WealthsimplePdfParser : IStatementParser
                         (last, lastY) = (row, line.Y);
                     }
                     else if (last is not null && lastY - line.Y <= WrappedLine && line.Left >= descriptionLeft - 2
-                             && !line.Words.Any(w => Money().IsMatch(w.Text)))
+                             && !line.Words.Any(w => w.BoundingBox.Left >= amountsLeft - 10))
                     {
-                        // A description too long for its column goes on below it.
+                        // A description too long for its column goes on below it ("1.0626 shares at $188.20 per share").
                         last.Description.Add(line.Text);
                         lastY = line.Y;
                     }
@@ -245,7 +246,7 @@ public partial class WealthsimplePdfParser : IStatementParser
     [GeneratedRegex(@"^[-(]?\$-?\d{1,3}(,\d{3})*\.\d{2}\)?$")]
     private static partial Regex Money();
 
-    [GeneratedRegex(@"^[A-Z]{2,12}$")]
+    [GeneratedRegex(@"^[A-Z][A-Z0-9_]{1,15}$")]
     private static partial Regex Code();
 
     [GeneratedRegex(@"(\d{4}-\d{2}-\d{2}) - (\d{4}-\d{2}-\d{2})")]

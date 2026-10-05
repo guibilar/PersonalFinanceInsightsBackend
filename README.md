@@ -175,8 +175,8 @@ summary's last statement cash balance to its closing cash balance, or the statem
 imported.
 
 Only cash moves, so the code decides what a row means, and the rules can't change it: deposits, contributions and
-withdrawals (`CONT`, `DEP`, `TRFIN`, `TRFINTF`, `WIREIN`, `WIREINTF`, `WD`, `WDQ`, `TRFOUT`, `TRFOUTTF`, `HBP`, `LLP`,
-`OBP`) follow the flow rules like any other (transfers, for an investment account); fees and taxes are spending;
+withdrawals (`CONT`, `DEP`, `TRFIN`, `TRFINTF`, `WIREIN`, `WIREINTF`, `E_TRFIN` for an Interac e-Transfer in, `WD`, `WDQ`,
+`TRFOUT`, `TRFOUTTF`, `E_TRFOUT`, `HBP`, `LLP`, `OBP`) follow the flow rules like any other (transfers, for an investment account); fees and taxes are spending;
 bonuses and grants are income; everything else (buying and selling, dividends, interest, currency exchange) stays inside
 the account and is ignored. The statement's portfolio value ("Total Portfolio", at market value) becomes the account's
 balance on the period's last day, replacing one entered for that day; the import's response says it (`balance`,
