@@ -16,6 +16,7 @@ public static class AccountMapping
             Type = account.Type,
             Format = account.Format,
             TransactionCount = summary.TransactionCount,
+            LastTransactionDate = summary.LastTransactionDate,
             Plan = account.Plan,
             ContributionRoom = account.ContributionRoom,
             ContributionRoomYear = account.ContributionRoomYear,

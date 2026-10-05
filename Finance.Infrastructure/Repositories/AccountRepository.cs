@@ -33,8 +33,8 @@ public class AccountRepository(FinanceDbContext dbContext) : BaseRepository<Acco
         var counts = await DbContext.Transactions.IgnoreQueryFilters()
             .Where(t => ids.Contains(t.AccountId))
             .GroupBy(t => t.AccountId)
-            .Select(g => new { AccountId = g.Key, Count = g.Count() })
-            .ToDictionaryAsync(x => x.AccountId, x => x.Count, cancellationToken);
+            .Select(g => new { AccountId = g.Key, Count = g.Count(), Last = g.Max(t => t.Date) })
+            .ToDictionaryAsync(x => x.AccountId, cancellationToken);
         var start = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var transfers = await DbContext.Transactions
             .Where(t => ids.Contains(t.AccountId) && t.Flow == Flow.Transfer && t.Date >= start && t.Date < start.AddYears(1))
@@ -52,8 +52,8 @@ public class AccountRepository(FinanceDbContext dbContext) : BaseRepository<Acco
         // Sorted here: the type is stored by name, and the list should follow the enum's order.
         return accounts
             .OrderBy(a => a.Type).ThenBy(a => a.Name, StringComparer.OrdinalIgnoreCase)
-            .Select(a => new AccountSummary(a, counts.GetValueOrDefault(a.Id), balances.GetValueOrDefault(a.Id),
-                Total(a.Id, TransactionType.Credit), Total(a.Id, TransactionType.Debit)))
+            .Select(a => new AccountSummary(a, counts.GetValueOrDefault(a.Id)?.Count ?? 0, balances.GetValueOrDefault(a.Id),
+                Total(a.Id, TransactionType.Credit), Total(a.Id, TransactionType.Debit), counts.GetValueOrDefault(a.Id)?.Last))
             .ToList();
     }
 

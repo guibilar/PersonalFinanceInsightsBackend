@@ -121,9 +121,13 @@ public class AccountTests
         var id = await factory.QueryAsync(db => db.Transactions.Select(t => t.Id).FirstAsync());
         await client.DeleteAsync($"/api/Transaction/{id}");
 
-        var card = (await GetAccountsAsync(client)).Single(a => a.Id == Account.DefaultCreditCardId);
+        var accounts = await GetAccountsAsync(client);
+        var card = accounts.Single(a => a.Id == Account.DefaultCreditCardId);
 
         Assert.Equal(2, card.TransactionCount);
+        // How far its statements reach: the latest row, deleted or not; nothing for an account without any.
+        Assert.Equal(new DateTime(2026, 1, 4), card.LastTransactionDate);
+        Assert.Null(accounts.Single(a => a.Id == Account.DefaultChequingId).LastTransactionDate);
     }
 
     [Fact]
