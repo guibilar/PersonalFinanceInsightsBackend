@@ -38,6 +38,8 @@ public class AccountRepository(FinanceDbContext dbContext) : BaseRepository<Acco
         var start = new DateTime(year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
         var transfers = await DbContext.Transactions
             .Where(t => ids.Contains(t.AccountId) && t.Flow == Flow.Transfer && t.Date >= start && t.Date < start.AddYears(1))
+            // A transfer straight from or to another plan of the same kind is not a contribution or a withdrawal.
+            .Where(t => !t.Description.StartsWith("TRFINTF ") && !t.Description.StartsWith("TRFOUTTF ") && !t.Description.StartsWith("WIREINTF "))
             .GroupBy(t => new { t.AccountId, t.TransactionType })
             .Select(g => new { g.Key.AccountId, g.Key.TransactionType, Total = g.Sum(t => t.Amount) })
             .ToListAsync(cancellationToken);

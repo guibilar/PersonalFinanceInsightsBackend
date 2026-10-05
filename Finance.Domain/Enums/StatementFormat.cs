@@ -10,5 +10,11 @@ public enum StatementFormat
     Neo,
 
     /// <summary>The bank offers no export: transactions are added by hand, and statement files are refused.</summary>
-    Manual
+    Manual,
+
+    /// <summary>
+    /// Wealthsimple's monthly PDF statements (TFSA, RRSP, FHSA, non-registered): the cash activity, each row with a
+    /// statement code (CONT, BUY, DIV, …), and the portfolio's market value at the end of the month.
+    /// </summary>
+    Wealthsimple
 }
