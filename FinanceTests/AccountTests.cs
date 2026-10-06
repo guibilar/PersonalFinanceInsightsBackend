@@ -5,6 +5,8 @@ using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace FinanceTests;
 
@@ -128,6 +130,26 @@ public class AccountTests
         // How far its statements reach: the latest row, deleted or not; nothing for an account without any.
         Assert.Equal(new DateTime(2026, 1, 4), card.LastTransactionDate);
         Assert.Null(accounts.Single(a => a.Id == Account.DefaultChequingId).LastTransactionDate);
+    }
+
+    [Fact]
+    public async Task LastImportedAt_IsWhenAStatementWasLastImported_EvenOneThatAddedNothing_NotARefusedOne()
+    {
+        var now = DateTimeOffset.Parse("2026-10-06T14:30:00Z");
+        await using var factory = new FinanceApiFactory(services =>
+            services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FixedTimeProvider(now))));
+        var client = factory.CreateClient();
+        Guid cardId = Account.DefaultCreditCardId;
+        Assert.Null((await GetAccountsAsync(client)).Single(a => a.Id == cardId).LastImportedAt);
+
+        await client.PostAsync("/api/Transaction/Import", ImportTests.Statement("2026-01-03,METRO,8.00,"));
+        await client.PostAsync("/api/Transaction/Import", ImportTests.Statement("2026-01-03,METRO,8.00,"));
+        var refused = await client.PostAsync("/api/Transaction/Import", ImportTests.Statement("not a statement"));
+
+        Assert.Equal(HttpStatusCode.BadRequest, refused.StatusCode);
+        var accounts = await GetAccountsAsync(client);
+        Assert.Equal(now.UtcDateTime, accounts.Single(a => a.Id == cardId).LastImportedAt);
+        Assert.Null(accounts.Single(a => a.Id == Account.DefaultChequingId).LastImportedAt);
     }
 
     [Fact]

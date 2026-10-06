@@ -18,6 +18,9 @@ public class AccountOutputDto
     /// </summary>
     public DateTime? LastTransactionDate { get; set; }
 
+    /// <summary>When a statement was last imported into it (UTC), whatever it added; null until the first.</summary>
+    public DateTime? LastImportedAt { get; set; }
+
     public RegisteredPlan Plan { get; set; }
 
     /// <summary>The plan's contribution room for <see cref="ContributionRoomYear"/>, as entered.</summary>
