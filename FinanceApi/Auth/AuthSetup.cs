@@ -1,4 +1,5 @@
 using Finance.Infrastructure.Persistence;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
@@ -11,6 +12,7 @@ namespace FinanceApi.Auth;
 public static class AuthSetup
 {
     public const string CookieName = "finance_session";
+    private const string SessionOrTokenScheme = "SessionOrToken";
 
     /// <summary>
     /// Username/password sign-in with ASP.NET Core Identity and an HttpOnly session cookie. The frontend is served
@@ -20,9 +22,18 @@ public static class AuthSetup
     /// </summary>
     public static IServiceCollection AddLogin(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<AuthOptions>(configuration.GetSection(AuthOptions.SectionName));
+        services.AddOptions<AuthOptions>()
+            .Bind(configuration.GetSection(AuthOptions.SectionName))
+            .Validate(options => options.IsValid(),
+                $"{AuthOptions.SectionName}:ReadOnlyToken must be at least {AuthOptions.MinimumTokenLength} characters.")
+            .ValidateOnStart();
 
-        services.AddAuthentication(IdentityConstants.ApplicationScheme).AddIdentityCookies();
+        // A request with a bearer token is the read-only token's; any other is the session cookie's.
+        var authentication = services.AddAuthentication(SessionOrTokenScheme);
+        authentication.AddIdentityCookies();
+        authentication.AddScheme<AuthenticationSchemeOptions, ReadOnlyTokenHandler>(ReadOnlyTokenHandler.SchemeName, _ => { });
+        authentication.AddPolicyScheme(SessionOrTokenScheme, null, options => options.ForwardDefaultSelector = context =>
+            ReadOnlyTokenHandler.HasBearerToken(context.Request) ? ReadOnlyTokenHandler.SchemeName : IdentityConstants.ApplicationScheme);
         services.AddIdentityCore<IdentityUser>(options =>
             {
                 // Length over composition rules (NIST SP 800-63B).
@@ -62,8 +73,12 @@ public static class AuthSetup
             .SetApplicationName("PersonalFinanceInsights")
             .PersistKeysToDbContext<FinanceDbContext>();
 
+        // The session cookie, or the read-only token for requests that don't change anything.
         services.AddAuthorizationBuilder()
-            .SetFallbackPolicy(new AuthorizationPolicyBuilder().RequireAuthenticatedUser().Build());
+            .SetFallbackPolicy(new AuthorizationPolicyBuilder()
+                .RequireAuthenticatedUser()
+                .RequireAssertion(ReadOnlyTokenHandler.MayProceed)
+                .Build());
 
         return services;
     }

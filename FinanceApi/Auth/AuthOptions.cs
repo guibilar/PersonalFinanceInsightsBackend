@@ -6,6 +6,16 @@ public class AuthOptions
     public const string SectionName = "Auth";
 
     public InitialUserOptions InitialUser { get; set; } = new();
+
+    /// <summary>
+    /// Opens the API read-only to <c>Authorization: Bearer &lt;token&gt;</c> (see <see cref="ReadOnlyTokenHandler"/>).
+    /// At least <see cref="MinimumTokenLength"/> characters; unset turns it off.
+    /// </summary>
+    public string? ReadOnlyToken { get; set; }
+
+    public const int MinimumTokenLength = 32;
+
+    public bool IsValid() => string.IsNullOrEmpty(ReadOnlyToken) || ReadOnlyToken.Trim().Length >= MinimumTokenLength;
 }
 
 public class InitialUserOptions

@@ -51,6 +51,12 @@ frontend reaches the API on the same origin (nginx in production, the dev-server
   (answering how many ended).
 - Other endpoints: `GET /api/Auth/me`, `POST /api/Auth/change-password`.
 
+**Read-only token:** for scripts and assistants that only read, set `Auth:ReadOnlyToken` (Docker: `FINANCE_READONLY_TOKEN`,
+at least 32 characters, e.g. `openssl rand -hex 32`) and send it as `Authorization: Bearer <token>`. It opens every `GET`
+and the POSTs that only search (`Transaction/Filter`, `Budget/Filter`, `Reports/breakdown`, `Reports/merchants`,
+`CategoryRules/Preview`, marked `[ReadOnlyQuery]`); everything else answers 403, a wrong token 401. `GET /api/Auth/me`
+names it `read-only token`. Change the setting and restart to revoke it.
+
 The keys that encrypt the cookie and the sessions are stored in the database, so sessions survive a
 container restart.
 

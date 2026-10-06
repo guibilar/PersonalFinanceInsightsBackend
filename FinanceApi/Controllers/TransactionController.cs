@@ -3,6 +3,7 @@ using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
 using Finance.Domain.Common;
+using FinanceApi.Auth;
 using FinanceApi.Mapping;
 using Microsoft.AspNetCore.Mvc;
 
@@ -58,6 +59,7 @@ public class TransactionController(ITransactionService transactionService) : Con
     }
 
     [HttpPost("Filter")]
+    [ReadOnlyQuery]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedList<TransactionOutputDto>>> Filter(TransactionFilterDto? filter, CancellationToken cancellationToken)

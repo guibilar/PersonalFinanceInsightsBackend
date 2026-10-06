@@ -1,6 +1,7 @@
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
+using FinanceApi.Auth;
 using FinanceApi.Mapping;
 using Microsoft.AspNetCore.Mvc;
 
@@ -68,6 +69,7 @@ public class CategoryRulesController(ICategoryRuleService ruleService) : Control
 
     /// <summary>How many stored transactions would change category if this rule were added first and the rules re-applied.</summary>
     [HttpPost("Preview")]
+    [ReadOnlyQuery]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<CategoryRulePreviewDto>> Preview(CategoryRulePreviewInputDto rule, CancellationToken cancellationToken)
