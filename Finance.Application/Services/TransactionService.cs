@@ -152,13 +152,8 @@ public class TransactionService(
 
         // A statement read in full counts as imported even when every row was already there: the reminders to import
         // ask whether statements are being brought in, not whether they had anything new.
-        // Read again: adding the rows starts the tracking afresh, leaving the account read above detached.
-        var imported = await accountRepository.GetByIdAsync(account.Id, cancellationToken);
-        if (imported is not null)
-        {
-            imported.LastImportedAt = timeProvider.GetUtcNow().UtcDateTime;
-            await accountRepository.SaveChangesAsync(cancellationToken);
-        }
+        account.LastImportedAt = timeProvider.GetUtcNow().UtcDateTime;
+        await accountRepository.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation("Imported {Account} statement: {Read} read, {Added} added", account.Name, parsed.Count, added);
         return new ImportResult(parsed.Count, added, parsed.Count - added, statementRows.ClosingBalance);
