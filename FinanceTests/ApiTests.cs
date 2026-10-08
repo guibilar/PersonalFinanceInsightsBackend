@@ -1,11 +1,11 @@
 using System.Net;
 using System.Net.Http.Json;
-using Microsoft.EntityFrameworkCore;
 using Finance.Contracts.Outputs;
 using Finance.Contracts.Reports;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 
 namespace FinanceTests;
 

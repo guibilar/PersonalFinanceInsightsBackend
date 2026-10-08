@@ -23,6 +23,9 @@ jobs:
       - name: Known vulnerabilities
         run: scripts/check-vulnerable-packages.sh
       - run: dotnet build --no-restore
+      # The code-style rules the .editorconfig sets as warnings (file-scoped namespaces); whitespace is left alone.
+      - name: Code style
+        run: dotnet format style --verify-no-changes --no-restore --severity warn
       - run: dotnet tool restore
 
       - name: Migrations match the model
