@@ -1,10 +1,10 @@
+using Finance.Contracts.Inputs;
+using Finance.Domain.Entities;
+using Finance.Domain.Enums;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
-using Finance.Contracts.Inputs;
-using Finance.Domain.Entities;
-using Finance.Domain.Enums;
 
 namespace Finance.Infrastructure.Persistence;
 

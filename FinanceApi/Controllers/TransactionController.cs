@@ -12,7 +12,7 @@ namespace FinanceApi.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Produces("application/json")]
-public class TransactionController(ITransactionService transactionService) : ControllerBase
+public class TransactionController(ITransactionService transactionService, IStatementImportService statementImportService) : ControllerBase
 {
     private const long MaxStatementBytes = 5 * 1024 * 1024;
 
@@ -47,15 +47,8 @@ public class TransactionController(ITransactionService transactionService) : Con
         }
 
         await using var stream = file.OpenReadStream();
-        var result = await transactionService.ImportAsync(stream, import.AccountId!.Value, import.Confirmed, cancellationToken);
-        return new ImportResultDto
-        {
-            Read = result.Read,
-            Added = result.Added,
-            Skipped = result.Skipped,
-            Balance = result.Balance?.Amount,
-            BalanceDate = result.Balance?.Date,
-        };
+        var result = await statementImportService.ImportAsync(stream, import.AccountId!.Value, import.Confirmed, cancellationToken);
+        return result.ToOutput();
     }
 
     [HttpPost("Filter")]
@@ -106,7 +99,7 @@ public class TransactionController(ITransactionService transactionService) : Con
     public async Task<ActionResult<RulesResultDto>> ApplyRules(CancellationToken cancellationToken)
     {
         var result = await transactionService.ApplyRulesAsync(cancellationToken);
-        return new RulesResultDto { Checked = result.Checked, Updated = result.Updated };
+        return result.ToOutput();
     }
 
     /// <summary>
@@ -144,7 +137,7 @@ public class TransactionController(ITransactionService transactionService) : Con
     {
         var result = await transactionService.BulkUpdateAsync(
             new BulkUpdate(update.TransactionIds, update.CategoryId, update.Flow, update.BudgetId, update.UnlinkBudget, update.AddTagId, update.RemoveTagId), cancellationToken);
-        return new BulkUpdateResultDto { Updated = result.Updated, Skipped = result.Skipped, Notes = result.Notes.ToList() };
+        return result.ToOutput();
     }
 
     [HttpPost("LinkTransaction")]
