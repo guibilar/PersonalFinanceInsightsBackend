@@ -29,4 +29,7 @@ public class Account : BaseEntity
     public decimal? ContributionRoom { get; set; }
 
     public int? ContributionRoomYear { get; set; }
+
+    /// <summary>When a statement was last imported into it (UTC), whatever it added; null until the first.</summary>
+    public DateTime? LastImportedAt { get; set; }
 }
