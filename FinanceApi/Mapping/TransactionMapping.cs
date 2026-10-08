@@ -1,3 +1,5 @@
+using Finance.Application.Import;
+using Finance.Application.Models;
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
 using Finance.Domain.Entities;
@@ -57,4 +59,18 @@ public static class TransactionMapping
                 .ToList(),
         };
     }
+
+    public static ImportResultDto ToOutput(this ImportResult result) => new()
+    {
+        Read = result.Read,
+        Added = result.Added,
+        Skipped = result.Skipped,
+        Balance = result.Balance?.Amount,
+        BalanceDate = result.Balance?.Date,
+    };
+
+    public static RulesResultDto ToOutput(this RulesResult result) => new() { Checked = result.Checked, Updated = result.Updated };
+
+    public static BulkUpdateResultDto ToOutput(this BulkUpdateResult result) =>
+        new() { Updated = result.Updated, Skipped = result.Skipped, Notes = result.Notes.ToList() };
 }

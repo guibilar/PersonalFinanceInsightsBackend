@@ -1,7 +1,7 @@
-namespace Finance.Domain.Enums{
-    public enum TransactionType
-    {
-        Credit,
-        Debit
-    }
+namespace Finance.Domain.Enums;
+
+public enum TransactionType
+{
+    Credit,
+    Debit
 }
