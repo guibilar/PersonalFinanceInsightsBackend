@@ -2,6 +2,7 @@ using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
 using Finance.Domain.Common;
+using FinanceApi.Auth;
 using FinanceApi.Mapping;
 using Microsoft.AspNetCore.Mvc;
 
@@ -50,6 +51,7 @@ public class BudgetController(IBudgetService budgetService) : ControllerBase
     }
 
     [HttpPost("Filter")]
+    [ReadOnlyQuery]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PaginatedList<BudgetOutputDto>>> Filter(BudgetFilterDto? filter, CancellationToken cancellationToken)

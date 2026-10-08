@@ -3,6 +3,7 @@ using Finance.Contracts.Inputs;
 using Finance.Contracts.Reports;
 using Finance.Domain.Common;
 using Finance.Domain.Exceptions;
+using FinanceApi.Auth;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FinanceApi.Controllers;
@@ -63,6 +64,7 @@ public class ReportsController(IReportService reportService, IInsightService ins
     /// (running totals included), with the merchants the spending went to.
     /// </summary>
     [HttpPost("breakdown")]
+    [ReadOnlyQuery]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public Task<TransactionBreakdown> GenerateBreakdown(TransactionBreakdownInputDto input, CancellationToken cancellationToken)
@@ -74,6 +76,7 @@ public class ReportsController(IReportService reportService, IInsightService ins
     /// A page of the merchants the list's criteria spent at, largest first: the breakdown's top ones, and the rest.
     /// </summary>
     [HttpPost("merchants")]
+    [ReadOnlyQuery]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public Task<PaginatedList<MerchantTotal>> GetMerchants(MerchantsInputDto input, CancellationToken cancellationToken)

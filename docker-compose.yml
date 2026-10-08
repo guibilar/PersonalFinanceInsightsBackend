@@ -25,6 +25,8 @@ services:
       Auth__InitialUser__Username: "${FINANCE_USERNAME:?Set FINANCE_USERNAME in .env}"
       Auth__InitialUser__Password: "${FINANCE_PASSWORD:?Set FINANCE_PASSWORD in .env}"
       Auth__InitialUser__ResetPassword: "${FINANCE_RESET_PASSWORD:-false}"
+      # Optional: a bearer token that reads but changes nothing (scripts, an assistant). Empty turns it off.
+      Auth__ReadOnlyToken: "${FINANCE_READONLY_TOKEN:-}"
     depends_on:
       db:
         condition: service_healthy
