@@ -1,5 +1,6 @@
 using System.Globalization;
 using Finance.Application.Abstractions;
+using Finance.Application.Import;
 using Finance.Application.Reports;
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
@@ -9,7 +10,6 @@ using Finance.Domain.Common;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
-using Finance.Application.Import;
 
 namespace Finance.Application.Services;
 

@@ -1,8 +1,8 @@
+using Finance.Application.Import;
 using Finance.Application.Reports;
 using Finance.Cli.Charts;
-using Finance.Domain.Enums;
-using Finance.Application.Import;
 using Finance.Domain.Entities;
+using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
 using Finance.Infrastructure;
 using Finance.Infrastructure.Import;
