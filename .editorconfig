@@ -18,5 +18,5 @@ dotnet_sort_system_directives_first = true
 dotnet_style_qualification_for_field = false:suggestion
 dotnet_diagnostic.IDE0005.severity = suggestion
 
-[Migrations/*.cs]
+[**/Migrations/*.cs]
 generated_code = true
