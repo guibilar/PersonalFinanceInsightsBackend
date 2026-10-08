@@ -38,9 +38,21 @@ public class BaseRepository<T>(FinanceDbContext dbContext) : IBaseRepository<T> 
         }
         catch (DbUpdateException ex) when (IsUniqueViolation(ex))
         {
-            // A concurrent request stored the same record first; the failed entities stay tracked, so drop them.
-            DbContext.ChangeTracker.Clear();
+            // A concurrent request stored the same record first; the failed additions stay tracked, so drop them.
+            DetachUnsaved();
             throw new DuplicateEntityException($"An identical {typeof(T).Name.ToLowerInvariant()} already exists.");
+        }
+    }
+
+    /// <summary>
+    /// Drops entities queued for insert that a failed save left tracked, so they aren't sent again with the next save.
+    /// Everything else stays tracked: an entity read earlier in the request can still be changed and saved.
+    /// </summary>
+    protected void DetachUnsaved()
+    {
+        foreach (var entry in DbContext.ChangeTracker.Entries().Where(e => e.State == EntityState.Added).ToList())
+        {
+            entry.State = EntityState.Detached;
         }
     }
 

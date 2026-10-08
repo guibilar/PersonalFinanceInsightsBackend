@@ -93,6 +93,19 @@ public class WealthsimplePdfImportTests
     }
 
     [Fact]
+    public void Parser_MarksTransfersStraightFromOrToAnotherPlan_AndOnlyThose()
+    {
+        var parsed = Parse(Build("2026-05-01 - 2026-05-31", 1_000m, 0, 0,
+        [
+            new("2026-05-01", "TRFINTF", "Tax-free money transfer into the account", 0, 800m, 800m),
+            new("2026-05-02", "CONT", "Contribution", 0, 200m, 1_000m),
+            new("2026-05-20", "TRFOUTTF", "Tax-free money transfer out of the account", 1_000m, 0, 0),
+        ]));
+
+        Assert.Equal([true, false, true], parsed.Select(t => t.IsPlanTransfer));
+    }
+
+    [Fact]
     public void Parser_RefusesAStatementWhoseRowsDontAddUp_AndOtherPdfs()
     {
         var wrongRow = Build("2026-03-01 - 2026-03-31", 100m, 0, 50m,

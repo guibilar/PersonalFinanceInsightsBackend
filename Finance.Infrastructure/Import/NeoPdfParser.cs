@@ -3,8 +3,6 @@ using System.Text.RegularExpressions;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
-using UglyToad.PdfPig;
-using UglyToad.PdfPig.Content;
 
 namespace Finance.Infrastructure.Import;
 
@@ -20,107 +18,60 @@ internal static partial class NeoPdfParser
     private const string NotNeoMessage =
         "This PDF doesn't look like a Neo Financial statement. Expected a transactions table with Credits, Debits and Balance columns.";
 
-    /// <summary>Words this close vertically are on the same line (their baselines differ by fractions of a point).</summary>
-    private const double SameLine = 2;
-
-    /// <summary>A wrapped description continues within this distance below its row.</summary>
-    private const double WrappedLine = 16;
-
-    private sealed record Line(double Y, List<Word> Words)
-    {
-        public string Text => string.Join(' ', Words.Select(w => w.Text));
-        public double Left => Words[0].BoundingBox.Left;
-    }
-
     private sealed record Row(DateTime Date, List<string> Description, decimal Amount, decimal Balance, string Text);
-
-    public static bool IsPdf(ReadOnlySpan<byte> bytes) => bytes.StartsWith("%PDF-"u8);
 
     public static List<Transaction> Parse(byte[] pdf)
     {
-        PdfDocument document;
-        try
-        {
-            document = PdfDocument.Open(pdf);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            throw new InvalidStatementException("This PDF can't be read. Is it a statement downloaded from Neo, not a scan or a protected file?");
-        }
+        var pages = PdfStatement.Pages(pdf, "This PDF can't be read. Is it a statement downloaded from Neo, not a scan or a protected file?");
+        var all = pages.SelectMany(p => p).ToList();
+        var (start, end) = Period(all);
+        var opening = Summary(all, "Opening balance");
+        var closing = Summary(all, "Closing balance");
 
-        using (document)
+        var rows = new List<Row>();
+        var tables = 0;
+        foreach (var lines in pages)
         {
-            var pages = document.GetPages().Select(LinesOf).ToList();
-            var all = pages.SelectMany(p => p).ToList();
-            var (start, end) = Period(all);
-            var opening = Summary(all, "Opening balance");
-            var closing = Summary(all, "Closing balance");
-
-            var rows = new List<Row>();
-            var tables = 0;
-            foreach (var lines in pages)
+            var header = lines.FindIndex(IsHeader);
+            if (header < 0) continue;
+            tables++;
+            var descriptionLeft = lines[header].Words.First(w => w.Text == "Description").BoundingBox.Left;
+            Row? last = null;
+            double lastY = 0;
+            foreach (var line in lines.Skip(header + 1))
             {
-                var header = lines.FindIndex(IsHeader);
-                if (header < 0) continue;
-                tables++;
-                var descriptionLeft = lines[header].Words.First(w => w.Text == "Description").BoundingBox.Left;
-                Row? last = null;
-                double lastY = 0;
-                foreach (var line in lines.Skip(header + 1))
+                if (TryRow(line, start, end, out var row))
                 {
-                    if (TryRow(line, start, end, out var row))
-                    {
-                        rows.Add(row);
-                        (last, lastY) = (row, line.Y);
-                    }
-                    else if (last is not null && lastY - line.Y <= WrappedLine && line.Left >= descriptionLeft - 2
-                             && !line.Words.Any(w => Money().IsMatch(w.Text)))
-                    {
-                        // A description too long for its column goes on below it.
-                        last.Description.Add(line.Text);
-                        lastY = line.Y;
-                    }
-                    else
-                    {
-                        last = null;
-                    }
+                    rows.Add(row);
+                    (last, lastY) = (row, line.Y);
+                }
+                else if (last is not null && lastY - line.Y <= PdfStatement.WrappedLine && line.Left >= descriptionLeft - 2
+                         && !line.Words.Any(w => Money().IsMatch(w.Text)))
+                {
+                    // A description too long for its column goes on below it.
+                    last.Description.Add(line.Text);
+                    lastY = line.Y;
+                }
+                else
+                {
+                    last = null;
                 }
             }
-            if (tables == 0) throw new InvalidStatementException(NotNeoMessage);
+        }
+        if (tables == 0) throw new InvalidStatementException(NotNeoMessage);
 
-            Reconcile(rows, opening, closing);
-            return rows.Select(row => new Transaction
-            {
-                Date = row.Date,
-                Description = string.Join(' ', row.Description),
-                Amount = Math.Abs(row.Amount),
-                TransactionType = row.Amount < 0 ? TransactionType.Debit : TransactionType.Credit,
-            }).ToList();
-        }
-    }
-
-    /// <summary>Each row moves the balance by its amount, from the opening balance to the closing one.</summary>
-    private static void Reconcile(List<Row> rows, decimal opening, decimal closing)
-    {
-        var balance = opening;
-        foreach (var row in rows)
+        PdfStatement.Reconcile(rows, opening, closing, r => r.Amount, r => r.Balance, r => r.Text, "balance");
+        return rows.Select(row => new Transaction
         {
-            if (balance + row.Amount != row.Balance)
-            {
-                throw new InvalidStatementException(
-                    $"Couldn't read this statement reliably: \"{row.Text}\" doesn't take the balance from {balance:N2} to {row.Balance:N2}. Nothing was imported.");
-            }
-            balance = row.Balance;
-        }
-        if (balance != closing)
-        {
-            throw new InvalidStatementException(
-                $"Couldn't read this statement reliably: its transactions end at {balance:N2}, but the closing balance is {closing:N2}. Nothing was imported.");
-        }
+            Date = row.Date,
+            Description = string.Join(' ', row.Description),
+            Amount = Math.Abs(row.Amount),
+            TransactionType = row.Amount < 0 ? TransactionType.Debit : TransactionType.Credit,
+        }).ToList();
     }
 
     /// <summary>"Feb 2 Feb 2 Transfer from Everyday 4,000.00 6,408.64": two dates, the description, the amount, the balance.</summary>
-    private static bool TryRow(Line line, DateTime start, DateTime end, out Row row)
+    private static bool TryRow(PdfStatement.Line line, DateTime start, DateTime end, out Row row)
     {
         row = null!;
         var words = line.Words.Select(w => w.Text).ToList();
@@ -142,14 +93,14 @@ internal static partial class NeoPdfParser
         return true;
     }
 
-    private static bool IsHeader(Line line)
+    private static bool IsHeader(PdfStatement.Line line)
     {
         var words = line.Words.Select(w => w.Text).ToList();
         return words.Contains("Description") && words.Contains("Credits") && words.Contains("Debits") && words.Contains("Balance");
     }
 
     /// <summary>"Feb 1, 2026 - Feb 28, 2026", by the account's name at the top of each page.</summary>
-    private static (DateTime Start, DateTime End) Period(List<Line> lines)
+    private static (DateTime Start, DateTime End) Period(List<PdfStatement.Line> lines)
     {
         foreach (var line in lines)
         {
@@ -164,7 +115,7 @@ internal static partial class NeoPdfParser
         throw new InvalidStatementException(NotNeoMessage);
     }
 
-    private static decimal Summary(List<Line> lines, string label)
+    private static decimal Summary(List<PdfStatement.Line> lines, string label)
     {
         var line = lines.FirstOrDefault(l => l.Text.StartsWith(label, StringComparison.Ordinal) && Money().IsMatch(l.Words[^1].Text))
                    ?? throw new InvalidStatementException(NotNeoMessage);
@@ -180,20 +131,6 @@ internal static partial class NeoPdfParser
 
     private static decimal Amount(string text) =>
         decimal.Parse(text.Replace(",", ""), NumberStyles.AllowLeadingSign | NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
-
-    /// <summary>A page's words as lines, top to bottom, each left to right.</summary>
-    private static List<Line> LinesOf(Page page)
-    {
-        var lines = new List<Line>();
-        foreach (var word in page.GetWords().OrderByDescending(w => w.BoundingBox.Bottom).ThenBy(w => w.BoundingBox.Left))
-        {
-            var line = lines.LastOrDefault();
-            if (line is not null && line.Y - word.BoundingBox.Bottom <= SameLine) line.Words.Add(word);
-            else lines.Add(new Line(word.BoundingBox.Bottom, [word]));
-        }
-        foreach (var line in lines) line.Words.Sort((a, b) => a.BoundingBox.Left.CompareTo(b.BoundingBox.Left));
-        return lines;
-    }
 
     [GeneratedRegex(@"^-?\d{1,3}(,\d{3})*\.\d{2}$")]
     private static partial Regex Money();

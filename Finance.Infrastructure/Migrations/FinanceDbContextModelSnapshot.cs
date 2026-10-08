@@ -374,6 +374,9 @@ namespace Finance.Infrastructure.Migrations
                     b.Property<bool>("Hidden")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("IsPlanTransfer")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Note")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");

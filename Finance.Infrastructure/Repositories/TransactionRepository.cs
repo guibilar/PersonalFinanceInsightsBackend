@@ -91,7 +91,8 @@ public class TransactionRepository(FinanceDbContext dbContext)
         // The retrying execution strategy only allows an explicit transaction when it can replay all of it.
         return DbContext.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
         {
-            DbContext.ChangeTracker.Clear();
+            // A retried attempt starts again from the rows: drop the ones the failed attempt queued.
+            DetachUnsaved();
             // The in-memory test provider has no transactions; it runs the same steps without isolation.
             await using var dbTransaction = DbContext.Database.IsRelational()
                 ? await DbContext.Database.BeginTransactionAsync(ct)

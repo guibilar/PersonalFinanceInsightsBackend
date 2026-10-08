@@ -5,8 +5,6 @@ using Finance.Application.Import;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
-using UglyToad.PdfPig;
-using UglyToad.PdfPig.Content;
 
 namespace Finance.Infrastructure.Import;
 
@@ -34,6 +32,9 @@ public partial class WealthsimplePdfParser : IStatementParser
         "WD", "WDQ", "TRFOUT", "TRFOUTTF", "HBP", "LLP", "OBP", "E_TRFOUT" // out
     ];
 
+    /// <summary>Tax-free transfers straight from or to another plan of the same kind: they use no room and give none back.</summary>
+    private static readonly HashSet<string> PlanToPlan = ["TRFINTF", "TRFOUTTF", "WIREINTF"];
+
     /// <summary>Money the account earned or got as a bonus.</summary>
     private static readonly HashSet<string> Earned = ["AFFILIATE", "CLB", "CREDIT", "GIFTCARD", "GRANT", "REFER"];
 
@@ -41,94 +42,67 @@ public partial class WealthsimplePdfParser : IStatementParser
     private static readonly HashSet<string> Costs =
         ["DCTFEE", "DSCFEE", "FCPT", "FEE", "GST", "NRT", "PST", "QST", "TAX", "WHTFED", "WHTPROQC"];
 
-    /// <summary>Words this close vertically are on the same line.</summary>
-    private const double SameLine = 2;
-
-    /// <summary>A wrapped description continues within this distance below its row.</summary>
-    private const double WrappedLine = 16;
-
-    private sealed record Line(double Y, List<Word> Words)
-    {
-        public string Text => string.Join(' ', Words.Select(w => w.Text));
-        public double Left => Words[0].BoundingBox.Left;
-    }
-
     private sealed record Row(DateTime Date, string Code, List<string> Description, decimal Debit, decimal Credit, decimal Balance, string Text);
 
     public StatementFormat Format => StatementFormat.Wealthsimple;
 
     public ParsedStatement Parse(Stream statement)
     {
-        using var buffer = new MemoryStream();
-        statement.CopyTo(buffer);
-        var bytes = buffer.ToArray();
-        if (!NeoPdfParser.IsPdf(bytes)) throw new InvalidStatementException(NotWealthsimpleMessage);
+        var bytes = PdfStatement.ReadAll(statement);
+        if (!PdfStatement.IsPdf(bytes)) throw new InvalidStatementException(NotWealthsimpleMessage);
 
-        PdfDocument document;
-        try
-        {
-            document = PdfDocument.Open(bytes);
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            throw new InvalidStatementException("This PDF can't be read. Is it a statement downloaded from Wealthsimple, not a scan or a protected file?");
-        }
+        var pages = PdfStatement.Pages(bytes, "This PDF can't be read. Is it a statement downloaded from Wealthsimple, not a scan or a protected file?");
+        var all = pages.SelectMany(p => p).ToList();
+        var end = Period(all);
+        var opening = Summary(all, "Last Statement Cash Balance");
+        var closing = Summary(all, "Closing Cash Balance");
+        var portfolio = Summary(all, "Total Portfolio");
 
-        using (document)
+        var rows = new List<Row>();
+        var inTable = false;
+        foreach (var lines in pages)
         {
-            var pages = document.GetPages().Select(LinesOf).ToList();
-            var all = pages.SelectMany(p => p).ToList();
-            var end = Period(all);
-            var opening = Summary(all, "Last Statement Cash Balance");
-            var closing = Summary(all, "Closing Cash Balance");
-            var portfolio = Summary(all, "Total Portfolio");
-
-            var rows = new List<Row>();
-            var inTable = false;
-            foreach (var lines in pages)
+            Row? last = null;
+            double lastY = 0, descriptionLeft = 0, amountsLeft = double.MaxValue;
+            foreach (var line in lines)
             {
-                Row? last = null;
-                double lastY = 0, descriptionLeft = 0, amountsLeft = double.MaxValue;
-                foreach (var line in lines)
+                if (IsHeader(line))
                 {
-                    if (IsHeader(line))
-                    {
-                        // The table goes on over the next pages, under the same header (or none).
-                        inTable = true;
-                        descriptionLeft = line.Words.First(w => w.Text == "Description").BoundingBox.Left;
-                        amountsLeft = line.Words.First(w => w.Text == "Debit").BoundingBox.Left;
-                        last = null;
-                        continue;
-                    }
-                    if (!inTable) continue;
-                    if (TryRow(line, out var row))
-                    {
-                        rows.Add(row);
-                        (last, lastY) = (row, line.Y);
-                    }
-                    else if (last is not null && lastY - line.Y <= WrappedLine && line.Left >= descriptionLeft - 2
-                             && !line.Words.Any(w => w.BoundingBox.Left >= amountsLeft - 10))
-                    {
-                        // A description too long for its column goes on below it ("1.0626 shares at $188.20 per share").
-                        last.Description.Add(line.Text);
-                        lastY = line.Y;
-                    }
-                    else
-                    {
-                        last = null;
-                    }
+                    // The table goes on over the next pages, under the same header (or none).
+                    inTable = true;
+                    descriptionLeft = line.Words.First(w => w.Text == "Description").BoundingBox.Left;
+                    amountsLeft = line.Words.First(w => w.Text == "Debit").BoundingBox.Left;
+                    last = null;
+                    continue;
+                }
+                if (!inTable) continue;
+                if (TryRow(line, out var row))
+                {
+                    rows.Add(row);
+                    (last, lastY) = (row, line.Y);
+                }
+                else if (last is not null && lastY - line.Y <= PdfStatement.WrappedLine && line.Left >= descriptionLeft - 2
+                         && !line.Words.Any(w => w.BoundingBox.Left >= amountsLeft - 10))
+                {
+                    // A description too long for its column goes on below it ("1.0626 shares at $188.20 per share").
+                    last.Description.Add(line.Text);
+                    lastY = line.Y;
+                }
+                else
+                {
+                    last = null;
                 }
             }
-            if (!inTable) throw new InvalidStatementException(NotWealthsimpleMessage);
-
-            Reconcile(rows, opening, closing);
-            var transactions = rows
-                // A stock dividend or a share lent out moves no cash.
-                .Where(row => row.Credit != row.Debit)
-                .Select(ToTransaction)
-                .ToList();
-            return new ParsedStatement(transactions, IsCreditCardExport: false, new StatementBalance(end, portfolio));
         }
+        if (!inTable) throw new InvalidStatementException(NotWealthsimpleMessage);
+
+        PdfStatement.Reconcile(rows, opening, closing, r => r.Credit - r.Debit, r => r.Balance, r => r.Text, "cash balance");
+        var transactions = rows
+            // A stock dividend or a share lent out moves no cash.
+            .Where(row => row.Credit != row.Debit)
+            .Select(ToTransaction)
+            .ToList();
+        return new ParsedStatement(transactions, IsCreditCardExport: false, new StatementBalance(end, portfolio));
     }
 
     private static Transaction ToTransaction(Row row)
@@ -140,6 +114,7 @@ public partial class WealthsimplePdfParser : IStatementParser
             Description = $"{row.Code} {string.Join(' ', row.Description)}".Trim(),
             Amount = Math.Abs(amount),
             TransactionType = amount < 0 ? TransactionType.Debit : TransactionType.Credit,
+            IsPlanTransfer = PlanToPlan.Contains(row.Code),
         };
         if (!MoneyInOrOut.Contains(row.Code))
         {
@@ -150,28 +125,8 @@ public partial class WealthsimplePdfParser : IStatementParser
         return transaction;
     }
 
-    /// <summary>Each row moves the cash by its credit less its debit, from the last statement's cash to the closing cash.</summary>
-    private static void Reconcile(List<Row> rows, decimal opening, decimal closing)
-    {
-        var balance = opening;
-        foreach (var row in rows)
-        {
-            if (balance + row.Credit - row.Debit != row.Balance)
-            {
-                throw new InvalidStatementException(
-                    $"Couldn't read this statement reliably: \"{row.Text}\" doesn't take the cash balance from {balance:N2} to {row.Balance:N2}. Nothing was imported.");
-            }
-            balance = row.Balance;
-        }
-        if (balance != closing)
-        {
-            throw new InvalidStatementException(
-                $"Couldn't read this statement reliably: its activity ends at {balance:N2} in cash, but the closing cash balance is {closing:N2}. Nothing was imported.");
-        }
-    }
-
     /// <summary>"2026-05-01 TRFOUTTF Tax-free money transfer out … $2,800.02 $0.00 $0.00": date, code, description, debit, credit, balance.</summary>
-    private static bool TryRow(Line line, out Row row)
+    private static bool TryRow(PdfStatement.Line line, out Row row)
     {
         row = null!;
         var words = line.Words.Select(w => w.Text).ToList();
@@ -185,7 +140,7 @@ public partial class WealthsimplePdfParser : IStatementParser
         return true;
     }
 
-    private static bool IsHeader(Line line)
+    private static bool IsHeader(PdfStatement.Line line)
     {
         var words = line.Words.Select(w => w.Text).ToList();
         return words.Contains("Transaction") && words.Contains("Description") && words.Contains("Debit")
@@ -193,7 +148,7 @@ public partial class WealthsimplePdfParser : IStatementParser
     }
 
     /// <summary>The period's last day: "Statement Period" over "2026-05-01 - 2026-05-31", at the top of the first page.</summary>
-    private static DateTime Period(List<Line> lines)
+    private static DateTime Period(List<PdfStatement.Line> lines)
     {
         foreach (var line in lines)
         {
@@ -208,7 +163,7 @@ public partial class WealthsimplePdfParser : IStatementParser
             DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out date);
 
     /// <summary>The first amount after the label: other columns can share its line ("… Balance $0.00 Cash Paid In").</summary>
-    private static decimal Summary(List<Line> lines, string label)
+    private static decimal Summary(List<PdfStatement.Line> lines, string label)
     {
         foreach (var line in lines)
         {
@@ -227,20 +182,6 @@ public partial class WealthsimplePdfParser : IStatementParser
         var digits = text.Trim('-', '(', ')', '$').Replace(",", "");
         var value = decimal.Parse(digits, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
         return negative ? -value : value;
-    }
-
-    /// <summary>A page's words as lines, top to bottom, each left to right.</summary>
-    private static List<Line> LinesOf(Page page)
-    {
-        var lines = new List<Line>();
-        foreach (var word in page.GetWords().OrderByDescending(w => w.BoundingBox.Bottom).ThenBy(w => w.BoundingBox.Left))
-        {
-            var line = lines.LastOrDefault();
-            if (line is not null && line.Y - word.BoundingBox.Bottom <= SameLine) line.Words.Add(word);
-            else lines.Add(new Line(word.BoundingBox.Bottom, [word]));
-        }
-        foreach (var line in lines) line.Words.Sort((a, b) => a.BoundingBox.Left.CompareTo(b.BoundingBox.Left));
-        return lines;
     }
 
     [GeneratedRegex(@"^[-(]?\$-?\d{1,3}(,\d{3})*\.\d{2}\)?$")]

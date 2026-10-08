@@ -33,7 +33,7 @@ public partial class NeoCsvParser : IStatementParser
         using var buffer = new MemoryStream();
         statement.CopyTo(buffer);
         var bytes = buffer.ToArray();
-        if (NeoPdfParser.IsPdf(bytes)) return new ParsedStatement(NeoPdfParser.Parse(bytes), IsCreditCardExport: false);
+        if (PdfStatement.IsPdf(bytes)) return new ParsedStatement(NeoPdfParser.Parse(bytes), IsCreditCardExport: false);
 
         using var reader = new StringReader(StatementText.Read(new MemoryStream(bytes)));
         using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)

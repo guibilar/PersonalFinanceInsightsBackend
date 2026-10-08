@@ -32,6 +32,12 @@ public class Transaction : BaseEntity
     public Guid? BudgetId { get; set; }
     public Budget? Budget { get; set; }
 
+    /// <summary>
+    /// A transfer straight from or to another plan of the same kind (TFSA to TFSA), set by the importer that reads it:
+    /// no contribution and no withdrawal, so it is left out of the plan's contribution room.
+    /// </summary>
+    public bool IsPlanTransfer { get; set; }
+
     /// <summary>The person's own words about it ("Gift for mom"); searched along with the description.</summary>
     public string? Note { get; set; }
 
