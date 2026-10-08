@@ -11,7 +11,12 @@ namespace FinanceApi.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Produces("application/json")]
-public class ReportsController(IReportService reportService, IInsightService insightService, INetWorthService netWorthService) : ControllerBase
+public class ReportsController(
+    IReportService reportService,
+    IInsightService insightService,
+    IForecastService forecastService,
+    IReviewService reviewService,
+    INetWorthService netWorthService) : ControllerBase
 {
     /// <summary>Payments that come again and again (subscriptions, bills, rent): what they cost, when the next is due, price changes.</summary>
     [HttpGet("recurring")]
@@ -24,7 +29,7 @@ public class ReportsController(IReportService reportService, IInsightService ins
     [HttpGet("forecast")]
     public Task<SpendingForecast> GetForecast(CancellationToken cancellationToken)
     {
-        return insightService.GetForecastAsync(cancellationToken);
+        return forecastService.GetForecastAsync(cancellationToken);
     }
 
     /// <summary>Merchants whose spending is left in Other because no rule names them, each with a keyword for a rule.</summary>
@@ -44,7 +49,7 @@ public class ReportsController(IReportService reportService, IInsightService ins
     public Task<ReviewReport> GetReview([FromQuery] int? year, [FromQuery] int? month, CancellationToken cancellationToken)
     {
         if (year is null && month is not null) throw new InvalidInputException("year", "Choose the month's year too.");
-        return insightService.GetReviewAsync(year, month, cancellationToken);
+        return reviewService.GetReviewAsync(year, month, cancellationToken);
     }
 
     [HttpGet("monthly-categorized-graph")]

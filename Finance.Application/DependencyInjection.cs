@@ -14,6 +14,9 @@ public static class DependencyInjection
         services.AddScoped<TransactionRules>();
         services.AddScoped<IReportService, ReportService>();
         services.AddScoped<IInsightService, InsightService>();
+        services.AddScoped<IForecastService, ForecastService>();
+        services.AddScoped<IReviewService, ReviewService>();
+        services.AddScoped<RecurringPayments>();
         services.AddScoped<IBudgetService, BudgetService>();
         services.AddScoped<ICategoryRuleService, CategoryRuleService>();
         services.AddScoped<IFlowRuleService, FlowRuleService>();
