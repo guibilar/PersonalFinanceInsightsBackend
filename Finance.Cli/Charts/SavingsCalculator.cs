@@ -24,6 +24,12 @@ public abstract class SavingsCalculator
 
             public static void GenerateMonthlyTotalsSavingsGraph(List<MonthlyRecords> monthlySavings, string fileName)
     {
+        if (monthlySavings.Count == 0)
+        {
+            Console.WriteLine($"No savings transactions; {fileName}.png not drawn.");
+            return;
+        }
+
         var plt1 = new ScottPlot.Plot();
 
         double[] xs = [.. monthlySavings.Select(m => m.YearMonth.ToOADate())];
@@ -35,14 +41,13 @@ public abstract class SavingsCalculator
         scatter.LineWidth = 2;
         scatter.Color = ScottPlot.Colors.Green;
 
-        // Add value labels above each point (scaled offset)
+        // Each value at its point, a few pixels above it (below for a negative month), whatever the amounts' scale.
         for (int i = 0; i < xs.Length; i++)
         {
-            plt1.Add.Text(
-                ys[i].ToString("$0.00"),
-                xs[i] - 15,
-                ys[i] + 200
-            );
+            var label = plt1.Add.Text(ys[i].ToString("$#,##0.00;-$#,##0.00", CultureInfo.InvariantCulture), xs[i], ys[i]);
+            var below = ys[i] < 0;
+            label.LabelAlignment = below ? ScottPlot.Alignment.UpperCenter : ScottPlot.Alignment.LowerCenter;
+            label.LabelOffsetY = below ? 8 : -8;
         }
 
         // Custom ticks aligned with data
@@ -61,7 +66,13 @@ public abstract class SavingsCalculator
 
         // Ensure enough space for rotated labels
         plt1.Axes.Bottom.MinimumSize = 100;
-        plt1.Axes.Margins(bottom: 0.05, top: 0.2);
+
+        // From zero (or the lowest month, when one is negative) to the highest, with room for the labels: months that
+        // all saved the same would otherwise be zoomed into a sliver around that amount.
+        var low = Math.Min(0, ys.Min());
+        var high = Math.Max(0, ys.Max());
+        var pad = high > low ? (high - low) * 0.15 : 1;
+        plt1.Axes.SetLimitsY(low < 0 ? low - pad : 0, high + pad);
 
         // Labels & title
         plt1.Title("Monthly Savings Trend");
