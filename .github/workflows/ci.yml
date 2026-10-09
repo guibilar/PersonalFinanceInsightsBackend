@@ -13,8 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-dotnet@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
@@ -49,7 +49,7 @@ jobs:
       FINANCE_USERNAME: ci
       FINANCE_PASSWORD: ci-password-long-enough
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       # As on the server: the backup container runs as the user who owns ./backups.
       - name: Backup folder owned by the runner's user
         run: |
