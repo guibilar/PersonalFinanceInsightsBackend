@@ -21,10 +21,11 @@ public static partial class MerchantNames
     public static string Normalize(string description)
     {
         var upper = description.Trim().ToUpperInvariant();
-        var words = ProcessorPrefix().Replace(upper, "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        // On any whitespace, as the rules compare text (RuleText): a keyword suggested from this matches the description.
+        var words = ProcessorPrefix().Replace(upper, "").Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         var end = Array.FindIndex(words, w => w.Any(c => char.IsDigit(c) || c == '#'));
         var keyword = string.Join(' ', end < 0 ? words : words.Take(end)).Trim();
-        var name = keyword.Length > 0 ? keyword : string.Join(' ', upper.Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        var name = keyword.Length > 0 ? keyword : string.Join(' ', upper.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return name.Length > MaxLength ? name[..MaxLength].Trim() : name;
     }
 

@@ -185,6 +185,12 @@ public class ReviewReport
     /// <summary>"August 2026", or "2025".</summary>
     public string PreviousLabel { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Last day (inclusive) the previous totals count: the previous period's end once this one is over, the same day
+    /// of it while this one still runs.
+    /// </summary>
+    public DateTime PreviousEnd { get; set; }
+
     public decimal Spending { get; set; }
     public decimal PreviousSpending { get; set; }
     public decimal Income { get; set; }

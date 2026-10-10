@@ -1,4 +1,5 @@
 using Finance.Domain.Entities;
+using Finance.Domain.Helpers;
 
 namespace Finance.Application.Import;
 
@@ -24,7 +25,7 @@ public class CategoryMatcher
 
     private (string Keyword, Guid CategoryId)? Match(string description)
     {
-        var upper = description.ToUpperInvariant();
+        var upper = RuleText.Of(description);
         foreach (var rule in _rules)
         {
             if (upper.Contains(rule.Keyword, StringComparison.Ordinal))

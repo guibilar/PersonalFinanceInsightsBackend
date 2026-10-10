@@ -210,6 +210,10 @@ public class BreakdownTests
     [Theory]
     [InlineData("2026-09-10", "2026-09-01", "Month")]  // ends before it starts
     [InlineData("2026-09-01", "2026-09-10", "Fortnight")]
+    // The calendar's last year: its periods would run past the end of it.
+    [InlineData("9999-01-01", "9999-12-31", "Year")]
+    [InlineData("9999-12-01", "9999-12-30", "Month")]
+    [InlineData("2026-09-01", "9999-12-30", "Year")]
     public async Task UnusableCriteria_Return400(string startDate, string endDate, string interval)
     {
         await using var factory = FactoryOnSeptember15();

@@ -50,12 +50,10 @@ public partial class CibcCsvParser : IStatementParser
                     "Set the account's statement format to Neo, or choose another account.");
             }
             var description = csv.GetField(DescriptionColumn);
-            if (string.IsNullOrEmpty(description) ||
-                !DateTime.TryParse(csv.GetField(DateColumn), CultureInfo.InvariantCulture, out var date))
+            if (string.IsNullOrEmpty(description) || !StatementText.TryParseDay(csv.GetField(DateColumn), out var date))
             {
                 continue;
             }
-            date = DateTime.SpecifyKind(date, DateTimeKind.Utc);
             datedRows++;
             if (MaskedCardNumber().IsMatch(csv.GetField(CardNumberColumn) ?? "")) cardRows++;
 

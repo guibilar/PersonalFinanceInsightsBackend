@@ -21,7 +21,8 @@ public class TransactionInputDto
     public required string Description { get; set; }
 
     /// <summary>Always positive; <see cref="TransactionType"/> says which way the money moved.</summary>
-    [Range(typeof(decimal), "0.01", "79228162514264337593543950335"), Cents]
+    // Up to a billion: far past any real amount, and sums of many still fit in a decimal.
+    [Range(typeof(decimal), "0.01", "1000000000"), Cents]
     public decimal Amount { get; set; }
 
     /// <summary>Picked by hand when given, so re-applying the rules keeps it.</summary>

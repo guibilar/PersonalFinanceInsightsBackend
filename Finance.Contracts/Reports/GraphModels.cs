@@ -11,6 +11,14 @@ public class MonthlyCategorizedGraphData
     public List<MonthDataPoint> MonthlyData { get; set; } = [];
     public decimal AverageMonthlyTotal { get; set; }
 
+    /// <summary>How many months <see cref="AverageMonthlyTotal"/> is over.</summary>
+    public int AveragedMonths { get; set; }
+
+    /// <summary>
+    /// True when no month of the year is over yet (January), so the running month is what the average is over.
+    /// </summary>
+    public bool AverageIncludesCurrentMonth { get; set; }
+
     /// <summary>
     /// Current-month report only: spending in the previous month up to the same day of the month (the whole
     /// month when it is shorter), so a month in progress is compared like for like. Null in the year report.

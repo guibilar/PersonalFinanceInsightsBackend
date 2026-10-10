@@ -95,18 +95,7 @@ public class AccountService(IAccountRepository accountRepository, ReportingCalen
         if (day > today.AddDays(1)) throw new InvalidInputException("date", "A balance can't be in the future.");
         if (day > today) day = today;
 
-        var balance = await accountRepository.GetBalanceAsync(accountId, day, cancellationToken);
-        if (balance is null)
-        {
-            balance = new AccountBalance { AccountId = accountId, Date = day, Amount = amount };
-            await accountRepository.AddBalanceAsync(balance, cancellationToken);
-        }
-        else
-        {
-            balance.Amount = amount;
-            await accountRepository.SaveChangesAsync(cancellationToken);
-        }
-        return balance;
+        return await accountRepository.SetBalanceAsync(accountId, day, amount, cancellationToken);
     }
 
     public async Task RemoveBalanceAsync(Guid accountId, Guid balanceId, CancellationToken cancellationToken = default)

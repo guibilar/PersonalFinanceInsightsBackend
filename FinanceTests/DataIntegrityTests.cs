@@ -82,6 +82,22 @@ public class DataIntegrityTests
     }
 
     [Fact]
+    public async Task Balances_SetAtTheSameMomentForOneDay_AllSucceed_AndStayOneRow()
+    {
+        // Only PostgreSQL enforces the one-a-day unique index that settles the race.
+        Assert.SkipUnless(OnPostgres, "Needs PostgreSQL: set FINANCE_TEST_POSTGRES (e.g. to \"container\").");
+        await using var factory = new FinanceApiFactory();
+        var client = factory.CreateClient();
+        var url = $"/api/Accounts/{Account.DefaultSavingsId}/Balances";
+
+        var responses = await Task.WhenAll(Enumerable.Range(1, 8)
+            .Select(i => client.PostAsJsonAsync(url, new { date = "2026-01-05", amount = i * 100m })));
+
+        Assert.All(responses, r => Assert.Equal(HttpStatusCode.OK, r.StatusCode));
+        Assert.Equal(1, await factory.QueryAsync(db => db.AccountBalances.CountAsync()));
+    }
+
+    [Fact]
     public async Task Migration_RemovesExistingDuplicates_KeepingTheBudgetLinkedCopy()
     {
         Assert.SkipUnless(OnPostgres, "Needs PostgreSQL: set FINANCE_TEST_POSTGRES (e.g. to \"container\").");

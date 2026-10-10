@@ -160,4 +160,23 @@ public class ManualEntryTests
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Contains("at most 2 decimal places", await response.Content.ReadAsStringAsync());
     }
+
+    [Theory]
+    [InlineData("/api/Transaction")]
+    [InlineData("/api/Budget")]
+    public async Task AnAmountOverABillion_Returns400(string endpoint)
+    {
+        await using var factory = new FinanceApiFactory();
+        var client = factory.CreateClient();
+        var accountId = await AddManualAccountAsync(client);
+        // Two of these would overflow every total they are added to.
+        const decimal huge = 79228162514264337593543950335m;
+        object body = endpoint == "/api/Budget"
+            ? new { name = "Food", description = "d", status = "Active", amount = huge }
+            : new { date = "2026-09-10", description = "COFFEE", amount = huge, transactionType = "Debit", accountId };
+
+        var response = await client.PostAsJsonAsync(endpoint, body, FinanceApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
 }

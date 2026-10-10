@@ -119,7 +119,12 @@ public partial class WealthsimplePdfParser : IStatementParser
         if (!MoneyInOrOut.Contains(row.Code))
         {
             // Inside the account: buying and selling, dividends and interest, fees. Never a transfer, whatever the rules say.
-            transaction.Flow = Costs.Contains(row.Code) ? Flow.Spending : Earned.Contains(row.Code) ? Flow.Income : Flow.Ignored;
+            // By direction too: a fee or tax given back is a refund, not more spending, and a bonus taken back (a
+            // clawback) is no income; locked, the rules would never correct either.
+            var credit = transaction.TransactionType == TransactionType.Credit;
+            transaction.Flow = Costs.Contains(row.Code) ? (credit ? Flow.Refund : Flow.Spending)
+                : Earned.Contains(row.Code) ? (credit ? Flow.Income : Flow.Ignored)
+                : Flow.Ignored;
             transaction.FlowLocked = true;
         }
         return transaction;
@@ -175,10 +180,10 @@ public partial class WealthsimplePdfParser : IStatementParser
         throw new InvalidStatementException(NotWealthsimpleMessage);
     }
 
-    /// <summary>"$1,234.56", "-$12.00" or "($12.00)".</summary>
+    /// <summary>"$1,234.56", "-$12.00", "$-12.00" or "($12.00)".</summary>
     private static decimal Amount(string text)
     {
-        var negative = text.StartsWith('-') || text.StartsWith('(');
+        var negative = text.Contains('-') || text.StartsWith('(');
         var digits = text.Trim('-', '(', ')', '$').Replace(",", "");
         var value = decimal.Parse(digits, NumberStyles.AllowDecimalPoint, CultureInfo.InvariantCulture);
         return negative ? -value : value;

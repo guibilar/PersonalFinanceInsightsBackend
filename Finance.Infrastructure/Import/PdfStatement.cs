@@ -36,18 +36,16 @@ internal static class PdfStatement
     /// <exception cref="InvalidStatementException"><paramref name="unreadable"/>, when the file can't be opened as a PDF.</exception>
     public static List<List<Line>> Pages(byte[] pdf, string unreadable)
     {
-        PdfDocument document;
+        // Pages are read lazily: a file that opens can still fail on a damaged page (a truncated download), which is as
+        // unreadable as one that doesn't open, not an unexpected error.
         try
         {
-            document = PdfDocument.Open(pdf);
+            using var document = PdfDocument.Open(pdf);
+            return document.GetPages().Select(LinesOf).ToList();
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             throw new InvalidStatementException(unreadable);
-        }
-        using (document)
-        {
-            return document.GetPages().Select(LinesOf).ToList();
         }
     }
 

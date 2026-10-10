@@ -109,6 +109,7 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
             query = query.Where(x => x.Description.ToLower().Contains(filter.Description.ToLower()));
         }
 
-        return query.OrderBy(x => x.Name);
+        // Then by id: names can repeat, and a page boundary between two of them would otherwise list one twice or not at all.
+        return query.OrderBy(x => x.Name).ThenBy(x => x.Id);
     }
 }

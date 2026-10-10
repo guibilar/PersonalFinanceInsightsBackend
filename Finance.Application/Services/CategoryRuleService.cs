@@ -3,6 +3,7 @@ using Finance.Application.Models;
 using Finance.Application.Services.Interfaces;
 using Finance.Domain.Entities;
 using Finance.Domain.Exceptions;
+using Finance.Domain.Helpers;
 
 namespace Finance.Application.Services;
 
@@ -76,7 +77,7 @@ public class CategoryRuleService(
         // As the rule would be checked first, it decides every description containing its keyword.
         var changed = (await transactionRepository.GetRuleCategorizedAsync(cancellationToken))
             .Where(t => t.Id != excludeTransactionId && t.CategoryId != categoryId &&
-                        t.Description.ToUpperInvariant().Contains(normalized, StringComparison.Ordinal))
+                        RuleText.Of(t.Description).Contains(normalized, StringComparison.Ordinal))
             .ToList();
 
         var examples = changed.OrderByDescending(t => t.Date)

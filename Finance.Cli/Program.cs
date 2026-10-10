@@ -26,7 +26,14 @@ class Program
 
         List<Transaction> Read(string file, AccountType account)
         {
-            using var stream = File.OpenRead(FileHelper.GetInputPathForFile(file, "CIBC", "csv"));
+            var path = FileHelper.GetInputPathForFile(file, "CIBC", "csv");
+            // An account without its export this time is left out, as an empty one is, rather than stopping the report.
+            if (!File.Exists(path))
+            {
+                Console.WriteLine($"{file}.csv: not found, left out.");
+                return [];
+            }
+            using var stream = File.OpenRead(path);
             try
             {
                 var transactions = parser.Parse(stream).Transactions;

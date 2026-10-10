@@ -18,7 +18,7 @@ public class DbTicketStore(IServiceScopeFactory scopes, TimeProvider timeProvide
     /// The session key on the signed-in user. The cookie handler reads its own copy from the cookie and then
     /// works with the ticket stored here, so the store adds the key when it hands a ticket back.
     /// </summary>
-    private const string SessionKeyClaim = "finance:session";
+    internal const string SessionKeyClaim = "finance:session";
 
     public async Task<string> StoreAsync(AuthenticationTicket ticket)
     {
@@ -85,7 +85,9 @@ public class DbTicketStore(IServiceScopeFactory scopes, TimeProvider timeProvide
     public async Task<int> RemoveOtherSessionsAsync(ClaimsPrincipal current)
     {
         var userId = UserId(current);
-        var currentKey = current.FindFirstValue(SessionKeyClaim);
+        // Without its own key it would end every session, this one included.
+        var currentKey = current.FindFirstValue(SessionKeyClaim)
+            ?? throw new InvalidOperationException("The current session's key is missing from the signed-in user.");
 
         await using var scope = scopes.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<FinanceDbContext>();

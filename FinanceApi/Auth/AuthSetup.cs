@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Finance.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
@@ -61,6 +62,19 @@ public static class AuthSetup
             // An API answers with status codes; the frontend shows its own login page.
             options.Events.OnRedirectToLogin = context => StatusCode(context.Response, StatusCodes.Status401Unauthorized);
             options.Events.OnRedirectToAccessDenied = context => StatusCode(context.Response, StatusCodes.Status403Forbidden);
+        });
+
+        // Every 30 minutes Identity checks the user's security stamp and replaces the signed-in user with a fresh one,
+        // without the session key the store added: carried over, or "sign out other devices" and a password change
+        // would take this session for another and end it too.
+        services.Configure<SecurityStampValidatorOptions>(options => options.OnRefreshingPrincipal = context =>
+        {
+            var key = context.CurrentPrincipal?.FindFirst(DbTicketStore.SessionKeyClaim);
+            if (key is not null && context.NewPrincipal?.Identity is ClaimsIdentity identity && !identity.HasClaim(c => c.Type == key.Type))
+            {
+                identity.AddClaim(new Claim(key.Type, key.Value));
+            }
+            return Task.CompletedTask;
         });
 
         // Sessions live in the database, so signing out, a password change or "sign out other devices" really

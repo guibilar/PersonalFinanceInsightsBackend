@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.RegularExpressions;
+using Finance.Application.Import;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
@@ -20,11 +21,11 @@ internal static partial class NeoPdfParser
 
     private sealed record Row(DateTime Date, List<string> Description, decimal Amount, decimal Balance, string Text);
 
-    public static List<Transaction> Parse(byte[] pdf)
+    public static ParsedStatement Parse(byte[] pdf)
     {
         var pages = PdfStatement.Pages(pdf, "This PDF can't be read. Is it a statement downloaded from Neo, not a scan or a protected file?");
         var all = pages.SelectMany(p => p).ToList();
-        var (start, end) = Period(all);
+        var (_, end) = Period(all);
         var opening = Summary(all, "Opening balance");
         var closing = Summary(all, "Closing balance");
 
@@ -40,7 +41,7 @@ internal static partial class NeoPdfParser
             double lastY = 0;
             foreach (var line in lines.Skip(header + 1))
             {
-                if (TryRow(line, start, end, out var row))
+                if (TryRow(line, end, out var row))
                 {
                     rows.Add(row);
                     (last, lastY) = (row, line.Y);
@@ -61,17 +62,20 @@ internal static partial class NeoPdfParser
         if (tables == 0) throw new InvalidStatementException(NotNeoMessage);
 
         PdfStatement.Reconcile(rows, opening, closing, r => r.Amount, r => r.Balance, r => r.Text, "balance");
-        return rows.Select(row => new Transaction
+        var transactions = rows.Select(row => new Transaction
         {
             Date = row.Date,
             Description = string.Join(' ', row.Description),
             Amount = Math.Abs(row.Amount),
             TransactionType = row.Amount < 0 ? TransactionType.Debit : TransactionType.Credit,
         }).ToList();
+        // The statement's closing balance, checked against every row above: the account's balance on its last day,
+        // as a Wealthsimple statement gives its portfolio's.
+        return new ParsedStatement(transactions, IsCreditCardExport: false, new StatementBalance(DateTime.SpecifyKind(end, DateTimeKind.Utc), closing));
     }
 
     /// <summary>"Feb 2 Feb 2 Transfer from Everyday 4,000.00 6,408.64": two dates, the description, the amount, the balance.</summary>
-    private static bool TryRow(PdfStatement.Line line, DateTime start, DateTime end, out Row row)
+    private static bool TryRow(PdfStatement.Line line, DateTime end, out Row row)
     {
         row = null!;
         var words = line.Words.Select(w => w.Text).ToList();
@@ -81,8 +85,12 @@ internal static partial class NeoPdfParser
         {
             return false;
         }
-        // The year is the period's: a December row in a statement running into January belongs to the year before.
-        var year = month >= start.Month || start.Year == end.Year ? start.Year : end.Year;
+        // The year is the period's end's, or the one before when that would put the row after the period: a December
+        // row in a statement running into January, or a purchase made Dec 31 and posted Jan 2 in a January statement
+        // (rows are dated when made, which can be just before the period). A few days' grace for late postings.
+        var year = end.Year;
+        if (day <= DateTime.DaysInMonth(year, month) && new DateTime(year, month, day, 0, 0, 0, DateTimeKind.Utc) > end.AddDays(7))
+            year--;
         if (day > DateTime.DaysInMonth(year, month)) return false;
         row = new Row(
             new DateTime(year, month, day, 0, 0, 0, DateTimeKind.Utc),

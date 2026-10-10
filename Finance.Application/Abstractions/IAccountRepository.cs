@@ -23,11 +23,12 @@ public interface IAccountRepository : IBaseRepository<Account>
     /// <summary>Every account's balances, oldest first.</summary>
     Task<List<AccountBalance>> GetAllBalancesAsync(CancellationToken cancellationToken = default);
 
-    /// <summary>Tracked.</summary>
-    Task<AccountBalance?> GetBalanceAsync(Guid accountId, DateTime date, CancellationToken cancellationToken = default);
-
     Task<AccountBalance?> GetBalanceByIdAsync(Guid accountId, Guid balanceId, CancellationToken cancellationToken = default);
-    Task AddBalanceAsync(AccountBalance balance, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Sets the account's balance on <paramref name="date"/>, adding it or changing the one there: one stored at the
+    /// same moment by another request is changed rather than refused.
+    /// </summary>
+    Task<AccountBalance> SetBalanceAsync(Guid accountId, DateTime date, decimal amount, CancellationToken cancellationToken = default);
     Task RemoveBalanceAsync(AccountBalance balance, CancellationToken cancellationToken = default);
 
     /// <summary>Deleted ones included: they are kept so re-importing doesn't bring them back.</summary>
