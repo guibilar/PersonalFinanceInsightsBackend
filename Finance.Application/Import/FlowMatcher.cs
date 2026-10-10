@@ -1,5 +1,6 @@
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
+using Finance.Domain.Helpers;
 
 namespace Finance.Application.Import;
 
@@ -24,7 +25,7 @@ public class FlowMatcher
 
     public Flow Match(string description, AccountType account, TransactionType? direction)
     {
-        var upper = description.ToUpperInvariant();
+        var upper = RuleText.Of(description);
         foreach (var (keyword, flow) in _rules)
         {
             if (upper.Contains(keyword, StringComparison.Ordinal) && IsAllowed(flow, direction))

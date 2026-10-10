@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using Finance.Application.Import;
 using Finance.Contracts.Outputs;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
@@ -58,6 +59,27 @@ public class NeoPdfImportTests
         ]));
 
         Assert.Equal([new DateTime(2025, 12, 20), new DateTime(2026, 1, 3)], parsed.Select(t => t.Date));
+    }
+
+    [Fact]
+    public void Parser_GivesTheClosingBalance_OnThePeriodsLastDay()
+    {
+        var balance = new NeoCsvParser().Parse(new MemoryStream(February)).ClosingBalance;
+
+        Assert.Equal(new StatementBalance(new DateTime(2026, 2, 28, 0, 0, 0, DateTimeKind.Utc), 10408.64m), balance);
+    }
+
+    [Fact]
+    public void Parser_GivesARowMadeJustBeforeTheMonthTheYearBefore()
+    {
+        // Rows carry the day the purchase was made: Dec 31, posted Jan 2, is in January's statement.
+        var parsed = Parse(Build("Jan 1, 2026 - Jan 31, 2026", 100m, 85.50m,
+        [
+            new("Dec 31", "Coffee", -4.50m, 95.50m),
+            new("Jan 20", "Groceries", -10m, 85.50m),
+        ]));
+
+        Assert.Equal([new DateTime(2025, 12, 31), new DateTime(2026, 1, 20)], parsed.Select(t => t.Date));
     }
 
     [Fact]

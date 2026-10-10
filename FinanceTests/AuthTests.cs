@@ -237,6 +237,31 @@ public class AuthTests
     }
 
     [Fact]
+    public async Task SignOutOthers_KeepsThisSession_AfterIdentityRefreshedTheSignedInUser()
+    {
+        // The security stamp is checked on every request here (every 30 minutes in use): each check replaces the
+        // signed-in user with a fresh one.
+        await using var factory = new FinanceApiFactory(
+            services => services.Configure<SecurityStampValidatorOptions>(o => o.ValidationInterval = TimeSpan.Zero),
+            signedIn: false);
+        _ = factory.CreateClient();
+        using (var scope = factory.Services.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<IdentityUser>>();
+            Assert.True((await users.CreateAsync(new IdentityUser(Username), Password)).Succeeded);
+        }
+        var laptop = factory.CreateClient();
+        await LoginAsync(laptop);
+        var phone = await SignInElsewhereAsync(factory);
+
+        var signedOut = await (await laptop.PostAsync("/api/Auth/sign-out-others", null)).ReadAsync<SignedOutSessionsDto>();
+
+        Assert.Equal(1, signedOut.Count);
+        Assert.Equal(HttpStatusCode.Unauthorized, await WhoAmIAsync(factory, phone));
+        Assert.Equal(HttpStatusCode.OK, (await laptop.GetAsync("/api/Auth/me")).StatusCode);
+    }
+
+    [Fact]
     public async Task InitialUser_IsCreatedAtStartup_AndCanBeReset()
     {
         var settings = new Dictionary<string, string?>

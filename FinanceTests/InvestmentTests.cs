@@ -90,7 +90,7 @@ public class InvestmentTests
         var savings = await AddAsync(client, new { name = "HISA", type = AccountType.Savings, plan = RegisteredPlan.Tfsa, contributionRoom = 500m });
         // A rename alone leaves the plan as it is.
         var renamed = await (await client.PutAsJsonAsync($"/api/Accounts/{savings.Id}", new { name = "Savings TFSA" })).ReadAsync<AccountOutputDto>();
-        var cleared = await (await client.PutAsJsonAsync($"/api/Accounts/{savings.Id}", new { name = "Savings TFSA", plan = RegisteredPlan.None })).ReadAsync<AccountOutputDto>();
+        var cleared = await (await client.PutAsJsonAsync($"/api/Accounts/{savings.Id}", new { name = "Savings TFSA", plan = RegisteredPlan.None }, FinanceApiFactory.Json)).ReadAsync<AccountOutputDto>();
         Assert.Equal((RegisteredPlan.Tfsa, 500m), (renamed.Plan, renamed.ContributionRoom));
         Assert.Equal((RegisteredPlan.None, null, null), (cleared.Plan, cleared.ContributionRoom, cleared.ContributionRoomYear));
     }

@@ -1,4 +1,5 @@
 using Finance.Domain.Enums;
+using Finance.Domain.Helpers;
 
 namespace Finance.Domain.Entities;
 
@@ -14,5 +15,5 @@ public class FlowRule : BaseEntity
     /// <summary>Never <see cref="Enums.Flow.Spending"/>: that is what money out is when no rule says otherwise.</summary>
     public Flow Flow { get; set; }
 
-    public static string NormalizeKeyword(string keyword) => keyword.Trim().ToUpperInvariant();
+    public static string NormalizeKeyword(string keyword) => RuleText.Of(keyword);
 }

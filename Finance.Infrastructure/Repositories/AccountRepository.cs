@@ -68,7 +68,7 @@ public class AccountRepository(FinanceDbContext dbContext) : BaseRepository<Acco
         return DbContext.AccountBalances.AsNoTracking().OrderBy(b => b.Date).ToListAsync(cancellationToken);
     }
 
-    public Task<AccountBalance?> GetBalanceAsync(Guid accountId, DateTime date, CancellationToken cancellationToken = default)
+    private Task<AccountBalance?> GetBalanceAsync(Guid accountId, DateTime date, CancellationToken cancellationToken = default)
     {
         return DbContext.AccountBalances.SingleOrDefaultAsync(b => b.AccountId == accountId && b.Date == date, cancellationToken);
     }
@@ -78,10 +78,32 @@ public class AccountRepository(FinanceDbContext dbContext) : BaseRepository<Acco
         return DbContext.AccountBalances.SingleOrDefaultAsync(b => b.AccountId == accountId && b.Id == balanceId, cancellationToken);
     }
 
-    public async Task AddBalanceAsync(AccountBalance balance, CancellationToken cancellationToken = default)
+    public async Task<AccountBalance> SetBalanceAsync(Guid accountId, DateTime date, decimal amount,
+        CancellationToken cancellationToken = default)
     {
-        DbContext.AccountBalances.Add(balance);
-        await DbContext.SaveChangesAsync(cancellationToken);
+        for (var attempt = 1; ; attempt++)
+        {
+            var balance = await GetBalanceAsync(accountId, date, cancellationToken);
+            if (balance is not null)
+            {
+                balance.Amount = amount;
+                await DbContext.SaveChangesAsync(cancellationToken);
+                return balance;
+            }
+
+            balance = new AccountBalance { AccountId = accountId, Date = date, Amount = amount };
+            DbContext.AccountBalances.Add(balance);
+            try
+            {
+                await DbContext.SaveChangesAsync(cancellationToken);
+                return balance;
+            }
+            catch (DbUpdateException ex) when (attempt == 1 && IsUniqueViolation(ex))
+            {
+                // Another request stored that day's balance first: change it instead.
+                DbContext.Entry(balance).State = EntityState.Detached;
+            }
+        }
     }
 
     public async Task RemoveBalanceAsync(AccountBalance balance, CancellationToken cancellationToken = default)

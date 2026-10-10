@@ -13,7 +13,8 @@ public class BudgetInputDto
 
     public Status Status { get; set; }
 
-    [Range(typeof(decimal), "0.01", "79228162514264337593543950335"), Cents]
+    // Up to a billion: far past any real amount, and sums of many still fit in a decimal.
+    [Range(typeof(decimal), "0.01", "1000000000"), Cents]
     public decimal Amount { get; set; }
 
     /// <summary>Optional; <see cref="BudgetPeriod.Total"/> when omitted.</summary>

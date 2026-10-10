@@ -44,10 +44,11 @@ public class ForecastService(
         var history = HistoryMonths(transactions, monthStart);
         var historyDays = history.Sum(m => DateTime.DaysInMonth(m.Year, m.Month));
         bool InHistory(Transaction t) => history.Count > 0 && t.Date >= history[0] && t.Date < monthStart;
+        var firstDay = transactions.Count > 0 ? transactions.Min(t => t.Date) : (DateTime?)null;
         var dailyRate = historyDays > 0
             ? transactions.Where(t => InHistory(t) && !recurring.Contains(t.Id)).Sum(MonthlyRecordsCalculator.SpendingAmount) / historyDays
             // No complete month yet: this month's pace.
-            : thisMonth.Where(t => !recurring.Contains(t.Id)).Sum(MonthlyRecordsCalculator.SpendingAmount) / today.Day;
+            : thisMonth.Where(t => !recurring.Contains(t.Id)).Sum(MonthlyRecordsCalculator.SpendingAmount) / DaysSoFar(monthStart, firstDay, today);
         dailyRate = Math.Max(0, dailyRate);
 
         var budgets = await budgetRepository.FilterAsync(
@@ -66,7 +67,7 @@ public class ForecastService(
             DailyRate = Math.Round(dailyRate, 2),
             Upcoming = upcoming,
             Budgets = budgets.Items
-                .Select(b => BudgetForecast(b, transactions, history, historyDays, today))
+                .Select(b => BudgetForecast(b, transactions, history, historyDays, firstDay, today))
                 .OfType<BudgetForecast>()
                 .OrderByDescending(b => b.ProjectedPercentage)
                 .ToList(),
@@ -91,6 +92,16 @@ public class ForecastService(
         }
     }
 
+    /// <summary>
+    /// The days from <paramref name="periodStart"/> to today, both included; from the first transaction when the data starts
+    /// later, as the days before it say nothing about the pace.
+    /// </summary>
+    private static int DaysSoFar(DateTime periodStart, DateTime? firstDay, DateTime today)
+    {
+        var from = firstDay is { } first && first > periodStart && first <= today ? first : periodStart;
+        return (today - from).Days + 1;
+    }
+
     /// <summary>Up to <see cref="UsualMonths"/> months just before this one that the data covers from their first day, oldest first.</summary>
     private static List<DateTime> HistoryMonths(List<Transaction> transactions, DateTime monthStart)
     {
@@ -112,7 +123,7 @@ public class ForecastService(
     /// one that counts only what is linked: a linked purchase says nothing about the next.
     /// </summary>
     private static BudgetForecast? BudgetForecast(BudgetSummary summary, List<Transaction> transactions, List<DateTime> history,
-        int historyDays, DateTime today)
+        int historyDays, DateTime? firstDay, DateTime today)
     {
         var budget = summary.Budget;
         if (budget.Period is not (BudgetPeriod.Monthly or BudgetPeriod.Yearly) || budget.Amount <= 0) return null;
@@ -130,9 +141,11 @@ public class ForecastService(
                     : 0;
 
         var monthStart = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+        var periodStart = budget.Period == BudgetPeriod.Monthly ? monthStart : new DateTime(today.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        // No complete month yet: what it counted so far, over the days of its period that the data covers.
         var rate = historyDays > 0
             ? transactions.Where(t => t.Date >= history[0] && t.Date < monthStart).Sum(Counted) / historyDays
-            : summary.TotalSpent / today.Day;
+            : summary.TotalSpent / DaysSoFar(periodStart, firstDay, today);
         var end = budget.Period == BudgetPeriod.Monthly
             ? monthStart.AddMonths(1).AddDays(-1)
             : new DateTime(today.Year, 12, 31, 0, 0, 0, DateTimeKind.Utc);

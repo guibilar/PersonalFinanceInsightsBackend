@@ -33,7 +33,7 @@ public partial class NeoCsvParser : IStatementParser
         using var buffer = new MemoryStream();
         statement.CopyTo(buffer);
         var bytes = buffer.ToArray();
-        if (PdfStatement.IsPdf(bytes)) return new ParsedStatement(NeoPdfParser.Parse(bytes), IsCreditCardExport: false);
+        if (PdfStatement.IsPdf(bytes)) return NeoPdfParser.Parse(bytes);
 
         using var reader = new StringReader(StatementText.Read(new MemoryStream(bytes)));
         using var csv = new CsvReader(reader, new CsvConfiguration(CultureInfo.InvariantCulture)
@@ -55,8 +55,7 @@ public partial class NeoCsvParser : IStatementParser
         while (csv.Read())
         {
             var description = csv.GetField(DescriptionHeader);
-            if (string.IsNullOrWhiteSpace(description) ||
-                !DateTime.TryParse(csv.GetField(DateHeader), CultureInfo.InvariantCulture, out var date))
+            if (string.IsNullOrWhiteSpace(description) || !StatementText.TryParseDay(csv.GetField(DateHeader), out var date))
             {
                 continue;
             }
@@ -77,7 +76,7 @@ public partial class NeoCsvParser : IStatementParser
 
             transactions.Add(new Transaction
             {
-                Date = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc),
+                Date = date,
                 // Neo pads merchant names and cities with runs of spaces ("CALGARY       CAN").
                 Description = WhitespaceRun().Replace(description.Trim(), " "),
                 Amount = Math.Abs(amount),

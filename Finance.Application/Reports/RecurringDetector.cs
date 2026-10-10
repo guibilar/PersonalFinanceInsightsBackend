@@ -101,22 +101,27 @@ public static class RecurringDetector
     }
 
     /// <summary>
-    /// A fixed price (the latest), a fixed price that just changed (the new one, and from what), or a varying amount
+    /// A fixed price (the latest), a fixed price that changed (the new one, and from what), or a varying amount
     /// (the average of the last three).
     /// </summary>
     private static (decimal Amount, bool Variable, PriceChange? Change) Price(List<Charge> charges)
     {
         var last = charges[^1];
-        var before = charges.SkipLast(1).TakeLast(3).Select(c => c.Amount).ToList();
+        // The latest price and the charges that have come at it since it changed.
+        var run = 1;
+        while (run < charges.Count && Same(charges[^(run + 1)].Amount, last.Amount)) run++;
+        var before = charges.SkipLast(run).TakeLast(3).Select(c => c.Amount).ToList();
+        if (before.Count == 0) return (last.Amount, false, null);
         if (before.All(a => Same(a, before[^1])))
         {
-            if (Same(last.Amount, before[^1])) return (last.Amount, false, null);
             if (Math.Abs(last.Amount - before[^1]) >= Math.Max(0.5m, before[^1] * 0.02m))
             {
-                return (last.Amount, false, new PriceChange { From = before[^1], To = last.Amount, Since = last.Date });
+                return (last.Amount, false, new PriceChange { From = before[^1], To = last.Amount, Since = charges[^run].Date });
             }
             return (last.Amount, false, null);
         }
+        // Settled on one price after varying.
+        if (run >= 3) return (last.Amount, false, null);
         var recent = charges.TakeLast(3).Select(c => c.Amount).ToList();
         return (Math.Round(recent.Average(), 2), true, null);
     }

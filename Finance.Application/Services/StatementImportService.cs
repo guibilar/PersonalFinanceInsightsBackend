@@ -81,17 +81,7 @@ public class StatementImportService(
         // The statement's own figure for what the account was worth replaces any typed in for that day.
         if (statementRows.ClosingBalance is { } closing)
         {
-            var balance = await accountRepository.GetBalanceAsync(account.Id, closing.Date, cancellationToken);
-            if (balance is null)
-            {
-                await accountRepository.AddBalanceAsync(
-                    new AccountBalance { AccountId = account.Id, Date = closing.Date, Amount = closing.Amount }, cancellationToken);
-            }
-            else
-            {
-                balance.Amount = closing.Amount;
-                await accountRepository.SaveChangesAsync(cancellationToken);
-            }
+            await accountRepository.SetBalanceAsync(account.Id, closing.Date, closing.Amount, cancellationToken);
         }
 
         // A statement read in full counts as imported even when every row was already there: the reminders to import

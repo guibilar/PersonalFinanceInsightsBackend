@@ -48,6 +48,18 @@ public class InsightTests
     }
 
     [Fact]
+    public void AMonthlyPrice_ThatWentUp_KeepsItsNewPrice_ChargesAfterTheChange()
+    {
+        var charges = new[] { 6, 7, 8 }.Select(m => C(Day(2026, m, 5), "NETFLIX.COM", 16.49m))
+            .Concat(new[] { 9, 10 }.Select(m => C(Day(2026, m, 5), "NETFLIX.COM", 18.99m)));
+
+        var payment = Assert.Single(RecurringDetector.Detect(charges, Today)).Payment;
+
+        Assert.Equal((18.99m, false), (payment.Amount, payment.VariableAmount));
+        Assert.Equal((16.49m, 18.99m, Day(2026, 9, 5)), (payment.PriceChange!.From, payment.PriceChange.To, payment.PriceChange.Since));
+    }
+
+    [Fact]
     public void WeeklyGroceries_ForDifferentAmounts_AreNotASubscription()
     {
         var amounts = new[] { 85m, 120m, 60m, 140m, 95m, 70m };
@@ -169,6 +181,28 @@ public class InsightTests
     }
 
     [Fact]
+    public async Task Forecast_WithoutACompleteMonth_ProjectsAYearlyBudget_AtItsPaceSinceTheDataStarts()
+    {
+        await using var factory = FactoryOnOctober15();
+        // The data starts on September 20th: no month is complete yet, so the budget's own pace is all there is.
+        await factory.SeedAsync(db => db.Transactions.AddRange(
+            Tx(Day(2026, 9, 20), "NO FRILLS", 130),
+            Tx(Day(2026, 10, 5), "SAFEWAY", 130)));
+        var client = factory.CreateClient();
+        var created = await client.PostAsJsonAsync("/api/Budget", new
+        {
+            name = "Food", description = "d", status = "Active", amount = 3000, period = "Yearly", categoryIds = new[] { DefaultCategories.Groceries }
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var forecast = await (await client.GetAsync("/api/Reports/forecast")).ReadAsync<SpendingForecast>();
+
+        // $260 over the 26 days from September 20th is $10 a day, and 77 days are left in the year.
+        var food = Assert.Single(forecast.Budgets);
+        Assert.Equal((260m, 1030m), (food.Spent, food.Projected));
+    }
+
+    [Fact]
     public async Task Uncategorised_GroupsWhatNoRuleSorts_ByMerchant()
     {
         await using var factory = FactoryOnOctober15();
@@ -203,7 +237,7 @@ public class InsightTests
         // Without a month: the last one that is over.
         var review = await (await factory.CreateClient().GetAsync("/api/Reports/review")).ReadAsync<ReviewReport>();
 
-        Assert.Equal(("September 2026", "August 2026", true), (review.Label, review.PreviousLabel, review.Complete));
+        Assert.Equal(("September 2026", "August 2026", true, Day(2026, 8, 31)), (review.Label, review.PreviousLabel, review.Complete, review.PreviousEnd));
         Assert.Equal((1315m, 1325m, 3000m, 0m), (review.Spending, review.PreviousSpending, review.Income, review.PreviousIncome));
         // Four purchases on four days of thirty.
         Assert.Equal((4, 26), (review.Purchases, review.NoSpendDays));
@@ -214,6 +248,22 @@ public class InsightTests
         Assert.Equal(["LANDLORD", "SAFEWAY", "NO FRILLS", "NETFLIX"], review.TopMerchants.Select(m => m.Name));
         Assert.Equal((2, 1015m, "2026-07"), (review.RecurringCount, review.RecurringMonthlyTotal, review.Earliest));
         Assert.Empty(review.Months);
+    }
+
+    [Fact]
+    public async Task ARunningMonthsReview_ComparesItWithTheMonthBefore_AsFarAsTheSameDay()
+    {
+        await using var factory = FactoryOnOctober15();
+        await factory.SeedAsync(SeedHistory);
+
+        var review = await (await factory.CreateClient().GetAsync("/api/Reports/review?year=2026&month=10")).ReadAsync<ReviewReport>();
+
+        // September up to the 15th: rent (the 20th) and pay (the 25th) hadn't come yet either.
+        Assert.Equal((false, Day(2026, 9, 15)), (review.Complete, review.PreviousEnd));
+        Assert.Equal((55m, 315m, 0m, 0m), (review.Spending, review.PreviousSpending, review.Income, review.PreviousIncome));
+        Assert.Equal(
+            [("Groceries", 40m, 300m), ("Subscriptions", 15m, 15m)],
+            review.Categories.Select(c => (c.Category.Name, c.Spending, c.PreviousSpending)));
     }
 
     [Fact]

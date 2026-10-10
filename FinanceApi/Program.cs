@@ -17,7 +17,8 @@ builder.Configuration
     .AddEnvironmentVariables();
 
 builder.Services.AddControllers()
-    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+    // Enums by name only: a number ("status": 7) would otherwise be accepted as a value no enum has, and stored.
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
 
 builder.Services.AddReverseProxySupport(builder.Configuration);
 builder.Services.AddProblemDetails();

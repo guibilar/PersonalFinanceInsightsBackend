@@ -56,7 +56,7 @@ public class BaseRepository<T>(FinanceDbContext dbContext) : IBaseRepository<T> 
         }
     }
 
-    private static bool IsUniqueViolation(DbUpdateException ex) =>
+    protected static bool IsUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation };
 
     protected static async Task<PaginatedList<TItem>> PaginateAsync<TItem>(

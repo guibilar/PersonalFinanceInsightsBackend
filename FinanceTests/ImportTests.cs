@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using Finance.Application.Import;
+using Finance.Application.Reports;
 using Finance.Contracts.Outputs;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
@@ -254,6 +255,26 @@ public class ImportTests
         var ex = Assert.Throws<InvalidStatementException>(() => Parse(content, AccountType.CreditCard));
 
         Assert.Contains("CIBC", ex.Message);
+    }
+
+    [Fact]
+    public void Rules_MatchADescriptionThePaddedBankWayToo()
+    {
+        var matcher = new CategoryMatcher([new CategoryRule { Keyword = "TIM HORTONS", CategoryId = DefaultCategories.IdOf("Dining")!.Value, Position = 0 }]);
+
+        Assert.Equal(DefaultCategories.IdOf("Dining"), matcher.Categorize("TIM  HORTONS #55"));
+        Assert.Equal("TIM HORTONS", MerchantNames.Normalize("TIM \tHORTONS #55"));
+    }
+
+    [Fact]
+    public void Parser_RefusesDatesASpreadsheetRewrote_RatherThanSwappingDaysAndMonths()
+    {
+        var ex = Assert.Throws<InvalidStatementException>(() => Parse("""
+            05/01/2026,METRO,8.00,
+            13/01/2026,METRO,9.00,
+            """, AccountType.CreditCard));
+
+        Assert.Contains("05/01/2026", ex.Message);
     }
 
     [Fact]

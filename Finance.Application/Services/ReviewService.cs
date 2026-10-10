@@ -42,7 +42,10 @@ public class ReviewService(
         var matcher = await recurringPayments.MatcherAsync(cancellationToken);
         var both = await recurringPayments.LoadAsync(previousStart, end, cancellationToken);
         var current = both.Where(t => t.Date >= start).ToList();
-        var previous = both.Where(t => t.Date < start).ToList();
+        // While the period still runs, the one before counts as far as the same day, so the two compare like for like.
+        var complete = today >= end;
+        var previousEnd = complete ? start : Min(start, (month is null ? today.AddYears(-1) : today.AddMonths(-1)).AddDays(1));
+        var previous = both.Where(t => t.Date < previousEnd).ToList();
         var purchases = current.Where(t => t.Flow == Flow.Spending).ToList();
 
         var lastDay = Min(end.AddDays(-1), today);
@@ -63,15 +66,16 @@ public class ReviewService(
             Month = month,
             Start = start,
             End = end.AddDays(-1),
-            Complete = today >= end,
+            Complete = complete,
             PreviousLabel = Label(previousStart),
+            PreviousEnd = previousEnd.AddDays(-1),
             Spending = current.Sum(MonthlyRecordsCalculator.SpendingAmount),
             PreviousSpending = previous.Sum(MonthlyRecordsCalculator.SpendingAmount),
             Income = current.Where(t => t.Flow == Flow.Income).Sum(t => t.Amount),
             PreviousIncome = previous.Where(t => t.Flow == Flow.Income).Sum(t => t.Amount),
             Purchases = purchases.Count,
             NoSpendDays = days - spendDays,
-            Categories = both
+            Categories = current.Concat(previous)
                 .Where(t => t.Flow is Flow.Spending or Flow.Refund)
                 .GroupBy(t => t.CategoryId)
                 .Select(g => new ReviewCategory

@@ -1,3 +1,5 @@
+using Finance.Domain.Helpers;
+
 namespace Finance.Domain.Entities;
 
 /// <summary>
@@ -14,5 +16,5 @@ public class CategoryRule : BaseEntity
     /// <summary>0 for the first rule checked; the positions of all rules are always 0..n-1.</summary>
     public int Position { get; set; }
 
-    public static string NormalizeKeyword(string keyword) => keyword.Trim().ToUpperInvariant();
+    public static string NormalizeKeyword(string keyword) => RuleText.Of(keyword);
 }

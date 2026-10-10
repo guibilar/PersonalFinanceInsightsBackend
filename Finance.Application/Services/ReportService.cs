@@ -119,6 +119,9 @@ public class ReportService(
         {
             throw new InvalidInputException("endDate", "The end date is before the start date.");
         }
+        // The calendar ends with 9999: a period of it would run past that.
+        if (start?.Year == DateTime.MaxValue.Year) throw new InvalidInputException("startDate", "Choose a date before the year 9999.");
+        if (end?.Year == DateTime.MaxValue.Year) throw new InvalidInputException("endDate", "Choose a date before the year 9999.");
 
         return (start, end);
     }
@@ -240,7 +243,8 @@ public class ReportService(
 
     /// <param name="averageBefore">
     /// Only months before this one count towards the average: the current month isn't over, and its partial
-    /// total would pull the average down. When there are no earlier months (January), every month counts.
+    /// total would pull the average down. When there are no earlier months (January), that month counts, though
+    /// not a later one dated ahead.
     /// </param>
     private static MonthlyCategorizedGraphData GenerateMonthlyGraphDataFromTransactions(
         List<Transaction> transactions, DateTime? averageBefore = null)
@@ -249,7 +253,8 @@ public class ReportService(
         var completeMonths = averageBefore is { } before
             ? monthlyRecords.Where(m => m.YearMonth < before).ToList()
             : [];
-        var averaged = completeMonths.Count > 0 ? completeMonths : monthlyRecords;
+        var averaged = completeMonths.Count > 0 ? completeMonths
+            : monthlyRecords.Where(m => averageBefore is not { } current || m.YearMonth <= current).ToList();
         // The transactions come with their categories; names are unique, so values are keyed by name.
         var categories = transactions
             .Select(t => t.Category!)
@@ -263,6 +268,8 @@ public class ReportService(
             Categories = categories.Select(c => new CategoryReferenceDto { Id = c.Id, Name = c.Name, Color = c.Color }).ToList(),
             // No transactions yet (e.g. the 1st of the month) is a valid, empty report.
             AverageMonthlyTotal = averaged.Count > 0 ? averaged.Average(m => m.Total) : 0,
+            AveragedMonths = averaged.Count,
+            AverageIncludesCurrentMonth = averageBefore is not null && completeMonths.Count == 0 && averaged.Count > 0,
             MonthlyData = monthlyRecords.Select(m => new MonthDataPoint
             {
                 Month = m.YearMonth.ToString("MMM yyyy", CultureInfo.InvariantCulture),

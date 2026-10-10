@@ -57,6 +57,20 @@ public class WealthsimplePdfImportTests
     }
 
     [Fact]
+    public void Parser_GivesAFeeOrTaxBackAsARefund_AndABonusTakenBackAsNoIncome()
+    {
+        var parsed = Parse(Build("2026-04-01 - 2026-04-30", 100m, 10m, 10m,
+        [
+            new("2026-04-02", "WHTFED", "Withholding tax reversal", 0, 5m, 15m),
+            new("2026-04-03", "REFER", "Referral bonus clawback", 5m, 0, 10m),
+        ]));
+
+        Assert.Equal(
+            [(TransactionType.Credit, Flow.Refund), (TransactionType.Debit, Flow.Ignored)],
+            parsed.Select(t => (t.TransactionType!.Value, t.Flow)));
+    }
+
+    [Fact]
     public void Parser_GivesThePortfolioValue_AtThePeriodsEnd_EvenWithNoActivity()
     {
         var statement = new WealthsimplePdfParser().Parse(new MemoryStream(Build("2025-05-01 - 2025-05-31", 3_845.03m, 0, 0, [])));
