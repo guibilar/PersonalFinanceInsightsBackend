@@ -73,6 +73,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
+// After authorization, so only requests allowed in count towards an allowance (SignInGuard).
+app.UseRateLimiter();
 
 // Liveness: the process answers (no dependencies, so a database outage doesn't get the API restarted).
 app.MapHealthChecks("/health/live", new HealthCheckOptions { Predicate = _ => false }).AllowAnonymous();

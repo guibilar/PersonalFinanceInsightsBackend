@@ -43,7 +43,12 @@ frontend reaches the API on the same origin (nginx in production, the dev-server
   the account is `dev` / `development-only`. Passwords need at least 12 characters.
 - **Forgotten password:** start once with `Auth:InitialUser:ResetPassword=true` (`FINANCE_RESET_PASSWORD=true`),
   then remove it. It sets the configured password and clears a lockout.
-- **Lockout:** 5 wrong passwords lock the account for 15 minutes.
+- **Lockout:** 5 wrong passwords lock the account for 15 minutes, at sign-in or as the current password when
+  changing it. A username no account has is locked out the same way, and answered as slowly, so no answer tells
+  which usernames exist.
+- **Rate limit:** an address gets 10 password attempts a minute (sign-in and password change together); more
+  get a 429 with `Retry-After`. Behind the frontend's nginx the address is the client's, as forwarded by the
+  trusted proxies (`ReverseProxy:TrustedNetworks`).
 - **Data:** everyone who can sign in sees the same transactions and budgets.
 - **Sessions:** kept in the database (`UserSessions`); the cookie only carries the session's key. Signing out
   ends the session on the server, so a copy of the cookie stops working too. Changing the password signs

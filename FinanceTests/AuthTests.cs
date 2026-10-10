@@ -128,6 +128,62 @@ public class AuthTests
     }
 
     [Fact]
+    public async Task AnUnknownUsername_IsLockedOutAfterAsManyAttempts_AsAnAccount()
+    {
+        await using var factory = await WithAccountAsync();
+        var client = factory.CreateClient();
+
+        var account = new List<HttpResponseMessage>();
+        var unknown = new List<HttpResponseMessage>();
+        for (var i = 0; i < 5; i++)
+        {
+            account.Add(await LoginAsync(client, "not the password"));
+            unknown.Add(await LoginAsync(client, "not the password", username: "nobody"));
+        }
+
+        // Four refusals, then the lockout, for both: guessing can't tell which name has an account.
+        Assert.Equal(account.Select(r => r.StatusCode), unknown.Select(r => r.StatusCode));
+        Assert.Equal(HttpStatusCode.TooManyRequests, unknown[^1].StatusCode);
+        Assert.Equal(Detail(await account[^1].Content.ReadAsStringAsync()), Detail(await unknown[^1].Content.ReadAsStringAsync()));
+    }
+
+    [Fact]
+    public async Task WrongCurrentPasswords_WhenChangingIt_LockTheAccountToo()
+    {
+        await using var factory = await WithAccountAsync();
+        var client = factory.CreateClient();
+        await LoginAsync(client);
+
+        HttpResponseMessage last = null!;
+        for (var i = 0; i < 5; i++)
+        {
+            last = await client.PostAsJsonAsync("/api/Auth/change-password", new { currentPassword = "a wrong guess", newPassword = "a much longer passphrase" });
+        }
+
+        Assert.Equal(HttpStatusCode.BadRequest, last.StatusCode);
+        Assert.Contains("Too many wrong passwords", await last.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.TooManyRequests, (await LoginAsync(factory.CreateClient())).StatusCode);
+    }
+
+    [Fact]
+    public async Task PasswordAttempts_AreLimitedPerAddress_RightOrWrong()
+    {
+        await using var factory = await WithAccountAsync();
+        var client = factory.CreateClient();
+
+        // Different made-up names, so no lockout comes into it.
+        for (var i = 0; i < 10; i++)
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, (await LoginAsync(client, "guess", username: $"user{i}")).StatusCode);
+        }
+        var limited = await LoginAsync(client);
+
+        Assert.Equal(HttpStatusCode.TooManyRequests, limited.StatusCode);
+        Assert.True(limited.Headers.Contains("Retry-After"));
+        Assert.Contains("from this device", Detail(await limited.Content.ReadAsStringAsync()));
+    }
+
+    [Fact]
     public async Task ChangePassword_ChecksTheCurrentOne_AndTheNewOneIsUsedFromThenOn()
     {
         await using var factory = await WithAccountAsync();
