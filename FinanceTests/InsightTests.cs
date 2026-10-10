@@ -169,6 +169,28 @@ public class InsightTests
     }
 
     [Fact]
+    public async Task Forecast_WithoutACompleteMonth_ProjectsAYearlyBudget_AtItsPaceSinceTheDataStarts()
+    {
+        await using var factory = FactoryOnOctober15();
+        // The data starts on September 20th: no month is complete yet, so the budget's own pace is all there is.
+        await factory.SeedAsync(db => db.Transactions.AddRange(
+            Tx(Day(2026, 9, 20), "NO FRILLS", 130),
+            Tx(Day(2026, 10, 5), "SAFEWAY", 130)));
+        var client = factory.CreateClient();
+        var created = await client.PostAsJsonAsync("/api/Budget", new
+        {
+            name = "Food", description = "d", status = "Active", amount = 3000, period = "Yearly", categoryIds = new[] { DefaultCategories.Groceries }
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var forecast = await (await client.GetAsync("/api/Reports/forecast")).ReadAsync<SpendingForecast>();
+
+        // $260 over the 26 days from September 20th is $10 a day, and 77 days are left in the year.
+        var food = Assert.Single(forecast.Budgets);
+        Assert.Equal((260m, 1030m), (food.Spent, food.Projected));
+    }
+
+    [Fact]
     public async Task Uncategorised_GroupsWhatNoRuleSorts_ByMerchant()
     {
         await using var factory = FactoryOnOctober15();
