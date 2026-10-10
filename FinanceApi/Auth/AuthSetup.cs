@@ -23,6 +23,7 @@ public static class AuthSetup
     /// </summary>
     public static IServiceCollection AddLogin(this IServiceCollection services, IConfiguration configuration)
     {
+        services.AddSignInGuard();
         services.AddOptions<AuthOptions>()
             .Bind(configuration.GetSection(AuthOptions.SectionName))
             .Validate(options => options.IsValid(),
@@ -43,8 +44,8 @@ public static class AuthSetup
                 options.Password.RequireLowercase = false;
                 options.Password.RequireUppercase = false;
                 options.Password.RequireNonAlphanumeric = false;
-                options.Lockout.MaxFailedAccessAttempts = 5;
-                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+                options.Lockout.MaxFailedAccessAttempts = SignInGuard.MaxFailedAttempts;
+                options.Lockout.DefaultLockoutTimeSpan = SignInGuard.LockoutTime;
             })
             .AddEntityFrameworkStores<FinanceDbContext>()
             .AddSignInManager()
