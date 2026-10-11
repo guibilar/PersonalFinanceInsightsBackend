@@ -27,6 +27,10 @@ services:
       Auth__InitialUser__ResetPassword: "${FINANCE_RESET_PASSWORD:-false}"
       # Optional: a bearer token that reads but changes nothing (scripts, an assistant). Empty turns it off.
       Auth__ReadOnlyToken: "${FINANCE_READONLY_TOKEN:-}"
+      # Hestia T03. Cookie (default): this API signs users in. Gateway: Hestia.Api signs users in, and this API accepts
+      # only its gateway tokens, checked with the public key (see "Signing in" in the README).
+      Auth__Mode: "${FINANCE_AUTH_MODE:-Cookie}"
+      Auth__Gateway__PublicKey: "${GATEWAY_PUBLIC_KEY:-}"
     depends_on:
       db:
         condition: service_healthy

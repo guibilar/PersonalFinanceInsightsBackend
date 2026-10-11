@@ -8,6 +8,7 @@ using FinanceApi.Auth;
 using FinanceApi.Errors;
 using FinanceApi.Health;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -52,9 +53,18 @@ if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
     app.Logger.LogInformation("Applying database migrations");
     await app.Services.MigrateDatabaseAsync();
 }
-await app.Services.EnsureInitialUserAsync(app.Logger);
+if (app.Services.GetRequiredService<IOptions<AuthOptions>>().Value.Mode == AuthMode.Cookie)
+{
+    await app.Services.EnsureInitialUserAsync(app.Logger);
+}
+else
+{
+    app.Logger.LogInformation("Auth mode Gateway: only the gateway tokens of Hestia.Api are accepted");
+}
 await app.Services.SeedRulesAsync(app.Logger);
 
+// The address of the connection itself, for the Gateway auth mode (tokens only from the internal network).
+app.UseGatewayPeer();
 // First, so everything after it (the auth cookie in particular) sees the scheme the browser used.
 app.UseForwardedHeaders();
 app.UseExceptionHandler();

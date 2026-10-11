@@ -20,6 +20,8 @@ public static class AuthSetup
     /// from the same origin as the API (nginx in production, the dev-server proxy locally), so SameSite=Strict
     /// works and also stops other sites from making requests with the cookie. Every endpoint requires a signed-in
     /// user unless it opts out with [AllowAnonymous].
+    /// In the auth mode <see cref="AuthMode.Gateway"/>, Hestia.Api signs users in instead, and the default scheme accepts
+    /// only its gateway tokens (<see cref="GatewayAuth"/>); the sign-in endpoints are not mapped.
     /// </summary>
     public static IServiceCollection AddLogin(this IServiceCollection services, IConfiguration configuration)
     {
@@ -30,8 +32,16 @@ public static class AuthSetup
                 $"{AuthOptions.SectionName}:ReadOnlyToken must be at least {AuthOptions.MinimumTokenLength} characters.")
             .ValidateOnStart();
 
-        // A request with a bearer token is the read-only token's; any other is the session cookie's.
-        var authentication = services.AddAuthentication(SessionOrTokenScheme);
+        var settings = configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();
+        var gateway = settings.Mode == AuthMode.Gateway;
+
+        // Cookie mode: a request with a bearer token is the read-only token's; any other is the session cookie's.
+        // Gateway mode: only the gateway token of Hestia.Api.
+        var authentication = services.AddAuthentication(gateway ? GatewayAuth.SchemeName : SessionOrTokenScheme);
+        if (gateway)
+        {
+            authentication.AddGatewayAuth(services, settings.Gateway);
+        }
         authentication.AddIdentityCookies();
         authentication.AddScheme<AuthenticationSchemeOptions, ReadOnlyTokenHandler>(ReadOnlyTokenHandler.SchemeName, _ => { });
         authentication.AddPolicyScheme(SessionOrTokenScheme, null, options => options.ForwardDefaultSelector = context =>

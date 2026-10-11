@@ -40,6 +40,12 @@ jobs:
         env:
           FINANCE_TEST_POSTGRES: container
 
+      # Hestia T03: the signed-in tests again, with gateway tokens (auth mode Gateway) instead of the test sign-in.
+      - name: Tests (auth mode Gateway, in-memory database)
+        run: dotnet test --no-build
+        env:
+          FINANCE_TEST_AUTH: gateway
+
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 15
