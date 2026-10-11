@@ -115,7 +115,8 @@ public class FinanceChanges(
         }
 
         var today = calendar.Today();
-        var transactions = await recurringPayments.LoadAsync(RecurringPayments.Start(today), today, cancellationToken);
+        // The end is exclusive: today's charges count.
+        var transactions = await recurringPayments.LoadAsync(RecurringPayments.Start(today), today.AddDays(1), cancellationToken);
         var dates = transactions.ToDictionary(t => t.Id, t => t.Date);
         var now = Now;
         foreach (var detected in await recurringPayments.DetectAsync(transactions, today, cancellationToken))
