@@ -47,11 +47,12 @@ public class ReadOnlyTokenHandler(IOptionsMonitor<AuthenticationSchemeOptions> o
         CryptographicOperations.FixedTimeEquals(SHA256.HashData(Encoding.UTF8.GetBytes(given)), SHA256.HashData(Encoding.UTF8.GetBytes(expected)));
 
     /// <summary>
-    /// True unless the only thing signing the request in is the read-only token and the request may change data.
+    /// True unless the only thing signing the request in is read-only (the read-only token, or a gateway token with the
+    /// read-only scope, see <see cref="GatewayAuth"/>) and the request may change data.
     /// </summary>
     public static bool MayProceed(AuthorizationHandlerContext context)
     {
-        if (context.User.Identities.Any(i => i.IsAuthenticated && i.AuthenticationType != SchemeName))
+        if (context.User.Identities.Any(i => i.IsAuthenticated && i.AuthenticationType != SchemeName && !GatewayAuth.IsReadOnly(i)))
         {
             return true;
         }

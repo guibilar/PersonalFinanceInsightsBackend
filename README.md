@@ -65,6 +65,33 @@ names it `read-only token`. Change the setting and restart to revoke it.
 The keys that encrypt the cookie and the sessions are stored in the database, so sessions survive a
 container restart.
 
+### Auth mode Gateway (Hestia)
+
+Hestia.Api signs users in for the whole Hestia system (Hestia decision D5, task T03). It has the account, the session
+cookie, the lockout, the rate limit, and the read-only token, and it proxies the finance paths to this API. In the auth
+mode `Gateway`, this API accepts only the short-lived token that the host adds to each request:
+
+| Setting | Docker (`.env`) | Description |
+| --- | --- | --- |
+| `Auth:Mode` | `FINANCE_AUTH_MODE` | `Cookie` (the default: this API signs users in, as above) or `Gateway`. |
+| `Auth:Gateway:PublicKey` | `GATEWAY_PUBLIC_KEY` | The public key of the host's signing key (ECDSA P-256): PEM, or the DER bytes in base64 on one line. Required in `Gateway` mode. |
+| `Auth:Gateway:Issuer`, `Auth:Gateway:Audience` | | `hestia-api` and `finance` (the defaults). |
+
+In `Gateway` mode:
+
+- A request needs `Authorization: Bearer <token>`: a JWT, signed with ES256 by the host, with the issuer `hestia-api`,
+  the audience `finance`, a lifetime of about 60 seconds, the user (`sub`, `name`), and a scope (`full` or `read-only`).
+  Anything else answers 401.
+- The token counts only when the connection comes from loopback or `ReverseProxy:TrustedNetworks` (the Docker network
+  of the host), not from `X-Forwarded-For`. A copied token from another machine answers 401.
+- The scope `read-only` (the host's read-only token) reads, and calls the `[ReadOnlyQuery]` POSTs. Anything else answers 403.
+- `/api/Auth/*`, the session cookie, and `Auth:ReadOnlyToken` are off. The account in `Auth:InitialUser` is not made.
+- The finance data stays the same. The finance account stays in the database (for a return to `Cookie` mode).
+
+To switch: make the key pair (HestiaBackend README, "Sign-in"), import the account into Hestia once, set
+`FINANCE_AUTH_MODE=Gateway` and `GATEWAY_PUBLIC_KEY` in `.env`, and run `docker compose up -d`. From then on, only the
+host reaches this API. To go back, remove `FINANCE_AUTH_MODE` (or set `Cookie`), and point the frontend at this API again.
+
 **Behind a reverse proxy:** the API believes `X-Forwarded-Proto` / `X-Forwarded-For` only from proxies on
 `ReverseProxy:TrustedNetworks` (loopback plus the private ranges by default, which covers the frontend's
 nginx container). When the browser connects over HTTPS somewhere in front, the session cookie is marked
@@ -375,6 +402,7 @@ dotnet test                                    # in-memory database (fast; 4 Pos
 FINANCE_TEST_POSTGRES=container dotnet test    # starts PostgreSQL 15 in Docker (Testcontainers), removes it afterwards
 FINANCE_TEST_POSTGRES="Host=localhost;Username=postgres;Password=postgres" dotnet test   # your own server
 dotnet test -- --filter-class FinanceTests.AuthTests                                  # one class
+FINANCE_TEST_AUTH=gateway dotnet test          # the signed-in tests with gateway tokens (auth mode Gateway)
 ```
 
 On PostgreSQL every test factory gets its own freshly migrated database, dropped afterwards. CI runs

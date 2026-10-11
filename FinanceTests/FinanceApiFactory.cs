@@ -21,7 +21,8 @@ namespace FinanceTests;
 /// Runs the real API against a private database: in-memory by default, or a freshly migrated PostgreSQL
 /// database on the server <see cref="TestDatabase"/> picked for the run.
 /// Requests count as signed in (see <see cref="TestSignIn"/>) unless <paramref name="signedIn"/> is false,
-/// which leaves the real cookie sign-in in charge.
+/// which leaves the real cookie sign-in in charge. With FINANCE_TEST_AUTH=gateway, signed-in requests use the auth
+/// mode Gateway instead: each client sends a gateway token, as Hestia.Api does (see <see cref="TestGateway"/>).
 /// </summary>
 public class FinanceApiFactory(
     Action<IServiceCollection>? configureServices = null,
@@ -39,8 +40,17 @@ public class FinanceApiFactory(
         Converters = { new JsonStringEnumConverter() }
     };
 
+    private bool GatewaySignIn => signedIn && TestGateway.AllTests;
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
+        if (GatewaySignIn)
+        {
+            foreach (var (key, value) in TestGateway.Settings())
+            {
+                builder.UseSetting(key, value);
+            }
+        }
         foreach (var (key, value) in settings ?? new Dictionary<string, string?>())
         {
             builder.UseSetting(key, value);
@@ -67,12 +77,27 @@ public class FinanceApiFactory(
                         DependencyInjection.ConfigureNpgsql);
                 }
             });
-            if (signedIn)
+            if (GatewaySignIn)
+            {
+                // The requests come from the hestia-api container (the gateway tokens are accepted only from there).
+                services.AddSingleton<IStartupFilter>(new FromPeer(TestGateway.Host));
+            }
+            else if (signedIn)
             {
                 TestSignIn.Register(services);
             }
             configureServices?.Invoke(services);
         });
+    }
+
+    protected override void ConfigureClient(HttpClient client)
+    {
+        base.ConfigureClient(client);
+        if (GatewaySignIn)
+        {
+            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue(
+                "Bearer", TestGateway.Token(lifetime: TimeSpan.FromHours(1)));
+        }
     }
 
     protected override IHost CreateHost(IHostBuilder builder)
