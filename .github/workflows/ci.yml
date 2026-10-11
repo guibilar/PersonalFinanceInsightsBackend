@@ -115,14 +115,28 @@ jobs:
           for i in $(seq 1 60); do curl -sf http://localhost:5096/health/ready > /dev/null && break; sleep 1; done
       - name: The finance events are on (outbox tables and the exchange exist)
         run: |
-          docker compose logs app | grep -q "Finance events are on"
+          docker compose logs app > app.log 2>&1
+          docker compose ps -a > ps.log 2>&1
+          ok=true
+          grep -q "Finance events are on" app.log || ok=false
+          exchange=no
           for i in $(seq 1 30); do
-            docker exec rabbitmq rabbitmqctl -q list_exchanges name | grep -qx 'hestia.finance-events' && break
+            if docker exec rabbitmq rabbitmqctl -q list_exchanges name > exchanges.log 2>&1 && grep -qx 'hestia.finance-events' exchanges.log; then
+              exchange=yes
+              break
+            fi
             sleep 1
           done
-          docker exec rabbitmq rabbitmqctl -q list_exchanges name | grep -x 'hestia.finance-events'
+          [ "$exchange" = yes ] || ok=false
           docker compose exec -T db psql -U postgres -d FinanceDb -tAc \
-            "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'wolverine' AND table_name = 'wolverine_outgoing_envelopes'" | grep -x 1
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'wolverine' AND table_name = 'wolverine_outgoing_envelopes'" > tables.log 2>&1 || true
+          grep -qx 1 tables.log || ok=false
+          if [ "$ok" != true ]; then
+            # TEMPORARY (T04): what failed, as an annotation.
+            { echo "== ps"; cat ps.log; echo "== exchanges"; cat exchanges.log; echo "== tables"; cat tables.log; echo "== app log"; grep -iE "event|wolverine|rabbit|fail|error" app.log | tail -40; } > check.log
+            python3 -c "t=open('check.log').read()[-3500:].replace('%','%25').replace('\n','%0A'); print('::error title=events check::'+t)"
+            exit 1
+          fi
       - name: The API runs as a non-root user
         run: test "$(docker exec personal-finance-api id -u)" != 0
       - name: Smoke test (health, sign-in, session cookie, protected calls)
