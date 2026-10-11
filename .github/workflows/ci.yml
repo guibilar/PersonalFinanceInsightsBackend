@@ -8,21 +8,34 @@ on:
   schedule:
     - cron: '17 6 * * 1'
 
+# Bash with pipefail, so a command piped into tee still fails its step.
+defaults:
+  run:
+    shell: bash
+
+# Hestia.Contracts comes from GitHub Packages (NuGet.Config), which needs a token also for a public package.
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      HESTIA_PACKAGES_USER: ${{ github.actor }}
+      HESTIA_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
-      - run: dotnet restore
+      - run: dotnet restore 2>&1 | tee restore.log
       # Packages the API and CLI ship with; test-only packages and low-severity advisories don't block.
       - name: Known vulnerabilities
         run: scripts/check-vulnerable-packages.sh
-      - run: dotnet build --no-restore
+      - run: dotnet build --no-restore 2>&1 | tee build.log
       # The code-style rules the .editorconfig sets as warnings (file-scoped namespaces); whitespace is left alone.
       - name: Code style
         run: dotnet format style --verify-no-changes --no-restore --severity warn
@@ -31,14 +44,40 @@ jobs:
       - name: Migrations match the model
         run: dotnet ef migrations has-pending-model-changes --project Finance.Infrastructure --startup-project FinanceApi --no-build
 
-      - name: Tests (in-memory database)
-        run: dotnet test --no-build
+      - name: Tests (in-memory database, events off)
+        run: dotnet test --no-build 2>&1 | tee test-in-memory.log
 
-      # The tests start PostgreSQL themselves in Docker (Testcontainers) and remove it afterwards.
-      - name: Tests (PostgreSQL, migrated from scratch)
-        run: dotnet test --no-build
+      # The tests start PostgreSQL and RabbitMQ themselves in Docker (Testcontainers) and remove them afterwards.
+      # The event tests (EventTests) need both.
+      - name: Tests (PostgreSQL migrated from scratch, RabbitMQ)
+        run: dotnet test --no-build 2>&1 | tee test-postgres.log
         env:
           FINANCE_TEST_POSTGRES: container
+          FINANCE_TEST_RABBITMQ: container
+
+      # TEMPORARY (T04): task sessions cannot read the logs.
+      - name: TEMP failures as annotations
+        if: failure()
+        run: |
+          python3 - <<'EOF'
+          import os, re
+          count = 0
+          for name in ["restore.log", "build.log", "test-in-memory.log", "test-postgres.log"]:
+              if not os.path.exists(name) or count >= 9:
+                  continue
+              lines = open(name, errors="replace").read().splitlines()
+              keep = [i for i, l in enumerate(lines) if re.search(r"error|failed|Failed|Exception|Assert\.|Expected|Actual", l)]
+              picked = []
+              for i in keep:
+                  picked.extend(lines[max(0, i - 1): i + 4])
+              text = "\n".join(dict.fromkeys(picked)) or "\n".join(lines[-60:])
+              for start in range(0, len(text), 3500):
+                  if count >= 9:
+                      break
+                  chunk = text[start:start + 3500].replace("%", "%25").replace("\r", "").replace("\n", "%0A")
+                  print(f"::error title={name} part {start // 3500 + 1}::{chunk}")
+                  count += 1
+          EOF
 
       # Hestia T03: the signed-in tests again, with gateway tokens (auth mode Gateway) instead of the test sign-in.
       - name: Tests (auth mode Gateway, in-memory database)
@@ -54,6 +93,14 @@ jobs:
       POSTGRES_PASSWORD: ci-database-password
       FINANCE_USERNAME: ci
       FINANCE_PASSWORD: ci-password-long-enough
+      # The Docker build restores Hestia.Contracts from GitHub Packages with these (build secrets).
+      HESTIA_PACKAGES_USER: ${{ github.actor }}
+      HESTIA_PACKAGES_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # The finance events on, with the broker of the "events" profile: as on the server.
+      COMPOSE_PROFILES: events
+      RABBITMQ_USER: hestia
+      RABBITMQ_PASSWORD: ci-rabbitmq-password
+      EVENTS_RABBITMQ_URL: amqp://hestia:ci-rabbitmq-password@rabbitmq:5672
     steps:
       - uses: actions/checkout@v7
       # As on the server: the backup container runs as the user who owns ./backups.
@@ -62,10 +109,20 @@ jobs:
           mkdir -p backups
           echo "BACKUP_UID=$(id -u)" >> "$GITHUB_ENV"
           echo "BACKUP_GID=$(id -g)" >> "$GITHUB_ENV"
-      - name: Build and start the stack (API + PostgreSQL, as deployed)
+      - name: Build and start the stack (API, PostgreSQL, backup, and RabbitMQ, as deployed)
         run: |
           docker compose up -d --build --wait
           for i in $(seq 1 60); do curl -sf http://localhost:5096/health/ready > /dev/null && break; sleep 1; done
+      - name: The finance events are on (outbox tables and the exchange exist)
+        run: |
+          docker compose logs app | grep -q "Finance events are on"
+          for i in $(seq 1 30); do
+            docker exec rabbitmq rabbitmqctl -q list_exchanges name | grep -qx 'hestia.finance-events' && break
+            sleep 1
+          done
+          docker exec rabbitmq rabbitmqctl -q list_exchanges name | grep -x 'hestia.finance-events'
+          docker compose exec -T db psql -U postgres -d FinanceDb -tAc \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'wolverine' AND table_name = 'wolverine_outgoing_envelopes'" | grep -x 1
       - name: The API runs as a non-root user
         run: test "$(docker exec personal-finance-api id -u)" != 0
       - name: Smoke test (health, sign-in, session cookie, protected calls)
@@ -83,6 +140,12 @@ jobs:
       - name: Container logs
         if: failure()
         run: docker compose logs
+      # TEMPORARY (T04): task sessions cannot read the logs.
+      - name: TEMP container logs as annotations
+        if: failure()
+        run: |
+          docker compose logs --no-color 2>&1 | grep -iE "fail|error|exception|denied|unauthorized" | head -60 > stack.log || true
+          python3 -c "t=open('stack.log').read()[:3500].replace('%','%25').replace('\n','%0A'); print('::error title=stack log::'+t)"
       - name: Stop the stack
         if: always()
         run: docker compose down -v

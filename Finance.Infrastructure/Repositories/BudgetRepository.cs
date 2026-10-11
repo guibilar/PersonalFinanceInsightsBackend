@@ -42,6 +42,11 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
             .SingleOrDefaultAsync(cancellationToken);
     }
 
+    public Task<List<BudgetSummary>> GetActiveSummariesAsync(DateTime today, CancellationToken cancellationToken = default)
+    {
+        return ToSummaries(DbContext.Budgets.Where(x => x.Status == Status.Active), today).ToListAsync(cancellationToken);
+    }
+
     public Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, DateTime today, CancellationToken cancellationToken = default)
     {
         return PaginateAsync(ToSummaries(FilterQuery(filter), today), filter.Page, filter.PageSize, cancellationToken);

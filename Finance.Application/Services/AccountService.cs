@@ -1,14 +1,16 @@
 using Finance.Application.Abstractions;
+using Finance.Application.Events;
 using Finance.Application.Models;
 using Finance.Application.Reports;
 using Finance.Application.Services.Interfaces;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
+using Hestia.Contracts.Finance;
 
 namespace Finance.Application.Services;
 
-public class AccountService(IAccountRepository accountRepository, ReportingCalendar calendar) : IAccountService
+public class AccountService(IAccountRepository accountRepository, ReportingCalendar calendar, FinanceChanges changes) : IAccountService
 {
     /// <summary>The TFSA's first year: no room is older.</summary>
     private const int FirstRoomYear = 2009;
@@ -88,14 +90,21 @@ public class AccountService(IAccountRepository accountRepository, ReportingCalen
 
     public async Task<AccountBalance> SetBalanceAsync(Guid accountId, DateOnly date, decimal amount, CancellationToken cancellationToken = default)
     {
-        await EnsureExistsAsync(accountId, cancellationToken);
+        var account = await EnsureExistsAsync(accountId, cancellationToken);
         var day = date.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
         var today = calendar.Today();
         // A phone or browser east of the reporting time zone can already be on tomorrow: that is today here.
         if (day > today.AddDays(1)) throw new InvalidInputException("date", "A balance can't be in the future.");
         if (day > today) day = today;
 
-        return await accountRepository.SetBalanceAsync(accountId, day, amount, cancellationToken);
+        // With the finance events on, the balance and its event commit together (T04).
+        return await changes.RunAsync(ChangeEffect.Other, async ct =>
+        {
+            var balance = await accountRepository.SetBalanceAsync(accountId, day, amount, ct);
+            changes.Raise(new BalanceRecorded(account.Id, account.Name, DateOnly.FromDateTime(balance.Date), balance.Amount,
+                BalanceSource.Entered, changes.Now));
+            return balance;
+        }, cancellationToken);
     }
 
     public async Task RemoveBalanceAsync(Guid accountId, Guid balanceId, CancellationToken cancellationToken = default)
@@ -105,10 +114,8 @@ public class AccountService(IAccountRepository accountRepository, ReportingCalen
         await accountRepository.RemoveBalanceAsync(balance, cancellationToken);
     }
 
-    private async Task EnsureExistsAsync(Guid accountId, CancellationToken cancellationToken)
-    {
-        _ = await accountRepository.GetByIdAsync(accountId, cancellationToken) ?? throw new NotFoundException(nameof(Account), accountId);
-    }
+    private async Task<Account> EnsureExistsAsync(Guid accountId, CancellationToken cancellationToken) =>
+        await accountRepository.GetByIdAsync(accountId, cancellationToken) ?? throw new NotFoundException(nameof(Account), accountId);
 
     // The database's unique index is the backstop for concurrent requests; this gives the usual case a clear message.
     private static void EnsureUnique(List<Account> accounts, string name, Guid id)

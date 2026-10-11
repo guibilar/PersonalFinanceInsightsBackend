@@ -19,6 +19,10 @@ public interface IBudgetRepository : IBaseRepository<Budget>
     /// <param name="today">Which month and year are current: monthly and yearly budgets only count their dates.</param>
     Task<BudgetSummary?> GetSummaryAsync(Guid id, DateTime today, CancellationToken cancellationToken = default);
 
+    /// <summary>Every active budget with its total, as <see cref="FilterAsync"/> totals them. Not tracked.</summary>
+    /// <param name="today">Which month and year are current: monthly and yearly budgets only count their dates.</param>
+    Task<List<BudgetSummary>> GetActiveSummariesAsync(DateTime today, CancellationToken cancellationToken = default);
+
     /// <param name="today">Which month and year are current: monthly and yearly budgets only count their dates.</param>
     Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, DateTime today, CancellationToken cancellationToken = default);
 }

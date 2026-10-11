@@ -33,8 +33,9 @@ public interface ITransactionRepository : IBaseRepository<Transaction>
     Task<Dictionary<Guid, int>> CountHashesByAccountAsync(IReadOnlyCollection<string> hashes, CancellationToken cancellationToken = default);
 
     /// <summary>
-    /// Stores the transactions whose hash is not yet stored for the account, all or nothing, and returns how many
-    /// were added. Concurrent calls for the same account run one after the other.
+    /// Stores the transactions whose hash is not yet stored for the account, all or nothing, and returns the ones
+    /// that were added. Concurrent calls for the same account run one after the other. Inside a transaction that is
+    /// open already (see <see cref="IUnitOfWork"/>), it uses that transaction.
     /// </summary>
-    Task<int> AddMissingAsync(Guid accountId, IReadOnlyCollection<Transaction> transactions, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Transaction>> AddMissingAsync(Guid accountId, IReadOnlyCollection<Transaction> transactions, CancellationToken cancellationToken = default);
 }

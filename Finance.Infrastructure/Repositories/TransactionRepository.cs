@@ -85,16 +85,18 @@ public class TransactionRepository(FinanceDbContext dbContext)
             .ToDictionaryAsync(x => x.AccountId, x => x.Count, cancellationToken);
     }
 
-    public Task<int> AddMissingAsync(
+    public Task<IReadOnlyList<Transaction>> AddMissingAsync(
         Guid accountId, IReadOnlyCollection<Transaction> transactions, CancellationToken cancellationToken = default)
     {
         // The retrying execution strategy only allows an explicit transaction when it can replay all of it.
-        return DbContext.Database.CreateExecutionStrategy().ExecuteAsync(async ct =>
+        return DbContext.Database.CreateExecutionStrategy().ExecuteAsync<IReadOnlyList<Transaction>>(async ct =>
         {
             // A retried attempt starts again from the rows: drop the ones the failed attempt queued.
             DetachUnsaved();
             // The in-memory test provider has no transactions; it runs the same steps without isolation.
-            await using var dbTransaction = DbContext.Database.IsRelational()
+            // In a transaction that the caller opened (a unit of work with events, T04), the rows join it: the caller
+            // commits them with the rest of its change.
+            await using var dbTransaction = DbContext.Database.IsRelational() && DbContext.Database.CurrentTransaction is null
                 ? await DbContext.Database.BeginTransactionAsync(ct)
                 : null;
             if (DbContext.Database.IsNpgsql())
@@ -117,7 +119,7 @@ public class TransactionRepository(FinanceDbContext dbContext)
             DbContext.Transactions.AddRange(toAdd);
             await SaveChangesAsync(ct);
             if (dbTransaction is not null) await dbTransaction.CommitAsync(ct);
-            return toAdd.Count;
+            return toAdd;
         }, cancellationToken);
     }
 

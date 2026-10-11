@@ -35,6 +35,11 @@ public class FinanceApiFactory(
     private readonly InMemoryDatabaseRoot _inMemoryRoot = new();
     private bool _createdDatabase;
 
+    /// <summary>This factory's own database on the PostgreSQL server; null on the in-memory provider.</summary>
+    public string? ConnectionString => PostgresServer is null
+        ? null
+        : new NpgsqlConnectionStringBuilder(PostgresServer) { Database = _databaseName }.ConnectionString;
+
     public static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         Converters = { new JsonStringEnumConverter() }
@@ -73,8 +78,7 @@ public class FinanceApiFactory(
                 }
                 else
                 {
-                    options.UseNpgsql(new NpgsqlConnectionStringBuilder(PostgresServer) { Database = _databaseName }.ConnectionString,
-                        DependencyInjection.ConfigureNpgsql);
+                    options.UseNpgsql(ConnectionString!, DependencyInjection.ConfigureNpgsql);
                 }
             });
             if (GatewaySignIn)

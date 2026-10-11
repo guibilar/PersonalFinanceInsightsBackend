@@ -9,7 +9,12 @@ x-logging: &logging
 
 services:
   app:
-    build: .
+    build:
+      context: .
+      # Hestia.Contracts comes from GitHub Packages: the restore needs a token (see .env.example and the README).
+      secrets:
+        - hestia_packages_user
+        - hestia_packages_token
     container_name: personal-finance-api
     # Browsers reach the API only through the frontend (nginx behind Tailscale HTTPS), over the
     # "finance" network. The port stays open on this machine alone, for curl and debugging.
@@ -31,9 +36,15 @@ services:
       # only its gateway tokens, checked with the public key (see "Signing in" in the README).
       Auth__Mode: "${FINANCE_AUTH_MODE:-Cookie}"
       Auth__Gateway__PublicKey: "${GATEWAY_PUBLIC_KEY:-}"
+      # The finance events (T04): the broker of the "events" profile. Empty: no events, finance works as before.
+      Events__RabbitMq: "${EVENTS_RABBITMQ_URL:-}"
     depends_on:
       db:
         condition: service_healthy
+      # Only with the "events" profile.
+      rabbitmq:
+        condition: service_healthy
+        required: false
     restart: unless-stopped
     logging: *logging
     # The image has no curl: bash asks /health/live itself (the process answers; no database needed).
@@ -99,11 +110,46 @@ services:
       start_period: 2m
       start_interval: 5s
 
+  # The broker for the finance events (T04, D7): finance publishes, Hestia.Api consumes. Only with the "events"
+  # profile (COMPOSE_PROFILES=events in .env). On "finance", so Hestia.Api reaches it as rabbitmq:5672.
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    container_name: rabbitmq
+    profiles: ["events"]
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-hestia}
+      # Set RABBITMQ_PASSWORD in .env for the events profile (no default: an empty password lets nobody in).
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-}
+    networks:
+      - default
+      - finance
+    # The management page, on this machine only: http://localhost:15672
+    ports:
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: unless-stopped
+    logging: *logging
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
 networks:
   # Shared with the frontend's docker compose project, which joins it as an external network:
   # start this project first. The database stays on this project's default network only.
   finance:
     name: finance
 
+secrets:
+  hestia_packages_user:
+    environment: HESTIA_PACKAGES_USER
+  hestia_packages_token:
+    environment: HESTIA_PACKAGES_TOKEN
+
 volumes:
   postgres_data:
+  rabbitmq_data:

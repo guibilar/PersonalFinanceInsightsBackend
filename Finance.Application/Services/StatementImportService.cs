@@ -1,10 +1,12 @@
 using Finance.Application.Abstractions;
+using Finance.Application.Events;
 using Finance.Application.Import;
 using Finance.Application.Services.Interfaces;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
 using Finance.Domain.Helpers;
+using Hestia.Contracts.Finance;
 using Microsoft.Extensions.Logging;
 
 namespace Finance.Application.Services;
@@ -19,6 +21,7 @@ public class StatementImportService(
     IAccountRepository accountRepository,
     IEnumerable<IStatementParser> statementParsers,
     TransactionRules rules,
+    FinanceChanges changes,
     TimeProvider timeProvider) : IStatementImportService
 {
     // A statement is taken for another account's when at least this many of its rows, and half of them, are stored there.
@@ -61,36 +64,62 @@ public class StatementImportService(
             await EnsureStatementMatchesAsync(account, statementRows, cancellationToken);
         }
 
-        // The statement is imported completely or not at all.
-        var added = await transactionRepository.AddMissingAsync(account.Id, parsed, cancellationToken);
-
-        // Where a chequing statement brings a month's real rent payment, the rent generated there before goes away,
-        // so the month counts rent once. Hidden, not deleted: it can be restored. (Other accounts never had it; a
-        // rent-category purchase on the card, say a storage unit, is not the apartment's rent.)
-        var rentMonths = parsed
-            .Where(t => account.Type == AccountType.Chequing && t.CategoryId == Category.RentId && t.TransactionType == TransactionType.Debit)
-            .Select(t => new DateTime(t.Date.Year, t.Date.Month, 1, 0, 0, 0, DateTimeKind.Utc))
-            .Distinct()
-            .ToList();
-        if (rentMonths.Count > 0)
+        // The statement is imported completely or not at all. With the finance events on, the import and its events
+        // are one transaction (T04): the rows, the balance, and the events commit together.
+        return await changes.RunAsync(ChangeEffect.Spending, async ct =>
         {
-            var replaced = await transactionRepository.HideLegacyMonthlyRentAsync(rentMonths, cancellationToken);
-            if (replaced > 0) logger.LogInformation("Hid {Count} generated monthly rent rows replaced by real payments", replaced);
-        }
+            var added = await transactionRepository.AddMissingAsync(account.Id, parsed, ct);
 
-        // The statement's own figure for what the account was worth replaces any typed in for that day.
-        if (statementRows.ClosingBalance is { } closing)
+            // Where a chequing statement brings a month's real rent payment, the rent generated there before goes away,
+            // so the month counts rent once. Hidden, not deleted: it can be restored. (Other accounts never had it; a
+            // rent-category purchase on the card, say a storage unit, is not the apartment's rent.)
+            var rentMonths = parsed
+                .Where(t => account.Type == AccountType.Chequing && t.CategoryId == Category.RentId && t.TransactionType == TransactionType.Debit)
+                .Select(t => new DateTime(t.Date.Year, t.Date.Month, 1, 0, 0, 0, DateTimeKind.Utc))
+                .Distinct()
+                .ToList();
+            if (rentMonths.Count > 0)
+            {
+                var replaced = await transactionRepository.HideLegacyMonthlyRentAsync(rentMonths, ct);
+                if (replaced > 0) logger.LogInformation("Hid {Count} generated monthly rent rows replaced by real payments", replaced);
+            }
+
+            // The statement's own figure for what the account was worth replaces any typed in for that day.
+            if (statementRows.ClosingBalance is { } closing)
+            {
+                await accountRepository.SetBalanceAsync(account.Id, closing.Date, closing.Amount, ct);
+            }
+
+            // A statement read in full counts as imported even when every row was already there: the reminders to import
+            // ask whether statements are being brought in, not whether they had anything new.
+            account.LastImportedAt = timeProvider.GetUtcNow().UtcDateTime;
+            await RaiseImportedAsync(account, parsed, added, statementRows.ClosingBalance, ct);
+            await accountRepository.SaveChangesAsync(ct);
+
+            logger.LogInformation("Imported {Account} statement: {Read} read, {Added} added", account.Name, parsed.Count, added.Count);
+            return new ImportResult(parsed.Count, added.Count, parsed.Count - added.Count, statementRows.ClosingBalance);
+        }, cancellationToken);
+    }
+
+    /// <summary>The events of an import: the import itself, the statement's balance, and new subscription prices.</summary>
+    private async Task RaiseImportedAsync(Account account, IReadOnlyList<Transaction> parsed, IReadOnlyList<Transaction> added,
+        StatementBalance? closing, CancellationToken cancellationToken)
+    {
+        if (!changes.Enabled)
         {
-            await accountRepository.SetBalanceAsync(account.Id, closing.Date, closing.Amount, cancellationToken);
+            return;
         }
-
-        // A statement read in full counts as imported even when every row was already there: the reminders to import
-        // ask whether statements are being brought in, not whether they had anything new.
-        account.LastImportedAt = timeProvider.GetUtcNow().UtcDateTime;
-        await accountRepository.SaveChangesAsync(cancellationToken);
-
-        logger.LogInformation("Imported {Account} statement: {Read} read, {Added} added", account.Name, parsed.Count, added);
-        return new ImportResult(parsed.Count, added, parsed.Count - added, statementRows.ClosingBalance);
+        var now = changes.Now;
+        changes.Raise(new TransactionsImported(account.Id, account.Name, parsed.Count, added.Count, parsed.Count - added.Count,
+            parsed.Count == 0 ? null : DateOnly.FromDateTime(parsed.Min(t => t.Date)),
+            parsed.Count == 0 ? null : DateOnly.FromDateTime(parsed.Max(t => t.Date)),
+            now));
+        if (closing is not null)
+        {
+            changes.Raise(new BalanceRecorded(account.Id, account.Name, DateOnly.FromDateTime(closing.Date), closing.Amount,
+                BalanceSource.Statement, now));
+        }
+        await changes.RaisePriceChangesAsync(added, cancellationToken);
     }
 
     /// <summary>
