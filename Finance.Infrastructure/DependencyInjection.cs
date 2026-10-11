@@ -23,6 +23,7 @@ public static class DependencyInjection
         services.AddOptions<ImportOptions>()
             .Bind(configuration.GetSection(ImportOptions.SectionName));
 
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<ITransactionRepository, TransactionRepository>();
         services.AddScoped<IBudgetRepository, BudgetRepository>();
         services.AddScoped<ICategoryRuleRepository, CategoryRuleRepository>();
@@ -45,7 +46,7 @@ public static class DependencyInjection
             errorCodesToAdd: null);
     }
 
-    private static string GetConnectionString(IConfiguration configuration) =>
+    public static string GetConnectionString(IConfiguration configuration) =>
         configuration.GetConnectionString("DefaultConnection")
         ?? throw new InvalidOperationException(
             "ConnectionStrings:DefaultConnection is not set. Outside Development, provide it through the " +

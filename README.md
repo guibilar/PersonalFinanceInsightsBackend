@@ -10,8 +10,8 @@ PostgreSQL via EF Core.
 | --- | --- | --- |
 | `Finance.Domain` | Entities, enums, domain exceptions, transaction hash | – |
 | `Finance.Contracts` | Request/response DTOs, report models | Domain |
-| `Finance.Application` | Services, repository/parser interfaces, import rules | Domain, Contracts |
-| `Finance.Infrastructure` | EF Core `DbContext`, migrations, repositories, CIBC CSV parser | Application |
+| `Finance.Application` | Services, repository/parser interfaces, import rules, the events that the services raise | Domain, Contracts, `Hestia.Contracts` (package) |
+| `Finance.Infrastructure` | EF Core `DbContext`, migrations, repositories, CIBC CSV parser, the event outbox (Wolverine) | Application |
 | `FinanceApi` | Controllers, mapping, error handling, health checks | Infrastructure |
 | `Finance.Cli` | Console tool: charts and Excel export from local statements | Infrastructure |
 | `FinanceTests` | API tests (xUnit + `WebApplicationFactory`) | FinanceApi |
@@ -23,6 +23,14 @@ warnings as errors) in `Directory.Build.props`.
 
 Requires the .NET 10 SDK and a PostgreSQL server on `localhost:5432` (user/password `postgres`,
 as in `appsettings.Development.json`).
+
+The package `Hestia.Contracts` (the event contracts, see [Events](#events)) comes from GitHub Packages, which needs a
+token also for a public package. Make a GitHub personal access token (classic) with only the `read:packages` scope, and
+set it before `dotnet restore`:
+
+```bash
+export HESTIA_PACKAGES_USER=<your GitHub user name> HESTIA_PACKAGES_TOKEN=<the token>
+```
 
 ```bash
 dotnet tool restore
@@ -392,6 +400,35 @@ budget (409), moving any linked to another.
 The dashboard's current month and year follow `Reports:TimeZone` in `appsettings.json`
 (IANA id, default `America/Toronto`; override with `Reports__TimeZone`). An unknown id stops the API at startup.
 
+## Events
+
+The finance service publishes events for the Hestia host (`guibilar/HestiaBackend`, decision D7, task T04). They are on
+only when `Events:RabbitMq` has a broker address (Docker: `EVENTS_RABBITMQ_URL`). Without it, finance works as before:
+no outbox, no RabbitMQ, and no extra queries.
+
+| Event | When |
+| --- | --- |
+| `TransactionsImported` | A statement import finished (also when it added nothing). |
+| `TransactionChanged` | A transaction was added by hand, changed (description, category, flow, note, tags, budget link, rules), deleted, or restored. |
+| `BudgetLimitReached` | A change made an active budget's spending cross 80 % or 100 % in its current period. |
+| `BalanceRecorded` | A balance was entered, or a statement gave one. |
+| `SubscriptionPriceChanged` | A new charge of a recurring payment has a new fixed price. |
+
+The event types are in the NuGet package `Hestia.Contracts` (from GitHub Packages, see `NuGet.Config`).
+
+How it works (Wolverine, MIT licence):
+
+1. A change runs in one database transaction (`FinanceChanges`, `IUnitOfWork`).
+2. The service raises its events. In each save, `FinanceOutbox` writes them as Wolverine envelopes into the table
+   `wolverine.wolverine_outgoing_envelopes`, in the same transaction as the change.
+3. After the commit, Wolverine sends them to the fanout exchange `hestia.finance-events`, and deletes the rows.
+   If the broker is down, the rows stay, and Wolverine sends them later.
+4. A failed change commits nothing, so it sends nothing.
+
+Wolverine makes its tables in the schema `wolverine` when the API starts. They are not in the EF Core migrations.
+If the broker is down when the API starts, the API starts without it and logs an error: restart the API when the
+broker is back. The events wait in the outbox until then.
+
 ## Tests
 
 xUnit v3 on Microsoft Testing Platform (enabled in `global.json`), so `dotnet test` runs the test project
@@ -401,6 +438,7 @@ as an executable.
 dotnet test                                    # in-memory database (fast; 4 PostgreSQL-only tests are skipped)
 FINANCE_TEST_POSTGRES=container dotnet test    # starts PostgreSQL 15 in Docker (Testcontainers), removes it afterwards
 FINANCE_TEST_POSTGRES="Host=localhost;Username=postgres;Password=postgres" dotnet test   # your own server
+FINANCE_TEST_POSTGRES=container FINANCE_TEST_RABBITMQ=container dotnet test    # also the event tests (RabbitMQ in Docker)
 dotnet test -- --filter-class FinanceTests.AuthTests                                  # one class
 FINANCE_TEST_AUTH=gateway dotnet test          # the signed-in tests with gateway tokens (auth mode Gateway)
 ```
@@ -416,7 +454,7 @@ flags and a protected call. You can run the smoke test against your own deployme
 ## Docker
 
 ```bash
-cp .env.example .env        # set POSTGRES_PASSWORD and FINANCE_USERNAME / FINANCE_PASSWORD (and BACKUP_UID/GID)
+cp .env.example .env        # set POSTGRES_PASSWORD, FINANCE_USERNAME / FINANCE_PASSWORD, HESTIA_PACKAGES_USER / _TOKEN (and BACKUP_UID/GID)
 mkdir -p backups            # before the first start, so it belongs to you (see Backups)
 docker compose up --build   # API on http://localhost:5096 (this machine only), migrations applied on start
 ```
@@ -437,6 +475,24 @@ Health checks: `/health/live` answers while the process runs (Docker's health ch
 container uses it); `/health/ready` (and its alias `/health`) also checks the database.
 
 Container logs are capped at 3 files of 10 MB per service (Docker keeps them forever by default).
+
+The build restores `Hestia.Contracts` from GitHub Packages. Compose gives `HESTIA_PACKAGES_USER` and
+`HESTIA_PACKAGES_TOKEN` from `.env` to the build as secrets, so the token is not in the image.
+
+### RabbitMQ and the events
+
+The `rabbitmq` service starts only with the `events` profile. To turn the events on, set these in `.env`:
+
+```bash
+COMPOSE_PROFILES=events
+RABBITMQ_PASSWORD=<a long password>
+EVENTS_RABBITMQ_URL=amqp://hestia:<the same password>@rabbitmq:5672
+```
+
+Then run `docker compose up -d`. The broker is on the `finance` network, so the Hestia host reaches it as `rabbitmq:5672`
+(set the same address as `EVENTS_RABBITMQ_URL` in the Hestia `.env`). The management page is on
+`http://localhost:15672` (this machine only), with the same user and password. The logs show
+"Finance events are on" when the API starts with the events.
 
 ### Backups
 

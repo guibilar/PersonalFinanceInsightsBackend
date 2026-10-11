@@ -1,4 +1,5 @@
 using Finance.Application.Abstractions;
+using Finance.Application.Events;
 using Finance.Application.Import;
 using Finance.Application.Models;
 using Finance.Application.Services.Interfaces;
@@ -8,6 +9,7 @@ using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
 using Finance.Domain.Helpers;
+using Hestia.Contracts.Finance;
 using Microsoft.Extensions.Logging;
 
 namespace Finance.Application.Services;
@@ -19,12 +21,19 @@ public class TransactionService(
     IAccountRepository accountRepository,
     ICategoryRepository categoryRepository,
     ITagRepository tagRepository,
-    TransactionRules rules) : ITransactionService
+    TransactionRules rules,
+    FinanceChanges changes) : ITransactionService
 {
     private const string DuplicateMessage = "An identical transaction (same account, date, amount and description) already exists.";
 
-    public async Task<Transaction> AddAsync(Transaction transaction, bool allowDuplicate = false,
-        CancellationToken cancellationToken = default)
+    // Each change below runs in FinanceChanges (T04): with the finance events on, the change and its events commit
+    // together, and a change that moves a budget past 80 % or 100 % also sends BudgetLimitReached.
+
+    public Task<Transaction> AddAsync(Transaction transaction, bool allowDuplicate = false,
+        CancellationToken cancellationToken = default) =>
+        changes.RunAsync(ChangeEffect.Spending, ct => AddOnceAsync(transaction, allowDuplicate, ct), cancellationToken);
+
+    private async Task<Transaction> AddOnceAsync(Transaction transaction, bool allowDuplicate, CancellationToken cancellationToken)
     {
         var account = await accountRepository.GetByIdAsync(transaction.AccountId, cancellationToken)
                       ?? throw new NotFoundException(nameof(Account), transaction.AccountId);
@@ -66,12 +75,14 @@ public class TransactionService(
         {
             await transactionRepository.AddAsync(transaction, cancellationToken);
             transaction.Account = account;
-            return transaction;
         }
         catch (DuplicateEntityException)
         {
             throw new ConflictException(DuplicateMessage);
         }
+        await changes.RaiseChangedAsync([transaction], TransactionChange.Added, cancellationToken);
+        await changes.RaisePriceChangesAsync([transaction], cancellationToken);
+        return transaction;
     }
 
     public Task<PaginatedList<Transaction>> FilterAsync(TransactionFilterDto filter, CancellationToken cancellationToken = default)
@@ -87,17 +98,28 @@ public class TransactionService(
         SetHiddenAsync(id, hidden: false, cancellationToken);
 
     // Idempotent: hiding a hidden transaction (or restoring a visible one) just succeeds.
-    private async Task SetHiddenAsync(Guid id, bool hidden, CancellationToken cancellationToken)
-    {
-        var transaction = await transactionRepository.GetIncludingHiddenAsync(id, cancellationToken)
-                          ?? throw new NotFoundException(nameof(Transaction), id);
+    private Task SetHiddenAsync(Guid id, bool hidden, CancellationToken cancellationToken) =>
+        changes.RunAsync(ChangeEffect.Spending, async ct =>
+        {
+            var transaction = await transactionRepository.GetIncludingHiddenAsync(id, ct)
+                              ?? throw new NotFoundException(nameof(Transaction), id);
 
-        transaction.Hidden = hidden;
-        await transactionRepository.SaveChangesAsync(cancellationToken);
-    }
+            var changed = transaction.Hidden != hidden;
+            transaction.Hidden = hidden;
+            if (changed)
+            {
+                await changes.RaiseChangedAsync([transaction], hidden ? TransactionChange.Deleted : TransactionChange.Restored, ct);
+            }
+            await transactionRepository.SaveChangesAsync(ct);
+        }, cancellationToken);
 
-    public async Task<Transaction> UpdateAsync(Guid id, string description, Guid categoryId, Flow? flow, string? note = null,
-        IReadOnlyCollection<Guid>? tagIds = null, CancellationToken cancellationToken = default)
+    public Task<Transaction> UpdateAsync(Guid id, string description, Guid categoryId, Flow? flow, string? note = null,
+        IReadOnlyCollection<Guid>? tagIds = null, CancellationToken cancellationToken = default) =>
+        changes.RunAsync(ChangeEffect.Spending,
+            ct => UpdateOnceAsync(id, description, categoryId, flow, note, tagIds, ct), cancellationToken);
+
+    private async Task<Transaction> UpdateOnceAsync(Guid id, string description, Guid categoryId, Flow? flow, string? note,
+        IReadOnlyCollection<Guid>? tagIds, CancellationToken cancellationToken)
     {
         var transaction = await transactionRepository.GetByIdAsync(id, cancellationToken)
                           ?? throw new NotFoundException(nameof(Transaction), id);
@@ -124,22 +146,25 @@ public class TransactionService(
         }
         if (note is not null) transaction.Note = string.IsNullOrWhiteSpace(note) ? null : note.Trim();
         if (tagIds is not null) transaction.Tags = await GetTagsAsync(tagIds, cancellationToken);
+        await changes.RaiseChangedAsync([transaction], TransactionChange.Updated, cancellationToken);
         await transactionRepository.SaveChangesAsync(cancellationToken);
         return transaction;
     }
 
-    public async Task<RulesResult> ApplyRulesAsync(CancellationToken cancellationToken = default)
-    {
-        var classifier = await rules.ClassifierAsync(cancellationToken);
-        var transactions = await transactionRepository.GetRuleManagedAsync(cancellationToken);
-        // Every one is classified, deleted ones included; the counts are of those the list shows.
-        var updated = transactions.Count(t => classifier.Classify(t, t.Account!.Type) && !t.Hidden);
-        var visible = transactions.Count(t => !t.Hidden);
+    public Task<RulesResult> ApplyRulesAsync(CancellationToken cancellationToken = default) =>
+        changes.RunAsync(ChangeEffect.Spending, async ct =>
+        {
+            var classifier = await rules.ClassifierAsync(ct);
+            var transactions = await transactionRepository.GetRuleManagedAsync(ct);
+            // Every one is classified, deleted ones included; the counts (and the events) are of those the list shows.
+            var updated = transactions.Where(t => classifier.Classify(t, t.Account!.Type) && !t.Hidden).ToList();
+            var visible = transactions.Count(t => !t.Hidden);
 
-        await transactionRepository.SaveChangesAsync(cancellationToken);
-        logger.LogInformation("Applied the rules: {Checked} checked, {Updated} updated", visible, updated);
-        return new RulesResult(visible, updated);
-    }
+            await changes.RaiseChangedAsync(updated, TransactionChange.Updated, ct);
+            await transactionRepository.SaveChangesAsync(ct);
+            logger.LogInformation("Applied the rules: {Checked} checked, {Updated} updated", visible, updated.Count);
+            return new RulesResult(visible, updated.Count);
+        }, cancellationToken);
 
     private async Task<List<Tag>> GetTagsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken)
     {
@@ -153,7 +178,10 @@ public class TransactionService(
         await categoryRepository.GetByIdAsync(id, cancellationToken)
         ?? throw new InvalidInputException("categoryId", "That category doesn't exist.");
 
-    public async Task LinkTransactionToBudgetAsync(Guid budgetId, Guid transactionId, CancellationToken cancellationToken = default)
+    public Task LinkTransactionToBudgetAsync(Guid budgetId, Guid transactionId, CancellationToken cancellationToken = default) =>
+        changes.RunAsync(ChangeEffect.Spending, ct => LinkOnceAsync(budgetId, transactionId, ct), cancellationToken);
+
+    private async Task LinkOnceAsync(Guid budgetId, Guid transactionId, CancellationToken cancellationToken)
     {
         var transaction = await transactionRepository.GetByIdAsync(transactionId, cancellationToken)
                           ?? throw new NotFoundException(nameof(Transaction), transactionId);
@@ -169,6 +197,7 @@ public class TransactionService(
             throw new ConflictException($"Budget '{budget.Name}' is inactive; activate it before linking transactions.");
 
         transaction.BudgetId = budgetId;
+        await changes.RaiseChangedAsync([transaction], TransactionChange.Updated, cancellationToken);
         await transactionRepository.SaveChangesAsync(cancellationToken);
     }
 
@@ -176,7 +205,10 @@ public class TransactionService(
     /// Sets a category, a flow, a budget or a tag on many transactions at once, with the same rules as one by one: a category or
     /// flow set this way is kept from the rules, a flow only where it fits the direction, and only active budgets.
     /// </summary>
-    public async Task<BulkUpdateResult> BulkUpdateAsync(BulkUpdate update, CancellationToken cancellationToken = default)
+    public Task<BulkUpdateResult> BulkUpdateAsync(BulkUpdate update, CancellationToken cancellationToken = default) =>
+        changes.RunAsync(ChangeEffect.Spending, ct => BulkUpdateOnceAsync(update, ct), cancellationToken);
+
+    private async Task<BulkUpdateResult> BulkUpdateOnceAsync(BulkUpdate update, CancellationToken cancellationToken)
     {
         var category = update.CategoryId is { } categoryId ? await GetCategoryAsync(categoryId, cancellationToken) : null;
         Budget? budget = null;
@@ -193,8 +225,8 @@ public class TransactionService(
 
         var ids = update.TransactionIds.Distinct().ToList();
         var transactions = await transactionRepository.GetByIdsAsync(ids, cancellationToken);
-        var updated = 0;
         var refusedFlow = 0;
+        var changedTransactions = new List<Transaction>();
         foreach (var transaction in transactions)
         {
             var changed = false;
@@ -237,8 +269,10 @@ public class TransactionService(
             {
                 changed = true;
             }
-            if (changed) updated++;
+            if (changed) changedTransactions.Add(transaction);
         }
+        var updated = changedTransactions.Count;
+        await changes.RaiseChangedAsync(changedTransactions, TransactionChange.Updated, cancellationToken);
         await transactionRepository.SaveChangesAsync(cancellationToken);
 
         var missing = ids.Count - transactions.Count;
@@ -256,12 +290,18 @@ public class TransactionService(
         return new BulkUpdateResult(updated, refusedFlow + missing, notes);
     }
 
-    public async Task UnlinkTransactionFromBudgetAsync(Guid transactionId, CancellationToken cancellationToken = default)
-    {
-        var transaction = await transactionRepository.GetByIdAsync(transactionId, cancellationToken)
-                          ?? throw new NotFoundException(nameof(Transaction), transactionId);
+    public Task UnlinkTransactionFromBudgetAsync(Guid transactionId, CancellationToken cancellationToken = default) =>
+        changes.RunAsync(ChangeEffect.Spending, async ct =>
+        {
+            var transaction = await transactionRepository.GetByIdAsync(transactionId, ct)
+                              ?? throw new NotFoundException(nameof(Transaction), transactionId);
 
-        transaction.BudgetId = null;
-        await transactionRepository.SaveChangesAsync(cancellationToken);
-    }
+            var changed = transaction.BudgetId is not null;
+            transaction.BudgetId = null;
+            if (changed)
+            {
+                await changes.RaiseChangedAsync([transaction], TransactionChange.Updated, ct);
+            }
+            await transactionRepository.SaveChangesAsync(ct);
+        }, cancellationToken);
 }

@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Finance.Application;
 using Finance.Application.Reports;
 using Finance.Infrastructure;
+using Finance.Infrastructure.Events;
 using Finance.Infrastructure.Persistence;
 using FinanceApi;
 using FinanceApi.Auth;
@@ -35,6 +36,13 @@ builder.Services
     .AddInfrastructure(builder.Configuration);
 builder.Services.AddLogin(builder.Configuration);
 
+// The finance events (T04): an outbox in the finance database, sent to RabbitMQ. Off without Events:RabbitMq.
+var events = builder.Configuration.GetSection(FinanceEventsOptions.SectionName).Get<FinanceEventsOptions>() ?? new FinanceEventsOptions();
+if (events.Enabled)
+{
+    builder.Services.AddFinanceEvents(events, Finance.Infrastructure.DependencyInjection.GetConnectionString(builder.Configuration));
+}
+
 builder.Services.AddHealthChecks()
     .AddCheck<DatabaseHealthCheck>("database", tags: [ReadyTag]);
 
@@ -52,6 +60,12 @@ if (app.Configuration.GetValue<bool>("Database:MigrateOnStartup"))
 {
     app.Logger.LogInformation("Applying database migrations");
     await app.Services.MigrateDatabaseAsync();
+}
+if (events.Enabled)
+{
+    await app.Services.EnsureFinanceOutboxAsync();
+    app.Logger.LogInformation("Finance events are on: outbox in the schema {Schema}, sent to RabbitMQ",
+        FinanceEventsOptions.OutboxSchema);
 }
 if (app.Services.GetRequiredService<IOptions<AuthOptions>>().Value.Mode == AuthMode.Cookie)
 {

@@ -1,4 +1,5 @@
 using Finance.Application.Abstractions;
+using Finance.Application.Events;
 using Finance.Application.Models;
 using Finance.Application.Reports;
 using Finance.Application.Services.Interfaces;
@@ -10,16 +11,22 @@ using Finance.Domain.Exceptions;
 
 namespace Finance.Application.Services;
 
-public class BudgetService(IBudgetRepository budgetRepository, ICategoryRepository categoryRepository, ReportingCalendar calendar)
+public class BudgetService(
+    IBudgetRepository budgetRepository,
+    ICategoryRepository categoryRepository,
+    ReportingCalendar calendar,
+    FinanceChanges changes)
     : IBudgetService
 {
-    public async Task<BudgetSummary> AddAsync(Budget budget, CancellationToken cancellationToken = default)
-    {
-        await EnsureFitsAsync(budget, cancellationToken);
-        await budgetRepository.AddAsync(budget, cancellationToken);
-        // Totalled like any other read: a new budget's categories may already have spending this month.
-        return await GetByIdAsync(budget.Id, cancellationToken);
-    }
+    // A new budget or a new limit can be over 80 % or 100 % at once: FinanceChanges sends BudgetLimitReached (T04).
+    public Task<BudgetSummary> AddAsync(Budget budget, CancellationToken cancellationToken = default) =>
+        changes.RunAsync(ChangeEffect.Spending, async ct =>
+        {
+            await EnsureFitsAsync(budget, ct);
+            await budgetRepository.AddAsync(budget, ct);
+            // Totalled like any other read: a new budget's categories may already have spending this month.
+            return await GetByIdAsync(budget.Id, ct);
+        }, cancellationToken);
 
     public async Task<BudgetSummary> GetByIdAsync(Guid id, CancellationToken cancellationToken = default)
     {
@@ -27,7 +34,10 @@ public class BudgetService(IBudgetRepository budgetRepository, ICategoryReposito
                ?? throw new NotFoundException(nameof(Budget), id);
     }
 
-    public async Task<BudgetSummary> UpdateAsync(Budget budget, CancellationToken cancellationToken = default)
+    public Task<BudgetSummary> UpdateAsync(Budget budget, CancellationToken cancellationToken = default) =>
+        changes.RunAsync(ChangeEffect.Spending, ct => UpdateOnceAsync(budget, ct), cancellationToken);
+
+    private async Task<BudgetSummary> UpdateOnceAsync(Budget budget, CancellationToken cancellationToken)
     {
         var existing = await budgetRepository.GetByIdAsync(budget.Id, cancellationToken)
                        ?? throw new NotFoundException(nameof(Budget), budget.Id);

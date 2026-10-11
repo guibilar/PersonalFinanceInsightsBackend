@@ -1,3 +1,4 @@
+using Finance.Application.Events;
 using Finance.Application.Reports;
 using Finance.Application.Services;
 using Finance.Application.Services.Interfaces;
@@ -25,6 +26,11 @@ public static class DependencyInjection
         services.AddScoped<ITagService, TagService>();
         services.AddScoped<INetWorthService, NetWorthService>();
         services.AddSingleton<ReportingCalendar>();
+        // The finance events (T04): off until the infrastructure turns them on (AddFinanceEvents).
+        services.AddSingleton(new FinanceEventsSwitch(Enabled: false));
+        services.AddScoped<FinanceEventCollector>();
+        services.AddScoped<IFinanceEvents>(provider => provider.GetRequiredService<FinanceEventCollector>());
+        services.AddScoped<FinanceChanges>();
         return services;
     }
 }

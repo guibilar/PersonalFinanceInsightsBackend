@@ -4,6 +4,8 @@
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Options" />
+    <!-- The finance events that the services raise (T04). -->
+    <PackageReference Include="Hestia.Contracts" />
   </ItemGroup>
 
   <ItemGroup>
