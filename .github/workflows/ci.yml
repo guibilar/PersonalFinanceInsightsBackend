@@ -61,22 +61,27 @@ jobs:
         run: |
           python3 - <<'EOF'
           import os, re
+          ansi = re.compile(r"\x1b\[[0-9;]*m")
           count = 0
-          for name in ["restore.log", "build.log", "test-in-memory.log", "test-postgres.log"]:
-              if not os.path.exists(name) or count >= 9:
-                  continue
-              lines = open(name, errors="replace").read().splitlines()
-              keep = [i for i, l in enumerate(lines) if re.search(r"error|failed|Failed|Exception|Assert\.|Expected|Actual", l)]
-              picked = []
-              for i in keep:
-                  picked.extend(lines[max(0, i - 1): i + 4])
-              text = "\n".join(dict.fromkeys(picked)) or "\n".join(lines[-60:])
+          def emit(title, text):
+              global count
               for start in range(0, len(text), 3500):
                   if count >= 9:
-                      break
+                      return
                   chunk = text[start:start + 3500].replace("%", "%25").replace("\r", "").replace("\n", "%0A")
-                  print(f"::error title={name} part {start // 3500 + 1}::{chunk}")
+                  print(f"::error title={title}::{chunk}")
                   count += 1
+          for name in ["restore.log", "build.log", "test-in-memory.log", "test-postgres.log"]:
+              if not os.path.exists(name):
+                  continue
+              lines = [ansi.sub("", l) for l in open(name, errors="replace").read().splitlines()]
+              picked = []
+              for i, l in enumerate(lines):
+                  if re.match(r"\s*failed \S", l) or re.search(r": error [A-Z]+\d+", l) or "Test run summary" in l:
+                      picked.extend(lines[i: i + 14])
+                      picked.append("")
+              if picked:
+                  emit(name, "\n".join(picked))
           EOF
 
       # Hestia T03: the signed-in tests again, with gateway tokens (auth mode Gateway) instead of the test sign-in.
