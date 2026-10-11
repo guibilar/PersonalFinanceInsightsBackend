@@ -43,6 +43,18 @@ public class GatewayAuthTests
     }
 
     [Fact]
+    public async Task TheSignedInTests_UseTheAuthModeOfTheRun()
+    {
+        // CI runs all tests two times: with the test sign-in, and with gateway tokens (FINANCE_TEST_AUTH=gateway).
+        await using var factory = new FinanceApiFactory();
+        var client = factory.CreateClient();
+
+        var mode = factory.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<FinanceApi.Auth.AuthOptions>>().Value.Mode;
+        Assert.Equal(TestGateway.AllTests ? FinanceApi.Auth.AuthMode.Gateway : FinanceApi.Auth.AuthMode.Cookie, mode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/Accounts")).StatusCode);
+    }
+
+    [Fact]
     public async Task AValidToken_OpensTheApi()
     {
         await using var factory = Gateway();
