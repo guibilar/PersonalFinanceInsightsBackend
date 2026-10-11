@@ -8,7 +8,7 @@ on:
   schedule:
     - cron: '17 6 * * 1'
 
-# Bash with pipefail, so a command piped into tee still fails its step.
+# Bash with pipefail: a failed command in a pipe fails its step.
 defaults:
   run:
     shell: bash
@@ -31,11 +31,11 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      - run: dotnet restore 2>&1 | tee restore.log
+      - run: dotnet restore
       # Packages the API and CLI ship with; test-only packages and low-severity advisories don't block.
       - name: Known vulnerabilities
         run: scripts/check-vulnerable-packages.sh
-      - run: dotnet build --no-restore 2>&1 | tee build.log
+      - run: dotnet build --no-restore
       # The code-style rules the .editorconfig sets as warnings (file-scoped namespaces); whitespace is left alone.
       - name: Code style
         run: dotnet format style --verify-no-changes --no-restore --severity warn
@@ -45,44 +45,15 @@ jobs:
         run: dotnet ef migrations has-pending-model-changes --project Finance.Infrastructure --startup-project FinanceApi --no-build
 
       - name: Tests (in-memory database, events off)
-        run: dotnet test --no-build 2>&1 | tee test-in-memory.log
+        run: dotnet test --no-build
 
       # The tests start PostgreSQL and RabbitMQ themselves in Docker (Testcontainers) and remove them afterwards.
       # The event tests (EventTests) need both.
       - name: Tests (PostgreSQL migrated from scratch, RabbitMQ)
-        run: dotnet test --no-build 2>&1 | tee test-postgres.log
+        run: dotnet test --no-build
         env:
           FINANCE_TEST_POSTGRES: container
           FINANCE_TEST_RABBITMQ: container
-
-      # TEMPORARY (T04): task sessions cannot read the logs.
-      - name: TEMP failures as annotations
-        if: failure()
-        run: |
-          python3 - <<'EOF'
-          import os, re
-          ansi = re.compile(r"\x1b\[[0-9;]*m")
-          count = 0
-          def emit(title, text):
-              global count
-              for start in range(0, len(text), 3500):
-                  if count >= 9:
-                      return
-                  chunk = text[start:start + 3500].replace("%", "%25").replace("\r", "").replace("\n", "%0A")
-                  print(f"::error title={title}::{chunk}")
-                  count += 1
-          for name in ["restore.log", "build.log", "test-in-memory.log", "test-postgres.log"]:
-              if not os.path.exists(name):
-                  continue
-              lines = [ansi.sub("", l) for l in open(name, errors="replace").read().splitlines()]
-              picked = []
-              for i, l in enumerate(lines):
-                  if re.match(r"\s*failed \S", l) or re.search(r": error [A-Z]+\d+", l) or "Test run summary" in l:
-                      picked.extend(lines[i: i + 14])
-                      picked.append("")
-              if picked:
-                  emit(name, "\n".join(picked))
-          EOF
 
       # Hestia T03: the signed-in tests again, with gateway tokens (auth mode Gateway) instead of the test sign-in.
       - name: Tests (auth mode Gateway, in-memory database)
@@ -137,9 +108,10 @@ jobs:
             "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'wolverine' AND table_name = 'wolverine_outgoing_envelopes'" > tables.log 2>&1 || true
           grep -qx 1 tables.log || ok=false
           if [ "$ok" != true ]; then
-            # TEMPORARY (T04): what failed, as an annotation.
-            { echo "== ps"; cat ps.log; echo "== exchanges"; cat exchanges.log; echo "== tables"; cat tables.log; echo "== app log"; grep -iE "event|wolverine|rabbit|fail|error" app.log | tail -40; } > check.log
-            python3 -c "t=open('check.log').read()[-3500:].replace('%','%25').replace('\n','%0A'); print('::error title=events check::'+t)"
+            echo "== containers"; cat ps.log
+            echo "== exchanges"; cat exchanges.log
+            echo "== outbox table"; cat tables.log
+            echo "== API log"; grep -iE "event|wolverine|rabbit|fail|error" app.log | tail -40
             exit 1
           fi
       - name: The API runs as a non-root user
@@ -159,12 +131,6 @@ jobs:
       - name: Container logs
         if: failure()
         run: docker compose logs
-      # TEMPORARY (T04): task sessions cannot read the logs.
-      - name: TEMP container logs as annotations
-        if: failure()
-        run: |
-          docker compose logs --no-color 2>&1 | grep -iE "fail|error|exception|denied|unauthorized" | head -60 > stack.log || true
-          python3 -c "t=open('stack.log').read()[:3500].replace('%','%25').replace('\n','%0A'); print('::error title=stack log::'+t)"
       - name: Stop the stack
         if: always()
         run: docker compose down -v
