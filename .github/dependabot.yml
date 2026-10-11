@@ -1,10 +1,20 @@
 # Weekly dependency updates, grouped so a week brings a few pull requests rather than one per package.
 # CI (build, tests on PostgreSQL, vulnerability check, the Docker stack's smoke test) runs on each.
 version: 2
+# Hestia.Contracts is on GitHub Packages. Dependabot reads it with a token in the Dependabot secret
+# HESTIA_PACKAGES_TOKEN (repository settings: Secrets and variables, Dependabot), with the read:packages scope.
+registries:
+  hestia:
+    type: nuget-feed
+    url: https://nuget.pkg.github.com/guibilar/index.json
+    username: guibilar
+    password: ${{secrets.HESTIA_PACKAGES_TOKEN}}
 updates:
   # Directory.Packages.props (central package management) and the dotnet-ef tool manifest.
   - package-ecosystem: nuget
     directory: /
+    registries:
+      - hestia
     schedule:
       interval: weekly
       day: monday
