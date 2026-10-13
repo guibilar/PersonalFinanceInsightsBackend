@@ -454,6 +454,32 @@ the API and CLI ship with; it also runs weekly). It then starts the Docker stack
 flags and a protected call. You can run the smoke test against your own deployment too, on the server:
 `FINANCE_USERNAME=... FINANCE_PASSWORD=... docker/smoke-test.sh` (it signs in and out once).
 
+### Test results as annotations
+
+The three CI test steps write TRX files (`--report-xunit-trx`, from xUnit v3, with no extra package).
+After each test step, `scripts/test-annotations.py` reads them and writes annotations on the run:
+
+- one notice per test project, with the totals, for example
+  `Tests (in-memory): FinanceTests — 376 passed, 0 failed, 13 skipped`;
+- one error per failed test, with the test name, the test project, and the first six lines of the message;
+- a warning if a test step wrote no TRX file (for example, a crash before the results).
+
+The labels are `in-memory`, `postgres`, and `gateway`. The step also runs when the tests fail.
+GitHub shows at most 10 errors per step. After 9 failed tests, one more error gives the count of the others.
+Task sessions cannot read the CI logs, but they can read these annotations:
+
+```bash
+gh api "repos/guibilar/PersonalFinanceInsightsBackend/commits/<sha>/check-runs" --jq '.check_runs[] | [.id, .name] | @tsv'
+gh api repos/guibilar/PersonalFinanceInsightsBackend/check-runs/<id>/annotations
+```
+
+The script is a copy of `scripts/test-annotations.py` in HestiaBackend (T26). To see the same output locally:
+
+```bash
+dotnet test --results-directory TestResults/local --report-xunit-trx
+python3 scripts/test-annotations.py local TestResults/local
+```
+
 ## Docker
 
 ```bash

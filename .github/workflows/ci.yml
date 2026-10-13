@@ -44,22 +44,36 @@ jobs:
       - name: Migrations match the model
         run: dotnet ef migrations has-pending-model-changes --project Finance.Infrastructure --startup-project FinanceApi --no-build
 
+      # --report-xunit-trx: xUnit v3 writes a TRX file per test project, for the annotations (Hestia T40).
       - name: Tests (in-memory database, events off)
-        run: dotnet test --no-build
+        id: tests-in-memory
+        run: dotnet test --no-build --results-directory TestResults/in-memory --report-xunit-trx
+      # Totals and failed tests as annotations: task sessions cannot read the logs, only the annotations.
+      - name: Test results (in-memory database)
+        if: always() && steps.tests-in-memory.outcome != 'skipped'
+        run: python3 scripts/test-annotations.py in-memory TestResults/in-memory
 
       # The tests start PostgreSQL and RabbitMQ themselves in Docker (Testcontainers) and remove them afterwards.
       # The event tests (EventTests) need both.
       - name: Tests (PostgreSQL migrated from scratch, RabbitMQ)
-        run: dotnet test --no-build
+        id: tests-postgres
+        run: dotnet test --no-build --results-directory TestResults/postgres --report-xunit-trx
         env:
           FINANCE_TEST_POSTGRES: container
           FINANCE_TEST_RABBITMQ: container
+      - name: Test results (PostgreSQL, RabbitMQ)
+        if: always() && steps.tests-postgres.outcome != 'skipped'
+        run: python3 scripts/test-annotations.py postgres TestResults/postgres
 
       # Hestia T03: the signed-in tests again, with gateway tokens (auth mode Gateway) instead of the test sign-in.
       - name: Tests (auth mode Gateway, in-memory database)
-        run: dotnet test --no-build
+        id: tests-gateway
+        run: dotnet test --no-build --results-directory TestResults/gateway --report-xunit-trx
         env:
           FINANCE_TEST_AUTH: gateway
+      - name: Test results (auth mode Gateway)
+        if: always() && steps.tests-gateway.outcome != 'skipped'
+        run: python3 scripts/test-annotations.py gateway TestResults/gateway
 
   docker:
     runs-on: ubuntu-latest
