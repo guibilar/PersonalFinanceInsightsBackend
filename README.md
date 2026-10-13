@@ -480,6 +480,13 @@ dotnet test --results-directory TestResults/local --report-xunit-trx
 python3 scripts/test-annotations.py local TestResults/local
 ```
 
+### CI artifacts
+
+CI uploads no artifacts. Artifacts count against the storage quota of the GitHub account, and when the quota is
+full, every upload fails. If a new step must upload one, set a short `retention-days` (7 for pull requests,
+30 for `master`) and `continue-on-error: true`. Then add a step that writes a `::warning::` annotation when the
+upload fails, so that a full quota does not hide the real result.
+
 ## Docker
 
 ```bash
