@@ -541,8 +541,10 @@ docker/restore.sh backups/finance-2026-09-28_030000.dump
 ```
 
 `docker/restore.sh` replaces the current database with the dump: it first saves the current database
-as `backups/before-restore-<time>.dump` (mode 600, kept until you delete it), stops the API, restores in
-a single transaction (a failure leaves the database as it was) and starts the API again. The dumps
+as `backups/before-restore-<time>.dump` (mode 600, kept until you delete it), stops the API, drops every
+schema of the database (`public`, the events outbox schema `wolverine`, and any other one), restores in
+a single transaction (a failure leaves the database as it was) and starts the API again. A schema that
+the dump does not have is gone after the restore; the API makes the outbox tables again when it starts. The dumps
 include the account and the session-cookie keys, so you sign in as before. They are pg_dump's custom
 format; `pg_restore --list <file>` shows what one contains.
 

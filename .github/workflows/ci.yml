@@ -118,16 +118,37 @@ jobs:
         run: test "$(docker exec personal-finance-api id -u)" != 0
       - name: Smoke test (health, sign-in, session cookie, protected calls)
         run: docker/smoke-test.sh http://localhost:5096
-      - name: Backup written at start (owner-only, the runner's), and restore.sh restores it
+      - name: Backup written at start (owner-only, the runner's), and restore.sh restores it and drops an extra schema
         run: |
           dump=$(ls backups/finance-*.dump | head -n 1)
           test "$(stat -c %a "$dump")" = 600
           test "$(stat -c %u "$dump")" = "$(id -u)"
+          # A schema that the dump does not have (as a later migration or module adds one): the restore must drop it.
+          docker compose exec -T db psql -U postgres -d FinanceDb -v ON_ERROR_STOP=1 -qc \
+            "CREATE SCHEMA ci_extra; CREATE TABLE ci_extra.leftover (id int PRIMARY KEY); INSERT INTO ci_extra.leftover VALUES (1);"
           echo "Restoring $dump"
           docker/restore.sh "$dump"
           test "$(stat -c %a backups/before-restore-*.dump)" = 600
           docker compose up -d --wait
           docker/smoke-test.sh http://localhost:5096
+          extra=$(docker compose exec -T db psql -U postgres -d FinanceDb -tAc \
+            "SELECT count(*) FROM pg_namespace WHERE nspname = 'ci_extra'")
+          if [ "$extra" != 0 ]; then
+            echo "::error title=Restore::The schema ci_extra is still there after restore.sh"
+            exit 1
+          fi
+          # The API makes the Wolverine outbox tables again at start, if the dump had none.
+          outbox=0
+          for i in $(seq 1 30); do
+            outbox=$(docker compose exec -T db psql -U postgres -d FinanceDb -tAc \
+              "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'wolverine' AND table_name = 'wolverine_outgoing_envelopes'")
+            [ "$outbox" = 1 ] && break
+            sleep 1
+          done
+          if [ "$outbox" != 1 ]; then
+            echo "::error title=Restore::The Wolverine outbox table is missing after restore.sh"
+            exit 1
+          fi
       - name: Container logs
         if: failure()
         run: docker compose logs
