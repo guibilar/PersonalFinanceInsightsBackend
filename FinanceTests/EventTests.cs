@@ -59,7 +59,8 @@ public class EventTests
         Assert.Equal(-12.5m, sent.Amount);
         Assert.Equal(DefaultCategories.Groceries, sent.CategoryId);
         Assert.Equal("Groceries", sent.CategoryName);
-        Assert.Equal(1, sent.Version);
+        Assert.Equal(2, sent.Version);
+        Assert.NotEqual(Guid.Empty, sent.EventId);
     }
 
     [Fact]
@@ -75,7 +76,9 @@ public class EventTests
         var updated = await host.Events.WaitForAsync<TransactionChanged>(e => e.TransactionId == id && e.Change == TransactionChange.Updated);
         Assert.Equal("Books for school", updated.Description);
         Assert.Equal("Shopping", updated.CategoryName);
-        await host.Events.WaitForAsync<TransactionChanged>(e => e.TransactionId == id && e.Change == TransactionChange.Deleted);
+        var deleted = await host.Events.WaitForAsync<TransactionChanged>(e => e.TransactionId == id && e.Change == TransactionChange.Deleted);
+        // Each event has its own id (Hestia T36: the consumers handle each id once).
+        Assert.NotEqual(updated.EventId, deleted.EventId);
     }
 
     [Fact]

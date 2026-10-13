@@ -415,6 +415,9 @@ no outbox, no RabbitMQ, and no extra queries.
 | `SubscriptionPriceChanged` | A new charge of a recurring payment has a new fixed price. |
 
 The event types are in the NuGet package `Hestia.Contracts` (from GitHub Packages, see `NuGet.Config`).
+Each event has an `EventId` (`Hestia.Contracts` 1.1.0 and later): a new GUID for each event. The outbox stores the
+event with its id, so a second send of the same event has the same id, and the Hestia consumers handle it once
+(Hestia task T36). Do not set `EventId` yourself: the event types set it.
 
 How it works (Wolverine, MIT licence):
 
