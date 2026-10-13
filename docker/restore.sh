@@ -16,14 +16,20 @@ docker compose exec -T backup sh -c \
   'umask 077 && pg_dump --format=custom --file="${BACKUP_DIR:-/backups}/before-restore-$(date +%Y-%m-%d_%H%M%S).dump"'
 
 docker compose stop app
-# One transaction: if anything fails, the database is left as it was. The schema is emptied first
-# rather than with pg_restore --clean, which drops only what the dump has: a dump from before a
-# migration that added a table couldn't drop the keys that table points at, and a table it doesn't
-# know would be left behind for the next migration to trip over. The connection (PGHOST,
-# PGDATABASE, ...) comes from the backup container's environment.
+# One transaction: if anything fails, the database is left as it was. Every schema is dropped first
+# (public, the Wolverine outbox schema "wolverine", and any later one; not the system schemas), not with pg_restore --clean, which drops only what the dump has: a dump from before a
+# migration that added a table couldn't drop the keys that table points at, and a table or schema it
+# doesn't know would be left behind for the next migration to trip over. The API makes the Wolverine
+# tables again when it starts, if the dump has none. The connection (PGHOST, PGDATABASE, ...) comes
+# from the backup container's environment.
+reset_sql="DO \$\$ DECLARE s text; BEGIN
+  FOR s IN SELECT nspname FROM pg_namespace
+    WHERE nspname NOT LIKE 'pg\\_%' AND nspname <> 'information_schema'
+  LOOP EXECUTE format('DROP SCHEMA %I CASCADE', s); END LOOP;
+END \$\$; CREATE SCHEMA public;"
 status=0
-docker compose exec -T backup sh -c '
-  { echo "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"; pg_restore --no-owner --file=-; } |
+docker compose exec -T -e RESET_SQL="$reset_sql" backup sh -c '
+  { printf "%s\n" "$RESET_SQL"; pg_restore --no-owner --file=-; } |
     psql --quiet --no-psqlrc --set ON_ERROR_STOP=1 --single-transaction --output=/dev/null --dbname "postgresql:///"
 ' < "$dump" || status=$?
 docker compose start app
