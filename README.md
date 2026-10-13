@@ -457,7 +457,7 @@ The three CI test steps write TRX files (`--report-xunit-trx`, from xUnit v3, wi
 After each test step, `scripts/test-annotations.py` reads them and writes annotations on the run:
 
 - one notice per test project, with the totals, for example
-  `Tests (in-memory): FinanceTests — 380 passed, 0 failed, 4 skipped`;
+  `Tests (in-memory): FinanceTests — 376 passed, 0 failed, 13 skipped`;
 - one error per failed test, with the test name, the test project, and the first six lines of the message;
 - a warning if a test step wrote no TRX file (for example, a crash before the results).
 
