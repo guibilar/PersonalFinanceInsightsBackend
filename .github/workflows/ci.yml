@@ -34,7 +34,7 @@ jobs:
       - run: dotnet restore
       # Packages the API and CLI ship with; test-only packages and low-severity advisories don't block.
       - name: Known vulnerabilities
-        run: scripts/check-vulnerable-packages.sh
+        run: scripts/check-vulnerable-packages.sh | sed "s/^/::error::/"
       - run: dotnet build --no-restore
       # The code-style rules the .editorconfig sets as warnings (file-scoped namespaces); whitespace is left alone.
       - name: Code style
