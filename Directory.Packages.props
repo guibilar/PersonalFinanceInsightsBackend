@@ -27,7 +27,7 @@
   <!-- Events (T04, D7): the shared Hestia contracts (GitHub Packages, see NuGet.Config) and the Wolverine outbox.
        Wolverine is MIT-licensed. Keep the Wolverine packages on one version. -->
   <ItemGroup Label="Events">
-    <PackageVersion Include="Hestia.Contracts" Version="1.0.0" />
+    <PackageVersion Include="Hestia.Contracts" Version="1.1.0-pr.12.35" />
     <PackageVersion Include="WolverineFx.EntityFrameworkCore" Version="6.48.3" />
     <PackageVersion Include="WolverineFx.Postgresql" Version="6.48.3" />
     <PackageVersion Include="WolverineFx.RabbitMQ" Version="6.48.3" />

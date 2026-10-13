@@ -38,6 +38,12 @@ public sealed class FinanceEventCollector(FinanceEventsSwitch eventsSwitch) : IF
     public void Raise(IIntegrationEvent @event)
     {
         ArgumentNullException.ThrowIfNull(@event);
+        // Hestia consumers handle each event once by its EventId (Hestia T36). The event types set a new one for each
+        // event by default: an empty one is a bug in the code that made the event.
+        if (@event.EventId == Guid.Empty)
+        {
+            throw new ArgumentException($"The event {@event.GetType().Name} has no EventId.", nameof(@event));
+        }
         if (Enabled)
         {
             _pending.Add(@event);
