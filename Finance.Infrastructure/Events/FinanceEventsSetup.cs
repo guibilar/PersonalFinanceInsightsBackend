@@ -82,6 +82,9 @@ public static class FinanceEventsSetup
 
             wolverine.UseRabbitMq(rabbitMq)
                 .AutoProvision()
+                // Finance only publishes: no request/reply queue. That system queue is a listener, and a listener whose
+                // broker is down stops the start of finance (T37).
+                .DisableSystemRequestReplyQueueDeclaration()
                 .DeclareExchange(FinanceEventTopology.Exchange, exchange => exchange.ExchangeType = ExchangeType.Fanout);
             foreach (var eventType in FinanceEventTopology.EventTypes)
             {
