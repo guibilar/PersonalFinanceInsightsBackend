@@ -75,11 +75,18 @@ public sealed class FinanceEventQueue : IAsyncDisposable
         _queue = queue;
     }
 
-    /// <summary>Call it after the finance host started: the host declares the exchange.</summary>
-    public static async Task<FinanceEventQueue> BindAsync()
+    /// <summary>
+    /// Call it after the finance host started: the host declares the exchange. With <paramref name="declareExchange"/>,
+    /// the queue declares it first, as Wolverine does (durable fanout), for a host that has no broker yet (T37).
+    /// </summary>
+    public static async Task<FinanceEventQueue> BindAsync(bool declareExchange = false)
     {
         var connection = await new ConnectionFactory { Uri = new Uri(TestRabbitMq.Address!) }.CreateConnectionAsync();
         var channel = await connection.CreateChannelAsync();
+        if (declareExchange)
+        {
+            await channel.ExchangeDeclareAsync(FinanceEventTopology.Exchange, ExchangeType.Fanout, durable: true, autoDelete: false);
+        }
         var queue = await channel.QueueDeclareAsync(queue: "", durable: false, exclusive: true, autoDelete: true);
         await channel.QueueBindAsync(queue.QueueName, FinanceEventTopology.Exchange, routingKey: "");
         return new FinanceEventQueue(connection, channel, queue.QueueName);

@@ -429,8 +429,23 @@ How it works (Wolverine, MIT licence):
 4. A failed change commits nothing, so it sends nothing.
 
 Wolverine makes its tables in the schema `wolverine` when the API starts. They are not in the EF Core migrations.
-If the broker is down when the API starts, the API starts without it and logs an error: restart the API when the
-broker is back. The events wait in the outbox until then.
+**The broker is down (T37).**
+
+- **The broker stops while finance runs:** changes still save; their events wait in the outbox. The RabbitMQ client
+  connects again when the broker is back, and Wolverine sends the waiting events. No restart is necessary.
+- **Health:** the readiness check `events-broker` is **Degraded** while finance has no connection. Degraded keeps
+  `/health/ready` at 200, so the apps still work. It is Healthy when the events are off.
+- **The broker is down when finance starts (known limit):** the start waits `Events:Broker:StartTimeout` (30 seconds)
+  for the broker, then fails. `ContinueOnFailures` skips the transport, but Wolverine (6.49) then builds the routes of
+  the published events, and a route to a transport without a connection throws. Docker starts finance again
+  (`restart: unless-stopped`), and `depends_on` waits for a healthy broker when both start together. The events of
+  earlier changes stay in the outbox and go out after the start. The test
+  `BrokerTests.TheBrokerIsDownAtTheStart_TheStartFailsSoon` fails when a Wolverine update removes this limit.
+
+| Setting (`Events` section) | Default | Description |
+| --- | --- | --- |
+| `RabbitMq` | empty | The broker address. Empty: no events. |
+| `Broker:StartTimeout` | `00:00:30` | How long the start waits for the broker (Wolverine's own default is 2 minutes). |
 
 ## Tests
 
@@ -508,7 +523,8 @@ PostgreSQL is published on `127.0.0.1:5432` only: reachable from this machine (p
 not from the rest of the network.
 
 Health checks: `/health/live` answers while the process runs (Docker's health check for the API
-container uses it); `/health/ready` (and its alias `/health`) also checks the database.
+container uses it); `/health/ready` (and its alias `/health`) also checks the database, and the broker connection
+(`events-broker`, T37: Degraded only, so it stays 200).
 
 Container logs are capped at 3 files of 10 MB per service (Docker keeps them forever by default).
 
