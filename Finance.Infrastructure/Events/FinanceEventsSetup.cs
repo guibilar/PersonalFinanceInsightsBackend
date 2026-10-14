@@ -29,7 +29,7 @@ public sealed class FinanceEventsOptions
 
     public bool Enabled => !string.IsNullOrWhiteSpace(RabbitMq);
 
-    /// <summary>The start timeout and the reconnect of the broker connection (T37).</summary>
+    /// <summary>The start timeout of the broker connection (T37).</summary>
     public FinanceBrokerOptions Broker { get; set; } = new();
 
     public Uri RabbitMqUri()
@@ -58,7 +58,7 @@ public static class FinanceEventsSetup
         if (!options.Broker.IsValid())
         {
             throw new InvalidOperationException(
-                $"{FinanceEventsOptions.SectionName}:Broker:StartTimeout must be zero or more, and ReconnectInterval more than zero.");
+                $"{FinanceEventsOptions.SectionName}:Broker:StartTimeout must be zero or more.");
         }
 
         services.Replace(ServiceDescriptor.Singleton(new FinanceEventsSwitch(Enabled: true)));
@@ -66,9 +66,6 @@ public static class FinanceEventsSetup
         services.AddScoped<FinanceOutboxSaveInterceptor>();
         services.AddScoped<FinanceOutboxTransactionInterceptor>();
         services.AddFinanceOutboxOnDbContext();
-        // T37: connects to the broker when it comes back after a start without it, and sends the waiting events.
-        services.AddSingleton(options);
-        services.AddHostedService<FinanceBrokerReconnector>();
 
         services.AddWolverine(wolverine =>
         {
@@ -82,8 +79,7 @@ public static class FinanceEventsSetup
 
             wolverine.UseRabbitMq(rabbitMq)
                 .AutoProvision()
-                // Finance only publishes: no request/reply queue. That system queue is a listener, and a listener whose
-                // broker is down stops the start of finance (T37).
+                // Finance only publishes: no request/reply system queue (a listener that finance does not use).
                 .DisableSystemRequestReplyQueueDeclaration()
                 .DeclareExchange(FinanceEventTopology.Exchange, exchange => exchange.ExchangeType = ExchangeType.Fanout);
             foreach (var eventType in FinanceEventTopology.EventTypes)
@@ -92,9 +88,11 @@ public static class FinanceEventsSetup
                 wolverine.PublishMessage(eventType).ToRabbitExchange(FinanceEventTopology.Exchange).UseDurableOutbox();
             }
 
-            // A broker that is down when finance starts must not stop finance. The events then wait in the outbox, and
-            // FinanceBrokerReconnector sends them when the broker is back (T37). A short start timeout (Wolverine's
-            // default is 2 minutes), so finance answers requests soon.
+            // T37: a broker that is down when finance starts still stops the start. ContinueOnFailures skips the
+            // transport, but Wolverine then builds the routes of the published events, and a route to a transport with
+            // no connection throws (Wolverine 6.49). Docker starts finance again until the broker is back; the events
+            // wait in the outbox. A broker that stops later is no problem: the RabbitMQ client connects again, and the
+            // outbox keeps the events meanwhile. The start waits at most Events:Broker:StartTimeout for the broker.
             wolverine.ResourceMigrationFailureMode = ResourceMigrationFailureMode.ContinueOnFailures;
             wolverine.BrokerInitializationTimeout = options.Broker.StartTimeout;
         });
