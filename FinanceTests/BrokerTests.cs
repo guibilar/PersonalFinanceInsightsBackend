@@ -58,7 +58,7 @@ public class BrokerTests
         await using var factory = Start(gate.Address, logs);
         var clock = Stopwatch.StartNew();
 
-        var client = factory.CreateClient();
+        var client = Phase("start", factory.CreateClient, logs);
 
         Assert.True(clock.Elapsed < TimeSpan.FromSeconds(30), $"The start took {clock.Elapsed}. {logs}");
         Assert.Equal(HealthStatus.Degraded, (await CheckAsync(factory)).Status);
@@ -103,6 +103,21 @@ public class BrokerTests
             accountId = Account.DefaultCreditCardId, categoryId = DefaultCategories.Groceries
         }, FinanceApiFactory.Json)).ReadAsync<TransactionOutputDto>();
         await events.WaitForAsync<TransactionChanged>(e => e.TransactionId == later.Id);
+    }
+
+    /// <summary>Runs one step of a test, and names the step and the stack in the failure (CI shows only the message).</summary>
+    private static T Phase<T>(string name, Func<T> step, LogLines logs)
+    {
+        try
+        {
+            return step();
+        }
+        catch (Exception ex)
+        {
+            var stack = string.Join(" < ", (ex.StackTrace ?? "").Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0).Take(12));
+            Assert.Fail($"The step '{name}' failed: {ex.GetType().Name}: {ex.Message} AT {stack} INNER {ex.InnerException?.Message} {logs}");
+            throw;
+        }
     }
 
     private static FinanceApiFactory Start(string rabbitMq, LogLines logs)
