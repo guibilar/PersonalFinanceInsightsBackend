@@ -431,21 +431,21 @@ How it works (Wolverine, MIT licence):
 Wolverine makes its tables in the schema `wolverine` when the API starts. They are not in the EF Core migrations.
 **The broker is down (T37).**
 
-- **At the start:** the API waits `Events:Broker:StartTimeout` (5 seconds) for the broker, then starts without it and
-  logs the error. Changes still save; their events wait in the outbox. `FinanceBrokerReconnector` tries the broker
-  every `Events:Broker:ReconnectInterval` (15 seconds). When it answers, the reconnector declares the exchange, starts
-  the sender, and frees the waiting envelopes. Wolverine's durability agent then sends them. No restart is necessary.
-  The log says `Events: the RabbitMQ broker is not reachable` once, then
-  `Events: connected to the RabbitMQ broker after the start`.
-- **Later:** the RabbitMQ client recovers the connection itself, and the outbox keeps the events meanwhile.
+- **The broker stops while finance runs:** changes still save; their events wait in the outbox. The RabbitMQ client
+  connects again when the broker is back, and Wolverine sends the waiting events. No restart is necessary.
 - **Health:** the readiness check `events-broker` is **Degraded** while finance has no connection. Degraded keeps
   `/health/ready` at 200, so the apps still work. It is Healthy when the events are off.
+- **The broker is down when finance starts (known limit):** the start waits `Events:Broker:StartTimeout` (30 seconds)
+  for the broker, then fails. `ContinueOnFailures` skips the transport, but Wolverine (6.49) then builds the routes of
+  the published events, and a route to a transport without a connection throws. Docker starts finance again
+  (`restart: unless-stopped`), and `depends_on` waits for a healthy broker when both start together. The events of
+  earlier changes stay in the outbox and go out after the start. The test
+  `BrokerTests.TheBrokerIsDownAtTheStart_TheStartFailsSoon` fails when a Wolverine update removes this limit.
 
 | Setting (`Events` section) | Default | Description |
 | --- | --- | --- |
 | `RabbitMq` | empty | The broker address. Empty: no events. |
-| `Broker:StartTimeout` | `00:00:05` | How long the start waits for the broker. |
-| `Broker:ReconnectInterval` | `00:00:15` | How often finance tries the broker again after a start without it. |
+| `Broker:StartTimeout` | `00:00:30` | How long the start waits for the broker (Wolverine's own default is 2 minutes). |
 
 ## Tests
 
