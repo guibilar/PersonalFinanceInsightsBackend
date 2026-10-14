@@ -44,7 +44,9 @@ if (events.Enabled)
 }
 
 builder.Services.AddHealthChecks()
-    .AddCheck<DatabaseHealthCheck>("database", tags: [ReadyTag]);
+    .AddCheck<DatabaseHealthCheck>("database", tags: [ReadyTag])
+    // T37: Degraded (still 200) while the broker is down; Healthy when the events are off.
+    .AddCheck<BrokerHealthCheck>(BrokerHealthCheck.Name, tags: [ReadyTag]);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

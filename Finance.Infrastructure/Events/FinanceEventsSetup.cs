@@ -29,6 +29,9 @@ public sealed class FinanceEventsOptions
 
     public bool Enabled => !string.IsNullOrWhiteSpace(RabbitMq);
 
+    /// <summary>The start timeout and the reconnect of the broker connection (T37).</summary>
+    public FinanceBrokerOptions Broker { get; set; } = new();
+
     public Uri RabbitMqUri()
     {
         if (!Uri.TryCreate(RabbitMq, UriKind.Absolute, out var uri) || uri.Scheme is not ("amqp" or "amqps"))
@@ -52,12 +55,20 @@ public static class FinanceEventsSetup
         string connectionString)
     {
         var rabbitMq = options.RabbitMqUri();
+        if (!options.Broker.IsValid())
+        {
+            throw new InvalidOperationException(
+                $"{FinanceEventsOptions.SectionName}:Broker:StartTimeout must be zero or more, and ReconnectInterval more than zero.");
+        }
 
         services.Replace(ServiceDescriptor.Singleton(new FinanceEventsSwitch(Enabled: true)));
         services.AddScoped<FinanceOutbox>();
         services.AddScoped<FinanceOutboxSaveInterceptor>();
         services.AddScoped<FinanceOutboxTransactionInterceptor>();
         services.AddFinanceOutboxOnDbContext();
+        // T37: connects to the broker when it comes back after a start without it, and sends the waiting events.
+        services.AddSingleton(options);
+        services.AddHostedService<FinanceBrokerReconnector>();
 
         services.AddWolverine(wolverine =>
         {
@@ -78,9 +89,11 @@ public static class FinanceEventsSetup
                 wolverine.PublishMessage(eventType).ToRabbitExchange(FinanceEventTopology.Exchange).UseDurableOutbox();
             }
 
-            // A broker that is down when finance starts must not stop finance. The events then wait in the outbox,
-            // and Wolverine sends them after a restart with the broker back.
+            // A broker that is down when finance starts must not stop finance. The events then wait in the outbox, and
+            // FinanceBrokerReconnector sends them when the broker is back (T37). A short start timeout (Wolverine's
+            // default is 2 minutes), so finance answers requests soon.
             wolverine.ResourceMigrationFailureMode = ResourceMigrationFailureMode.ContinueOnFailures;
+            wolverine.BrokerInitializationTimeout = options.Broker.StartTimeout;
         });
         return services;
     }
