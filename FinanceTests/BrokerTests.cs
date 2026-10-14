@@ -114,8 +114,12 @@ public class BrokerTests
         }
         catch (Exception ex)
         {
-            var stack = string.Join(" < ", (ex.StackTrace ?? "").Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0).Take(12));
-            Assert.Fail($"The step '{name}' failed: {ex.GetType().Name}: {ex.Message} AT {stack} INNER {ex.InnerException?.Message} {logs}");
+            // Only the method of each frame, so the message keeps the whole stack.
+            var stack = string.Join(" < ", (ex.ToString()).Split('\n').Select(line => line.Trim())
+                .Where(line => line.StartsWith("at ", StringComparison.Ordinal))
+                .Select(line => line[3..].Split(" in ")[0].Split('(')[0].Replace("Wolverine.", "W.").Replace("Microsoft.", "M."))
+                .Take(40));
+            Assert.Fail($"The step '{name}' failed: {ex.GetType().Name}: {ex.Message[..Math.Min(80, ex.Message.Length)]} AT {stack}");
             throw;
         }
     }
