@@ -38,13 +38,19 @@ public static class TestGateway
     public static string Token(
         string scope = "full", string subject = "user-1", string name = "alex", TimeSpan? lifetime = null,
         DateTime? notBefore = null, string issuer = "hestia-api", string audience = "finance", ECDsa? key = null,
-        bool withScope = true)
+        bool withScope = true, bool withKeyId = true)
     {
         var start = notBefore ?? DateTime.UtcNow;
         var claims = new Dictionary<string, object> { ["sub"] = subject, ["name"] = name };
         if (withScope)
         {
             claims["scope"] = scope;
+        }
+        // As the host (T43): the kid is the JWK thumbprint of the public key.
+        var securityKey = new ECDsaSecurityKey(key ?? Key);
+        if (withKeyId)
+        {
+            securityKey.KeyId = KeyId(key ?? Key);
         }
         return new JsonWebTokenHandler().CreateToken(new SecurityTokenDescriptor
         {
@@ -54,9 +60,16 @@ public static class TestGateway
             IssuedAt = start,
             NotBefore = start,
             Expires = start + (lifetime ?? TimeSpan.FromSeconds(60)),
-            SigningCredentials = new SigningCredentials(new ECDsaSecurityKey(key ?? Key), SecurityAlgorithms.EcdsaSha256),
+            SigningCredentials = new SigningCredentials(securityKey, SecurityAlgorithms.EcdsaSha256),
         });
     }
+
+    /// <summary>The key id of a key: its JWK thumbprint (RFC 7638), as the host computes it.</summary>
+    public static string KeyId(ECDsa key) => Base64UrlEncoder.Encode(
+        JsonWebKeyConverter.ConvertFromECDsaSecurityKey(new ECDsaSecurityKey(key)).ComputeJwkThumbprint());
+
+    /// <summary>The public key of a key, as in the settings (the DER bytes in base64).</summary>
+    public static string PublicKeyOf(ECDsa key) => Convert.ToBase64String(key.ExportSubjectPublicKeyInfo());
 }
 
 /// <summary>The test server has no network peer. This plays the part of the connection (the host, or another machine).</summary>

@@ -75,7 +75,8 @@ if (app.Services.GetRequiredService<IOptions<AuthOptions>>().Value.Mode == AuthM
 }
 else
 {
-    app.Logger.LogInformation("Auth mode Gateway: only the gateway tokens of Hestia.Api are accepted");
+    app.Logger.LogInformation("Auth mode Gateway: only the gateway tokens of Hestia.Api are accepted (key ids: {KeyIds})",
+        string.Join(", ", app.Services.GetRequiredService<FinanceApi.Auth.GatewayAuth.GatewayKeys>().KeyIds));
 }
 await app.Services.SeedRulesAsync(app.Logger);
 
