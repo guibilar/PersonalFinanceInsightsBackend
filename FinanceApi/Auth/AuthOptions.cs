@@ -45,6 +45,12 @@ public class GatewayOptions
     /// </summary>
     public string? PublicKey { get; set; }
 
+    /// <summary>
+    /// Optional: a second public key, the next key during a key change (Hestia T43). Finance accepts tokens of both keys.
+    /// Empty: only <see cref="PublicKey"/>.
+    /// </summary>
+    public string? NextPublicKey { get; set; }
+
     /// <summary>The <c>iss</c> of the tokens.</summary>
     public string Issuer { get; set; } = "hestia-api";
 

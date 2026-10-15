@@ -83,6 +83,7 @@ mode `Gateway`, this API accepts only the short-lived token that the host adds t
 | --- | --- | --- |
 | `Auth:Mode` | `FINANCE_AUTH_MODE` | `Cookie` (the default: this API signs users in, as above) or `Gateway`. |
 | `Auth:Gateway:PublicKey` | `GATEWAY_PUBLIC_KEY` | The public key of the host's signing key (ECDSA P-256): PEM, or the DER bytes in base64 on one line. Required in `Gateway` mode. |
+| `Auth:Gateway:NextPublicKey` | `GATEWAY_NEXT_PUBLIC_KEY` | Optional, only during a change of the gateway key (Hestia T43): the new public key. Finance then accepts the tokens of both keys. The steps are in the HestiaBackend README, "Change the gateway key". |
 | `Auth:Gateway:Issuer`, `Auth:Gateway:Audience` | | `hestia-api` and `finance` (the defaults). |
 
 In `Gateway` mode:

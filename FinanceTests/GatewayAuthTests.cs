@@ -143,6 +143,59 @@ public class GatewayAuthTests
     }
 
     [Fact]
+    public async Task DuringAKeyChange_TokensOfBothKeysAreAccepted_WithOrWithoutAKeyId()
+    {
+        using var nextKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        using var otherKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        await using var factory = Gateway(more: new Dictionary<string, string?>
+        {
+            ["Auth:Gateway:NextPublicKey"] = TestGateway.PublicKeyOf(nextKey),
+        });
+
+        async Task<HttpStatusCode> Status(string token) => (await ClientWith(factory, token).GetAsync("/api/Accounts")).StatusCode;
+
+        Assert.Equal(HttpStatusCode.OK, await Status(TestGateway.Token()));
+        Assert.Equal(HttpStatusCode.OK, await Status(TestGateway.Token(key: nextKey)));
+        // An older host writes no kid: each key is tried.
+        Assert.Equal(HttpStatusCode.OK, await Status(TestGateway.Token(key: nextKey, withKeyId: false)));
+        Assert.Equal(HttpStatusCode.Unauthorized, await Status(TestGateway.Token(key: otherKey)));
+        Assert.Equal(HttpStatusCode.Unauthorized, await Status(TestGateway.Token(key: otherKey, withKeyId: false)));
+        // The current key comes first in the start log.
+        Assert.Equal([TestGateway.KeyId(TestGatewayKeyOf()), TestGateway.KeyId(nextKey)],
+            factory.Services.GetRequiredService<FinanceApi.Auth.GatewayAuth.GatewayKeys>().KeyIds);
+    }
+
+    [Fact]
+    public async Task AfterAKeyChange_TheOldKeyIsRefused()
+    {
+        using var newKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        await using var factory = Gateway(more: new Dictionary<string, string?>
+        {
+            ["Auth:Gateway:PublicKey"] = TestGateway.PublicKeyOf(newKey),
+        });
+
+        Assert.Equal(HttpStatusCode.OK, (await ClientWith(factory, TestGateway.Token(key: newKey)).GetAsync("/api/Accounts")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await ClientWith(factory, TestGateway.Token()).GetAsync("/api/Accounts")).StatusCode);
+    }
+
+    [Fact]
+    public async Task ANextKeyThatIsNotAKey_StopsTheStart()
+    {
+        await using var factory = Gateway(more: new Dictionary<string, string?> { ["Auth:Gateway:NextPublicKey"] = "not a key" });
+
+        var error = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+        Assert.Contains("Auth:Gateway:NextPublicKey", error.ToString());
+    }
+
+    /// <summary>The test key, from its public key in the settings.</summary>
+    private static ECDsa TestGatewayKeyOf()
+    {
+        var key = ECDsa.Create();
+        key.ImportSubjectPublicKeyInfo(Convert.FromBase64String(TestGateway.PublicKey), out _);
+        return key;
+    }
+
+    [Fact]
     public async Task AValidToken_FromOutsideTheInternalNetwork_Is401()
     {
         // A machine on the internet or the tailnet, with a copied token: finance accepts tokens only from the host.

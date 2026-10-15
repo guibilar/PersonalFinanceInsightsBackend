@@ -16,7 +16,8 @@ namespace FinanceApi.Auth;
 /// Auth mode <c>Gateway</c> (Hestia T03, decision D5): Hestia.Api signs users in, and adds a short-lived token to each
 /// request that it sends here. This API then accepts only that token:
 /// <list type="bullet">
-/// <item>a JWT, signed with ES256 by the host's private key; checked with the public key in <c>Auth:Gateway:PublicKey</c>;</item>
+/// <item>a JWT, signed with ES256 by the host's private key; checked with the public key in <c>Auth:Gateway:PublicKey</c>,
+/// or during a key change also <c>Auth:Gateway:NextPublicKey</c> (T43; the token's <c>kid</c> names the key);</item>
 /// <item>issuer <c>hestia-api</c>, audience <c>finance</c>, and a valid lifetime (60 seconds, 10 seconds of clock skew);</item>
 /// <item>only from the internal Docker network: the connection (not X-Forwarded-For) comes from a trusted proxy network
 /// (<c>ReverseProxy:TrustedNetworks</c>) or loopback;</item>
@@ -37,7 +38,12 @@ public static class GatewayAuth
 
     public static void AddGatewayAuth(this AuthenticationBuilder authentication, IServiceCollection services, GatewayOptions gateway)
     {
-        var publicKey = LoadPublicKey(gateway.PublicKey);
+        var keys = new List<ECDsaSecurityKey> { SecurityKey(LoadPublicKey(gateway.PublicKey, "Auth:Gateway:PublicKey")) };
+        if (!string.IsNullOrWhiteSpace(gateway.NextPublicKey))
+        {
+            keys.Add(SecurityKey(LoadPublicKey(gateway.NextPublicKey, "Auth:Gateway:NextPublicKey")));
+        }
+        services.AddSingleton(new GatewayKeys(keys.Select(key => key.KeyId).ToList()));
         authentication
             .AddJwtBearer(SchemeName, options =>
             {
@@ -47,7 +53,9 @@ public static class GatewayAuth
                 {
                     ValidIssuer = gateway.Issuer,
                     ValidAudience = gateway.Audience,
-                    IssuerSigningKey = new ECDsaSecurityKey(publicKey),
+                    // A token with a kid gets the key with that id; a token without one (an older host) is tried
+                    // with each key.
+                    IssuerSigningKeys = keys,
                     ValidAlgorithms = [SecurityAlgorithms.EcdsaSha256],
                     RequireExpirationTime = true,
                     RequireSignedTokens = true,
@@ -116,11 +124,19 @@ public static class GatewayAuth
         return forwarded.KnownProxies.Contains(peer) || forwarded.KnownIPNetworks.Any(network => network.Contains(peer));
     }
 
-    private static ECDsa LoadPublicKey(string? value)
+    /// <summary>The key with its id: the JWK thumbprint (RFC 7638), the same id that the host writes as <c>kid</c>.</summary>
+    private static ECDsaSecurityKey SecurityKey(ECDsa key)
+    {
+        var securityKey = new ECDsaSecurityKey(key);
+        securityKey.KeyId = Base64UrlEncoder.Encode(JsonWebKeyConverter.ConvertFromECDsaSecurityKey(securityKey).ComputeJwkThumbprint());
+        return securityKey;
+    }
+
+    private static ECDsa LoadPublicKey(string? value, string setting)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
-            throw new InvalidOperationException("Auth:Mode is Gateway, but Auth:Gateway:PublicKey is not set.");
+            throw new InvalidOperationException($"Auth:Mode is Gateway, but {setting} is not set.");
         }
         var key = ECDsa.Create();
         try
@@ -144,9 +160,12 @@ public static class GatewayAuth
         {
             key.Dispose();
             throw new InvalidOperationException(
-                "Auth:Gateway:PublicKey is not an ECDSA P-256 public key (PEM, or the DER bytes in base64).", exception);
+                $"{setting} is not an ECDSA P-256 public key (PEM, or the DER bytes in base64).", exception);
         }
     }
+
+    /// <summary>The ids of the accepted public keys (T43), for the start log: the first is the current key.</summary>
+    public sealed record GatewayKeys(IReadOnlyList<string> KeyIds);
 
     /// <summary>Removes <see cref="AuthController"/> from the controllers.</summary>
     private sealed class WithoutAuthController : IApplicationFeatureProvider<ControllerFeature>

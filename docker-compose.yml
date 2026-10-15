@@ -36,6 +36,8 @@ services:
       # only its gateway tokens, checked with the public key (see "Signing in" in the README).
       Auth__Mode: "${FINANCE_AUTH_MODE:-Cookie}"
       Auth__Gateway__PublicKey: "${GATEWAY_PUBLIC_KEY:-}"
+      # Only during a change of the gateway key (T43): the new public key. Finance accepts both keys.
+      Auth__Gateway__NextPublicKey: "${GATEWAY_NEXT_PUBLIC_KEY:-}"
       # The finance events (T04): the broker of the "events" profile. Empty: no events, finance works as before.
       Events__RabbitMq: "${EVENTS_RABBITMQ_URL:-}"
     depends_on:
