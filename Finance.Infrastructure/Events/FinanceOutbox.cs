@@ -14,10 +14,12 @@ namespace Finance.Infrastructure.Events;
 /// The transactional outbox of the finance events (T04, D7), with Wolverine. For each save of the
 /// <see cref="Persistence.FinanceDbContext"/>:
 /// <list type="number">
-/// <item>Before the save, the raised events become Wolverine envelopes, added to the same save as rows of
-/// <c>wolverine.wolverine_outgoing_envelopes</c>. So the change and its events commit together, or neither does.</item>
-/// <item>After the commit (of the save, or of the explicit transaction around it), Wolverine sends them to RabbitMQ
-/// and deletes the rows. If the send fails or the process stops, Wolverine's durability agent sends them later.</item>
+/// <item>Before the save, the raised events become Wolverine envelopes for the durable local queue
+/// <see cref="FinanceEventsSetup.ForwardQueue"/> (T79), added to the same save as rows of
+/// <c>wolverine.wolverine_incoming_envelopes</c>. So the change and its events commit together, or neither does.</item>
+/// <item>After the commit (of the save, or of the explicit transaction around it), Wolverine runs
+/// <see cref="FinanceEventForwarder{TEvent}"/>, which sends each event to RabbitMQ. If the broker is down or the process
+/// stops, the rows stay, and Wolverine tries again later.</item>
 /// <item>A failed save stores no envelope: its events go back to the queue, for a later save. A rolled-back
 /// transaction sends nothing.</item>
 /// </list>
@@ -48,7 +50,7 @@ public sealed class FinanceOutbox(FinanceEventCollector collector, IWolverineRun
         _inSaveEvents = events;
         foreach (var @event in events)
         {
-            // The route is durable: Wolverine adds the envelope to the context (an OutgoingMessage row).
+            // The route is a durable local queue: Wolverine adds the envelope to the context (an IncomingMessage row).
             await outbox.PublishAsync(@event);
         }
     }
@@ -79,7 +81,8 @@ public sealed class FinanceOutbox(FinanceEventCollector collector, IWolverineRun
         }
         if (context is not null)
         {
-            foreach (var entry in context.ChangeTracker.Entries<OutgoingMessage>().Where(e => e.State == EntityState.Added).ToList())
+            foreach (var entry in context.ChangeTracker.Entries()
+                         .Where(e => e is { Entity: IncomingMessage or OutgoingMessage, State: EntityState.Added }).ToList())
             {
                 entry.State = EntityState.Detached;
             }
@@ -109,7 +112,7 @@ public sealed class FinanceOutbox(FinanceEventCollector collector, IWolverineRun
         }
         catch (Exception ex)
         {
-            // The change and its envelopes are committed: Wolverine's durability agent sends them later.
+            // The change and its envelopes are committed: Wolverine's durability agent runs them later.
             logger.LogError(ex, "The finance events are in the outbox, but the send failed. Wolverine sends them later.");
         }
     }
