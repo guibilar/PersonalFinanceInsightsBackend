@@ -1,0 +1,5 @@
+/api/Budget/Filter
+/api/CategoryRules/Preview
+/api/Reports/breakdown
+/api/Reports/merchants
+/api/Transaction/Filter
