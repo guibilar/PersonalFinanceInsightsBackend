@@ -91,6 +91,10 @@ jobs:
       RABBITMQ_USER: hestia
       RABBITMQ_PASSWORD: ci-rabbitmq-password
       EVENTS_RABBITMQ_URL: amqp://hestia:ci-rabbitmq-password@rabbitmq:5672
+    # T45: each step through scripts/ci-step.sh: a failed step writes its last lines as an annotation.
+    defaults:
+      run:
+        shell: bash scripts/ci-step.sh {0}
     steps:
       - uses: actions/checkout@v7
       # As on the server: the backup container runs as the user who owns ./backups.
@@ -165,7 +169,11 @@ jobs:
           fi
       - name: Container logs
         if: failure()
-        run: docker compose logs
+        shell: bash
+        run: |
+          docker compose logs
+          # T45: the last lines of the API as an annotation.
+          echo "::error title=personal-finance-api log (last 30 lines)::$(docker logs --tail 30 personal-finance-api 2>&1 | sed -e 's/%/%25/g' -e 's/\r/%0D/g' | awk '{printf "%s%%0A", $0}')"
       - name: Stop the stack
         if: always()
         run: docker compose down -v

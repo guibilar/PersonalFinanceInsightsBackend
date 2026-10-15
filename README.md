@@ -456,7 +456,7 @@ xUnit v3 on Microsoft Testing Platform (enabled in `global.json`), so `dotnet te
 as an executable.
 
 ```bash
-dotnet test                                    # in-memory database (fast; 4 PostgreSQL-only tests are skipped)
+dotnet test                                    # in-memory database (fast; 13 PostgreSQL-only tests are skipped)
 FINANCE_TEST_POSTGRES=container dotnet test    # starts PostgreSQL 15 in Docker (Testcontainers), removes it afterwards
 FINANCE_TEST_POSTGRES="Host=localhost;Username=postgres;Password=postgres" dotnet test   # your own server
 FINANCE_TEST_POSTGRES=container FINANCE_TEST_RABBITMQ=container dotnet test    # also the event tests (RabbitMQ in Docker)
