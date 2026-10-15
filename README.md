@@ -93,6 +93,9 @@ In `Gateway` mode:
 - The token counts only when the connection comes from loopback or `ReverseProxy:TrustedNetworks` (the Docker network
   of the host), not from `X-Forwarded-For`. A copied token from another machine answers 401.
 - The scope `read-only` (the host's read-only token) reads, and calls the `[ReadOnlyQuery]` POSTs. Anything else answers 403.
+- The `[ReadOnlyQuery]` paths are listed in `docs/read-only-queries.txt` (T44). A test fails when the file is not current
+  (update it with `FINANCE_UPDATE_READ_ONLY_QUERIES=1 dotnet test`), and Hestia.Api's CI fails until its
+  `FinanceProxy:ReadOnlyQueries` has the same paths.
 - `/api/Auth/*`, the session cookie, and `Auth:ReadOnlyToken` are off. The account in `Auth:InitialUser` is not made.
 - The finance data stays the same. The finance account stays in the database (for a return to `Cookie` mode).
 
