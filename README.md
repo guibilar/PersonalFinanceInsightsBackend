@@ -426,11 +426,16 @@ event with its id, so a second send of the same event has the same id, and the H
 How it works (Wolverine, MIT licence):
 
 1. A change runs in one database transaction (`FinanceChanges`, `IUnitOfWork`).
-2. The service raises its events. In each save, `FinanceOutbox` writes them as Wolverine envelopes into the table
-   `wolverine.wolverine_outgoing_envelopes`, in the same transaction as the change.
-3. After the commit, Wolverine sends them to the fanout exchange `hestia.finance-events`, and deletes the rows.
-   If the broker is down, the rows stay, and Wolverine sends them later.
+2. The service raises its events. In each save, `FinanceOutbox` writes them as Wolverine envelopes for the durable
+   local queue `finance-events-forward` (table `wolverine.wolverine_incoming_envelopes`), in the same transaction as the
+   change (T79).
+3. After the commit, `FinanceEventForwarder` takes each event from the queue and sends it to the fanout exchange
+   `hestia.finance-events` through a durable sender (table `wolverine.wolverine_outgoing_envelopes`). If the broker is
+   down, the rows stay, and Wolverine sends them later.
 4. A failed change commits nothing, so it sends nothing.
+
+Why the local queue (T79): Wolverine builds the routes of the published events when it starts, and a route to RabbitMQ
+needs a broker connection. A route to a local queue does not. So a broker that is down does not stop the start.
 
 Wolverine makes its tables in the schema `wolverine` when the API starts. They are not in the EF Core migrations.
 **The broker is down (T37).**
@@ -439,17 +444,17 @@ Wolverine makes its tables in the schema `wolverine` when the API starts. They a
   connects again when the broker is back, and Wolverine sends the waiting events. No restart is necessary.
 - **Health:** the readiness check `events-broker` is **Degraded** while finance has no connection. Degraded keeps
   `/health/ready` at 200, so the apps still work. It is Healthy when the events are off.
-- **The broker is down when finance starts (known limit):** the start waits `Events:Broker:StartTimeout` (30 seconds)
-  for the broker, then fails. `ContinueOnFailures` skips the transport, but Wolverine (6.49) then builds the routes of
-  the published events, and a route to a transport without a connection throws. Docker starts finance again
-  (`restart: unless-stopped`), and `depends_on` waits for a healthy broker when both start together. The events of
-  earlier changes stay in the outbox and go out after the start. The test
-  `BrokerTests.TheBrokerIsDownAtTheStart_TheStartFailsSoon` fails when a Wolverine update removes this limit.
+- **The broker is down when finance starts (T79):** the start waits `Events:Broker:StartTimeout` (30 seconds) for the
+  broker, then goes on without it. Changes save, and their events wait in the queue. `FinanceBrokerReconnector` tries
+  to connect every `Events:Broker:ReconnectInterval` (15 seconds), and declares the exchange when the broker is there.
+  Then the events go out, with no restart. The log says "connected to the RabbitMQ broker after the start of finance".
+  The test `BrokerTests.TheBrokerIsDownAtTheStart_FinanceStarts_AndSendsTheEventsWhenTheBrokerComes` checks it.
 
 | Setting (`Events` section) | Default | Description |
 | --- | --- | --- |
 | `RabbitMq` | empty | The broker address. Empty: no events. |
 | `Broker:StartTimeout` | `00:00:30` | How long the start waits for the broker (Wolverine's own default is 2 minutes). |
+| `Broker:ReconnectInterval` | `00:00:15` | After a start without the broker: how often finance tries to connect (T79). |
 
 ## Tests
 

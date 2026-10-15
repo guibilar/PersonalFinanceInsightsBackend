@@ -22,8 +22,10 @@ namespace FinanceTests;
 /// </summary>
 public class BrokerTests
 {
-    private const string CountOutgoingEnvelopes =
-        "SELECT count(*)::int AS \"Value\" FROM " + FinanceEventsOptions.OutboxSchema + ".wolverine_outgoing_envelopes";
+    /// <summary>The events that wait in the database: on their way to the broker (T79), or not run yet.</summary>
+    private const string CountWaitingEnvelopes =
+        "SELECT ((SELECT count(*) FROM " + FinanceEventsOptions.OutboxSchema + ".wolverine_outgoing_envelopes) + " +
+        "(SELECT count(*) FROM " + FinanceEventsOptions.OutboxSchema + ".wolverine_incoming_envelopes WHERE status <> 'Handled'))::int AS \"Value\"";
 
     [Fact]
     public async Task WithoutEvents_TheCheckIsHealthy()
@@ -79,7 +81,7 @@ public class BrokerTests
             $"The change failed while the broker is down: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()} {logs}");
         var created = await response.ReadAsync<TransactionOutputDto>();
         Assert.Empty(await events.AfterQuietPeriodAsync<TransactionChanged>(e => e.TransactionId == created.Id));
-        Assert.True(await OutgoingAsync(factory) > 0, $"No envelope in the outbox. {logs}");
+        Assert.True(await WaitingAsync(factory) > 0, $"No envelope in the outbox. {logs}");
 
         gate.Open();
 
@@ -90,31 +92,64 @@ public class BrokerTests
         }
         catch (TimeoutException ex)
         {
-            Assert.Fail($"{ex.Message} Outbox: {await OutgoingAsync(factory)}. {logs}");
+            Assert.Fail($"{ex.Message} Outbox: {await WaitingAsync(factory)}. {logs}");
             throw;
         }
         Assert.Equal(description, sent.Description);
         Assert.Equal(HealthStatus.Healthy, await Eventually(async () => (await CheckAsync(factory)).Status, s => s == HealthStatus.Healthy));
-        Assert.Equal(0, await Eventually(() => OutgoingAsync(factory), count => count == 0));
+        Assert.Equal(0, await Eventually(() => WaitingAsync(factory), count => count == 0));
     }
 
     /// <summary>
-    /// The known limit (Wolverine 6.49): a broker that is down at the start stops the start, after
-    /// <c>Events:Broker:StartTimeout</c>. Docker starts finance again. If this test fails because the start works, Wolverine
-    /// fixed it: remove the limit from the README and from <c>FinanceEventsSetup</c>, and test the reconnect instead.
+    /// T79: a broker that is down at the start does not stop it (before T79, Wolverine stopped the start when it built
+    /// the routes to RabbitMQ). Finance saves its changes, keeps their events, and sends them when the broker comes, with
+    /// no restart.
     /// </summary>
     [Fact]
-    public async Task TheBrokerIsDownAtTheStart_TheStartFailsSoon()
+    public async Task TheBrokerIsDownAtTheStart_FinanceStarts_AndSendsTheEventsWhenTheBrokerComes()
     {
         Assert.SkipUnless(TestDatabase.OnPostgres, $"Needs PostgreSQL: set {TestDatabase.Variable}.");
-        await using var gate = new BrokerGate("amqp://guest:guest@127.0.0.1:5672");
-        await using var factory = Start(gate.Address, new LogLines());
+        Assert.SkipUnless(TestRabbitMq.Available, $"Needs RabbitMQ: set {TestRabbitMq.Variable}.");
+        await using var gate = new BrokerGate(TestRabbitMq.Address!);
+        var logs = new LogLines();
+        await using var factory = Start(gate.Address, logs, reconnectInterval: TimeSpan.FromSeconds(1));
         var clock = Stopwatch.StartNew();
 
-        var error = Assert.ThrowsAny<Exception>(() => factory.CreateClient());
+        var client = Phase("start without the broker", factory.CreateClient, logs);
 
         Assert.True(clock.Elapsed < TimeSpan.FromSeconds(30), $"The start took {clock.Elapsed}.");
-        Assert.Contains("RabbitMQ.Internal", error.ToString());
+        Assert.Equal(HealthStatus.Degraded, (await CheckAsync(factory)).Status);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/health/ready")).StatusCode);
+
+        var description = $"FLORIST {Guid.NewGuid():N}";
+        var response = await client.PostAsJsonAsync("/api/Transaction", new
+        {
+            date = "2026-10-12", description, amount = 31.40m, transactionType = "Debit",
+            accountId = Account.DefaultCreditCardId, categoryId = DefaultCategories.Shopping
+        }, FinanceApiFactory.Json);
+        Assert.True(response.StatusCode == HttpStatusCode.Created,
+            $"The change failed without the broker: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()} {logs}");
+        var created = await response.ReadAsync<TransactionOutputDto>();
+        Assert.True(await WaitingAsync(factory) > 0, $"No event waits in the database. {logs}");
+
+        // The broker comes. The test queue binds on the broker itself; finance declares the exchange when it connects.
+        gate.Open();
+        Assert.Equal(HealthStatus.Healthy, await Eventually(async () => (await CheckAsync(factory)).Status, s => s == HealthStatus.Healthy));
+        await using var events = await FinanceEventQueue.BindAsync();
+
+        TransactionChanged sent;
+        try
+        {
+            sent = await events.WaitForAsync<TransactionChanged>(e => e.TransactionId == created.Id, TimeSpan.FromSeconds(120));
+        }
+        catch (TimeoutException ex)
+        {
+            Assert.Fail($"{ex.Message} Waiting: {await WaitingAsync(factory)}. {logs}");
+            throw;
+        }
+        Assert.Equal(description, sent.Description);
+        Assert.Equal(0, await Eventually(() => WaitingAsync(factory), count => count == 0));
+        Assert.Contains("connected to the RabbitMQ broker after the start", logs.ToString());
     }
 
     /// <summary>Runs one step of a test, and names the step and the stack in the failure (CI shows only the message).</summary>
@@ -136,7 +171,7 @@ public class BrokerTests
         }
     }
 
-    private static FinanceApiFactory Start(string rabbitMq, LogLines logs)
+    private static FinanceApiFactory Start(string rabbitMq, LogLines logs, TimeSpan? reconnectInterval = null)
     {
         FinanceApiFactory? factory = null;
         factory = new FinanceApiFactory(services =>
@@ -144,7 +179,11 @@ public class BrokerTests
             services.AddFinanceEvents(new FinanceEventsOptions
             {
                 RabbitMq = rabbitMq,
-                Broker = new FinanceBrokerOptions { StartTimeout = TimeSpan.Zero }
+                Broker = new FinanceBrokerOptions
+                {
+                    StartTimeout = TimeSpan.Zero,
+                    ReconnectInterval = reconnectInterval ?? TimeSpan.FromSeconds(15)
+                }
             }, factory!.ConnectionString!);
             services.AddSingleton<ILoggerProvider>(logs);
         });
@@ -158,8 +197,8 @@ public class BrokerTests
         return report.Entries[BrokerHealthCheck.Name];
     }
 
-    private static Task<int> OutgoingAsync(FinanceApiFactory factory) =>
-        factory.QueryAsync(db => db.Database.SqlQueryRaw<int>(CountOutgoingEnvelopes).SingleAsync());
+    private static Task<int> WaitingAsync(FinanceApiFactory factory) =>
+        factory.QueryAsync(db => db.Database.SqlQueryRaw<int>(CountWaitingEnvelopes).SingleAsync());
 
     private static async Task<T> Eventually<T>(Func<Task<T>> read, Func<T, bool> done)
     {

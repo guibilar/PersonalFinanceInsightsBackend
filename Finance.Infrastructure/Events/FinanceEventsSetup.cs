@@ -7,9 +7,12 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Wolverine;
+using Wolverine.Configuration;
 using Wolverine.EntityFrameworkCore.Internals;
+using Wolverine.ErrorHandling;
 using Wolverine.Postgresql;
 using Wolverine.RabbitMQ;
+using Wolverine.RabbitMQ.Internal;
 
 namespace Finance.Infrastructure.Events;
 
@@ -45,6 +48,9 @@ public sealed class FinanceEventsOptions
 
 public static class FinanceEventsSetup
 {
+    /// <summary>The durable local queue of the events on their way to the broker (T79).</summary>
+    public const string ForwardQueue = "finance-events-forward";
+
     /// <summary>
     /// Turns the finance events on: the Wolverine outbox in the finance database (schema <c>wolverine</c>), and
     /// RabbitMQ. Every finance event goes to the fanout exchange <see cref="FinanceEventTopology.Exchange"/>.
@@ -58,10 +64,13 @@ public static class FinanceEventsSetup
         if (!options.Broker.IsValid())
         {
             throw new InvalidOperationException(
-                $"{FinanceEventsOptions.SectionName}:Broker:StartTimeout must be zero or more.");
+                $"{FinanceEventsOptions.SectionName}:Broker:StartTimeout must be zero or more, and ReconnectInterval more than zero.");
         }
 
         services.Replace(ServiceDescriptor.Singleton(new FinanceEventsSwitch(Enabled: true)));
+        services.AddSingleton(options);
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddHostedService<FinanceBrokerReconnector>();
         services.AddScoped<FinanceOutbox>();
         services.AddScoped<FinanceOutboxSaveInterceptor>();
         services.AddScoped<FinanceOutboxTransactionInterceptor>();
@@ -82,17 +91,29 @@ public static class FinanceEventsSetup
                 // Finance only publishes: no request/reply system queue (a listener that finance does not use).
                 .DisableSystemRequestReplyQueueDeclaration()
                 .DeclareExchange(FinanceEventTopology.Exchange, exchange => exchange.ExchangeType = ExchangeType.Fanout);
+            // Durable: the forward stores the event as an outgoing envelope before the local message counts as done,
+            // and Wolverine sends it (also later, after a broker outage). The default for an exchange that no publish
+            // rule names is inline, which retries a failed send in memory and then discards the event.
+            wolverine.Transports.GetOrCreate<RabbitMqTransport>().Exchanges[FinanceEventTopology.Exchange].Mode = EndpointMode.Durable;
+            // T79: each event goes first to a durable local queue (stored with the change, in the finance database),
+            // and FinanceEventForwarder sends it to the exchange. Wolverine builds the routes of the published events
+            // at its start; a route to RabbitMQ needs a broker connection, but a route to a local queue does not. So a
+            // broker that is down at the start no longer stops it.
+            wolverine.LocalQueue(ForwardQueue).UseDurableInbox();
             foreach (var eventType in FinanceEventTopology.EventTypes)
             {
-                // Durable: the envelope is stored with the change, and sent after the commit.
-                wolverine.PublishMessage(eventType).ToRabbitExchange(FinanceEventTopology.Exchange).UseDurableOutbox();
+                wolverine.PublishMessage(eventType).ToLocalQueue(ForwardQueue);
+                wolverine.Discovery.IncludeType(typeof(FinanceEventForwarder<>).MakeGenericType(eventType));
             }
+            wolverine.Policies.OnException(_ => true, "Finance event forward (T79)")
+                .RetryWithCooldown(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5))
+                .Then.ScheduleRetryIndefinitely(TimeSpan.FromSeconds(15), TimeSpan.FromSeconds(30), TimeSpan.FromMinutes(1));
 
-            // T37: a broker that is down when finance starts still stops the start. ContinueOnFailures skips the
-            // transport, but Wolverine then builds the routes of the published events, and a route to a transport with
-            // no connection throws (Wolverine 6.49). Docker starts finance again until the broker is back; the events
-            // wait in the outbox. A broker that stops later is no problem: the RabbitMQ client connects again, and the
-            // outbox keeps the events meanwhile. The start waits at most Events:Broker:StartTimeout for the broker.
+            // T37, T79: a broker that is down when finance starts does not stop the start. ContinueOnFailures skips
+            // the transport; the routes of the events go to the local queue, which needs no broker; and
+            // FinanceBrokerReconnector connects later. A broker that stops later is no problem: the RabbitMQ client
+            // connects again, and the queue keeps the events meanwhile. The start waits at most
+            // Events:Broker:StartTimeout for the broker.
             wolverine.ResourceMigrationFailureMode = ResourceMigrationFailureMode.ContinueOnFailures;
             wolverine.BrokerInitializationTimeout = options.Broker.StartTimeout;
         });

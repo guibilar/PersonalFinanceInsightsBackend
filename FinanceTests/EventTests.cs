@@ -36,8 +36,10 @@ public class EventTests
 
     private static string Day(DateTime date) => date.ToString("yyyy-MM-dd");
 
-    private const string CountOutgoingEnvelopes =
-        "SELECT count(*)::int AS \"Value\" FROM " + FinanceEventsOptions.OutboxSchema + ".wolverine_outgoing_envelopes";
+    /// <summary>The events that wait in the database: on their way to the broker (T79), or not run yet.</summary>
+    private const string CountWaitingEnvelopes =
+        "SELECT ((SELECT count(*) FROM " + FinanceEventsOptions.OutboxSchema + ".wolverine_outgoing_envelopes) + " +
+        "(SELECT count(*) FROM " + FinanceEventsOptions.OutboxSchema + ".wolverine_incoming_envelopes WHERE status <> 'Handled'))::int AS \"Value\"";
 
     [Fact]
     public async Task AddingATransaction_SendsTransactionChanged()
@@ -176,7 +178,7 @@ public class EventTests
             new { description = "Paint", categoryId = DefaultCategories.Shopping }, FinanceApiFactory.Json);
 
         // One save holds the changed transaction and the envelope of its event: they commit together.
-        Assert.Contains(saves.Saves, save => save.Contains($"Modified {nameof(Transaction)}") && save.Contains($"Added {nameof(OutgoingMessage)}"));
+        Assert.Contains(saves.Saves, save => save.Contains($"Modified {nameof(Transaction)}") && save.Contains($"Added {nameof(IncomingMessage)}"));
         await host.Events.WaitForAsync<TransactionChanged>(e => e.TransactionId == id && e.Description == "Paint");
     }
 
@@ -201,7 +203,7 @@ public class EventTests
         Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
         Assert.NotEqual("Never stored", await host.Factory.QueryAsync(db => db.Transactions.Where(t => t.Id == id).Select(t => t.Description).SingleAsync()));
         Assert.Empty(await host.Events.AfterQuietPeriodAsync<TransactionChanged>(e => e.TransactionId == id && e.Change == TransactionChange.Updated));
-        Assert.Equal(0, await host.Factory.QueryAsync(db => db.Database.SqlQueryRaw<int>(CountOutgoingEnvelopes).SingleAsync()));
+        Assert.Equal(0, await host.Factory.QueryAsync(db => db.Database.SqlQueryRaw<int>(CountWaitingEnvelopes).SingleAsync()));
     }
 
     [Fact]
