@@ -596,6 +596,12 @@ docker/restore.sh finance.dump
 A destination that encrypts by itself works too: an rclone `crypt` remote, or an encrypted disk
 (LUKS, BitLocker, FileVault). An unencrypted cloud folder or NAS share is not enough.
 
+**The restore check (Hestia T99).** After each nightly dump, the service restores it into a scratch database
+(`FinanceDb_restore_check`, never the real one), checks that it has tables and the migration history, and drops it.
+`BACKUP_VERIFY=false` turns it off; `docker compose exec backup backup.sh verify` runs it now. The result of the dump
+and of the check is in `backups/status/finance.json` (mode 644, no secrets). Hestia.Api reads that folder when its
+`FINANCE_BACKUP_STATUS_DIR` points to it, and shows a failed or old backup as an alert on Today.
+
 ```bash
 docker compose exec backup backup.sh once          # an extra dump right now
 docker/restore.sh backups/finance-2026-09-28_030000.dump
