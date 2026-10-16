@@ -114,7 +114,13 @@ verify() {
       "SELECT count(*) FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema')")
     migrations=$(psql --no-psqlrc --tuples-only --no-align --dbname="$scratch" -c \
       "SELECT count(*) FROM information_schema.tables WHERE table_name = '__EFMigrationsHistory'")
-    if [ "${tables:-0}" -eq 0 ] || [ "${migrations:-0}" -eq 0 ]; then
+    # A new install dumps before the API made its tables: an empty dump of an empty database is right.
+    live=$(psql --no-psqlrc --tuples-only --no-align -c \
+      "SELECT count(*) FROM information_schema.tables WHERE table_schema NOT IN ('pg_catalog', 'information_schema')")
+    if [ "${tables:-0}" -eq 0 ] && [ "${live:-0}" -eq 0 ]; then
+      verify_ok=true
+      verify_message=$(clean "$(basename "$newest") restored: the database had no tables yet.")
+    elif [ "${tables:-0}" -eq 0 ] || [ "${migrations:-0}" -eq 0 ]; then
       message="The dump restored, but it has no tables or no migration history."
     else
       verify_ok=true
