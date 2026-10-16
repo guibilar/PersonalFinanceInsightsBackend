@@ -136,6 +136,16 @@ jobs:
         run: test "$(docker exec personal-finance-api id -u)" != 0
       - name: Smoke test (health, sign-in, session cookie, protected calls)
         run: docker/smoke-test.sh http://localhost:5096
+      # Hestia T99: the restore check of the newest dump, and its status file for Hestia.Api.
+      - name: Restore check (backup.sh verify) and the status file
+        run: |
+          # The dump at start can be older than the migrations (an empty database): check a dump of now.
+          docker compose exec -T backup backup.sh once
+          docker compose exec -T backup backup.sh verify
+          test "$(jq -r .lastVerifyOk backups/status/finance.json)" = true
+          test "$(jq -r .lastBackupOk backups/status/finance.json)" = true
+          test "$(stat -c %a backups/status/finance.json)" = 644
+          test "$(docker compose exec -T db psql -U postgres -tAc "SELECT count(*) FROM pg_database WHERE datname = 'FinanceDb_restore_check'")" = 0
       - name: Backup written at start (owner-only, the runner's), and restore.sh restores it and drops an extra schema
         run: |
           dump=$(ls backups/finance-*.dump | head -n 1)

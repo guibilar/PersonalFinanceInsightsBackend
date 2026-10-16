@@ -96,6 +96,9 @@ services:
       PGDATABASE: ${POSTGRES_DB:-FinanceDb}
       BACKUP_AT: ${BACKUP_AT:-03:00}
       BACKUP_KEEP_DAYS: ${BACKUP_KEEP_DAYS:-14}
+      # After each nightly dump, restore it into a scratch database and check it (Hestia T99). "false" turns it off.
+      # The result is in backups/status/finance.json, for Hestia.Api (its FINANCE_BACKUP_STATUS_DIR).
+      BACKUP_VERIFY: ${BACKUP_VERIFY:-true}
       TZ: ${TZ:-America/Toronto}
     volumes:
       - ${BACKUP_DIR:-./backups}:/backups
