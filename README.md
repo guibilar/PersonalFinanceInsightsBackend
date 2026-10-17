@@ -191,7 +191,8 @@ Transactions are duplicates only within the same account.
 `POST /api/Transaction` `{date, description, amount, transactionType, accountId, categoryId?, flow?, allowDuplicate?}`
 adds one transaction, for accounts without an importer (statement format `Manual`) or a purchase that isn't on a
 statement yet. The amount is positive and `transactionType` (`Debit` or `Credit`) says which way the money moved.
-The date is from 2000 to a year from today; another year (a typo) is a 400. Without `categoryId` and `flow` the rules decide, as for an imported row; a given one is kept when the rules are
+The date is from 2000 to a year from today; another year (a typo) is a 400. Like every date the API reads (the
+filters' and a custom budget's too), it is the calendar day as written: `2026-09-01T23:30-04:00` is September 1st. Without `categoryId` and `flow` the rules decide, as for an imported row; a given one is kept when the rules are
 re-applied, and a flow that doesn't fit the direction is a 400. An identical transaction (same account, day, amount
 and description) is a 409 unless `allowDuplicate`, for two purchases that really were the same.
 

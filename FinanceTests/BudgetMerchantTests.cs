@@ -118,6 +118,18 @@ public class BudgetMerchantTests
     }
 
     [Fact]
+    public async Task ACustomBudget_KeepsItsDaysAsWritten_WithAnOffset()
+    {
+        await using var factory = FactoryOnSeptember15();
+        var client = factory.CreateClient();
+
+        var result = await CreateAsync(client, "Trip", "Custom", merchant: "hotel",
+            startDate: "2026-07-01T23:30:00-04:00", endDate: "2026-08-15T00:30:00+09:00");
+
+        Assert.Equal((new DateTime(2026, 7, 1), new DateTime(2026, 8, 15)), (result.StartDate, result.EndDate)!);
+    }
+
+    [Fact]
     public async Task AMerchantCanHaveBudgetsForSeveralPeriods_AndACategoryBudgetCountsTheYearToo()
     {
         await using var factory = FactoryOnSeptember15();
