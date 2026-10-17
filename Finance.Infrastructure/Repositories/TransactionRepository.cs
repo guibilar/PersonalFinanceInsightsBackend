@@ -59,7 +59,7 @@ public class TransactionRepository(FinanceDbContext dbContext)
             .SingleOrDefaultAsync(t => t.Id == id, cancellationToken);
     }
 
-    public async Task<int> HideLegacyMonthlyRentAsync(IReadOnlyCollection<DateTime> months, CancellationToken cancellationToken = default)
+    public async Task<List<Transaction>> HideLegacyMonthlyRentAsync(IReadOnlyCollection<DateTime> months, CancellationToken cancellationToken = default)
     {
         var rows = await DbContext.Transactions
             .Where(t => t.Account!.Type == AccountType.Chequing && t.CategoryId == Category.RentId &&
@@ -67,7 +67,7 @@ public class TransactionRepository(FinanceDbContext dbContext)
             .ToListAsync(cancellationToken);
         rows.ForEach(t => t.Hidden = true);
         await SaveChangesAsync(cancellationToken);
-        return rows.Count;
+        return rows;
     }
 
     public Task<Transaction?> FindByHashAsync(Guid accountId, string hash, CancellationToken cancellationToken = default)

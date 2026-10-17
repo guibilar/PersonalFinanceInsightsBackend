@@ -413,7 +413,7 @@ no outbox, no RabbitMQ, and no extra queries.
 | Event | When |
 | --- | --- |
 | `TransactionsImported` | A statement import finished (also when it added nothing). |
-| `TransactionChanged` | A transaction was added by hand, changed (description, category, flow, note, tags, budget link, rules), deleted, or restored. |
+| `TransactionChanged` | A transaction was added by hand, changed (description, category, flow, note, tags, budget link, rules), deleted (a generated "Monthly Rent" row too, when an import replaces it), or restored. |
 | `BudgetLimitReached` | A change made an active budget's spending cross 80 % or 100 % in its current period. |
 | `BalanceRecorded` | A balance was entered, or a statement gave one. |
 | `SubscriptionPriceChanged` | A new charge of a recurring payment has a new fixed price. |

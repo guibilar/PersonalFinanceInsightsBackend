@@ -81,7 +81,9 @@ public class StatementImportService(
             if (rentMonths.Count > 0)
             {
                 var replaced = await transactionRepository.HideLegacyMonthlyRentAsync(rentMonths, ct);
-                if (replaced > 0) logger.LogInformation("Hid {Count} generated monthly rent rows replaced by real payments", replaced);
+                if (replaced.Count > 0) logger.LogInformation("Hid {Count} generated monthly rent rows replaced by real payments", replaced.Count);
+                // Deleted, as one hidden by hand is.
+                await changes.RaiseChangedAsync(replaced, TransactionChange.Deleted, ct);
             }
 
             // The statement's own figure for what the account was worth replaces any typed in for that day.

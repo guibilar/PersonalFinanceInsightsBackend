@@ -22,9 +22,9 @@ public interface ITransactionRepository : IBaseRepository<Transaction>
 
     /// <summary>
     /// Hides the rows generated as <see cref="Import.LegacyMonthlyRent"/> in these months (their first day) and returns
-    /// how many were hidden.
+    /// the ones it hid.
     /// </summary>
-    Task<int> HideLegacyMonthlyRentAsync(IReadOnlyCollection<DateTime> months, CancellationToken cancellationToken = default);
+    Task<List<Transaction>> HideLegacyMonthlyRentAsync(IReadOnlyCollection<DateTime> months, CancellationToken cancellationToken = default);
 
     /// <summary>The stored transaction with this hash on the account, hidden or not; null when there is none.</summary>
     Task<Transaction?> FindByHashAsync(Guid accountId, string hash, CancellationToken cancellationToken = default);
