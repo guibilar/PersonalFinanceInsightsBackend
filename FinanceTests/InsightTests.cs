@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Finance.Application.Reports;
+using Finance.Contracts.Inputs;
 using Finance.Contracts.Outputs;
 using Finance.Contracts.Reports;
 using Finance.Domain.Entities;
@@ -200,6 +201,50 @@ public class InsightTests
         // $260 over the 26 days from September 20th is $10 a day, and 77 days are left in the year.
         var food = Assert.Single(forecast.Budgets);
         Assert.Equal((260m, 1030m), (food.Spent, food.Projected));
+    }
+
+    [Fact]
+    public async Task Forecast_ProjectsAMerchantBudget_WhateverTheSpacingOfItsDescriptions()
+    {
+        await using var factory = FactoryOnOctober15();
+        // July to September (92 days) are complete: $92 there is $1 a day.
+        await factory.SeedAsync(db => db.Transactions.AddRange(
+            Tx(Day(2026, 7, 1), "TIM  HORTONS #55", 92),
+            Tx(Day(2026, 10, 3), "TIM HORTONS     #12", 10)));
+        var client = factory.CreateClient();
+        var created = await client.PostAsJsonAsync("/api/Budget", new
+        {
+            name = "Coffee", description = "d", status = "Active", amount = 100, period = "Monthly", merchant = "tim hortons"
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var forecast = await (await client.GetAsync("/api/Reports/forecast")).ReadAsync<SpendingForecast>();
+
+        // $10 so far, and 16 days at $1.
+        var coffee = Assert.Single(forecast.Budgets);
+        Assert.Equal((10m, 26m), (coffee.Spent, coffee.Projected));
+    }
+
+    [Fact]
+    public async Task Forecast_ProjectsEveryActiveBudget_MoreThanAPageOfThem()
+    {
+        await using var factory = FactoryOnOctober15();
+        // A full page of budgets that come first by name (none of them projects: they count nothing by themselves).
+        await factory.SeedAsync(db => db.Budgets.AddRange(Enumerable.Range(0, PagingLimits.MaxPageSize).Select(i => new Budget
+        {
+            Id = Guid.NewGuid(), Name = $"A {i:D4}", Description = "d", Status = Status.Active, Amount = 10, Period = BudgetPeriod.Monthly
+        })));
+        await factory.SeedAsync(db => db.Transactions.Add(Tx(Day(2026, 10, 3), "NO FRILLS", 40)));
+        var client = factory.CreateClient();
+        var created = await client.PostAsJsonAsync("/api/Budget", new
+        {
+            name = "Food", description = "d", status = "Active", amount = 400, period = "Monthly", categoryIds = new[] { DefaultCategories.Groceries }
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+
+        var forecast = await (await client.GetAsync("/api/Reports/forecast")).ReadAsync<SpendingForecast>();
+
+        Assert.Equal(("Food", 40m), Assert.Single(forecast.Budgets) is var food ? (food.Name, food.Spent) : default);
     }
 
     [Fact]

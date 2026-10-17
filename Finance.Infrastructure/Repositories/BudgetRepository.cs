@@ -11,6 +11,12 @@ namespace Finance.Infrastructure.Repositories;
 
 public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budget>(dbContext), IBudgetRepository
 {
+    // Runs of spaces as one, as the rules compare text (RuleText), in SQL: each space gets a marker after it, a marker
+    // followed by a space goes, then the markers left. Npgsql's Regex.Replace replaces only the first run.
+    private const string Marker = "\u0001";
+    private const string Mark = " " + Marker;
+    private const string Unmark = Marker + " ";
+
     public Task<Budget?> GetWithTransactionsAsync(Guid id, CancellationToken cancellationToken = default)
     {
         // Hidden transactions too: deleting the budget has to unlink every one of them.
@@ -58,8 +64,8 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
     // A period limits which transactions count by their date: the current month, the current year, or the budget's
     // own days (both ends included); earlier ones stay linked but no longer count. A total budget has no limit.
     // A budget with a period also counts the period's spending in its categories, or at its merchant (part of the
-    // description, ignoring case), that isn't linked to another budget: spending as it counts in the reports, so
-    // refunds come off, and transfers and ignored rows stay out.
+    // description, ignoring case and taking runs of spaces as one), that isn't linked to another budget: spending as it
+    // counts in the reports, so refunds come off, and transfers and ignored rows stay out.
     private IQueryable<BudgetSummary> ToSummaries(IQueryable<Budget> budgets, DateTime today)
     {
         var monthStart = new DateTime(today.Year, today.Month, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -90,7 +96,8 @@ public class BudgetRepository(FinanceDbContext dbContext) : BaseRepository<Budge
                                 && (t.Flow == Flow.Spending || t.Flow == Flow.Refund)
                                 && (w.Budget.Categories.Any(c => c.CategoryId == t.CategoryId)
                                     || (w.Budget.Merchant != null
-                                        && t.Description.ToLower().Contains(w.Budget.Merchant.ToLower()))))
+                                        && t.Description.Replace(" ", Mark).Replace(Unmark, "").Replace(Marker, "").ToLower()
+                                            .Contains(w.Budget.Merchant.Replace(" ", Mark).Replace(Unmark, "").Replace(Marker, "").ToLower()))))
                     .Sum(t => t.Flow == Flow.Refund ? -t.Amount : t.Amount),
                 w.Budget.Categories.Select(c => c.Category!).OrderBy(c => c.Name).ToList()));
     }

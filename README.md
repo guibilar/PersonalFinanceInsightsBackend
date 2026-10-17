@@ -338,7 +338,7 @@ follows `Reports:TimeZone`.
 
 A budget with a period other than `Total` can also count spending by itself, with no linking, by **category**
 (`categoryIds` on `POST`/`PUT`, returned as `categories`) or by **merchant** (`merchant`: part of the description,
-ignoring case, so `no frills` counts every store of the chain). That is the period's spending as the reports count it
+ignoring case and runs of spaces as the rules do, so `no frills` counts every store of the chain, `NO  FRILLS #12` too). That is the period's spending as the reports count it
 (`Spending` minus `Refund`, so transfers and ignored rows stay out), deleted transactions excluded, and transactions
 linked to another budget left to that one. A transaction linked to the budget and also matching counts once.
 
