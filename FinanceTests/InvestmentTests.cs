@@ -125,6 +125,25 @@ public class InvestmentTests
     }
 
     [Fact]
+    public async Task BalancesAndRoom_AreInCents_AndAnAmountFarOutOfRange_IsRefused()
+    {
+        await using var factory = FactoryOnOctober15();
+        var client = factory.CreateClient();
+        var tfsa = await AddAsync(client, new { name = "TFSA", type = AccountType.Investment, plan = RegisteredPlan.Tfsa });
+        var url = $"/api/Accounts/{tfsa.Id}/Balances";
+
+        Assert.Contains("2 decimal places", await RefusalAsync(await client.PostAsJsonAsync(url, new { date = "2026-10-14", amount = 10.555m }), "Amount"));
+        // Past what a whole number holds: a 400 like any other amount out of range, not a 500.
+        Assert.Contains("between", await RefusalAsync(await client.PostAsJsonAsync(url, new { date = "2026-10-14", amount = 1e20m }), "Amount"));
+        Assert.Contains("2 decimal places", await RefusalAsync(
+            await client.PutAsJsonAsync($"/api/Accounts/{tfsa.Id}", new { name = "TFSA", contributionRoom = 7000.005m }), "ContributionRoom"));
+        Assert.Contains("between", await RefusalAsync(
+            await client.PutAsJsonAsync($"/api/Accounts/{tfsa.Id}", new { name = "TFSA", contributionRoom = 1e20m }), "ContributionRoom"));
+        Assert.Equal(0, await factory.QueryAsync(db => db.AccountBalances.CountAsync()));
+        Assert.Null((await GetAsync(client, tfsa.Id)).ContributionRoom);
+    }
+
+    [Fact]
     public async Task NetWorth_CarriesBalancesThroughTransactions_CardsOwe_AndInvestmentsStartAtTheirFirstBalance()
     {
         await using var factory = FactoryOnOctober15();

@@ -18,7 +18,7 @@ public class AccountUpdateDto
     public RegisteredPlan? Plan { get; set; }
 
     /// <summary>The plan's contribution room for <see cref="ContributionRoomYear"/>. Unchanged when omitted.</summary>
-    [Range(0, 10_000_000)]
+    [Range(typeof(decimal), "0", "10000000"), Cents]
     public decimal? ContributionRoom { get; set; }
 
     /// <summary>The year <see cref="ContributionRoom"/> is for; this year when omitted.</summary>
