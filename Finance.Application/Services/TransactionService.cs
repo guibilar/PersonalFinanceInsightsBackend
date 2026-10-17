@@ -2,6 +2,7 @@ using Finance.Application.Abstractions;
 using Finance.Application.Events;
 using Finance.Application.Import;
 using Finance.Application.Models;
+using Finance.Application.Reports;
 using Finance.Application.Services.Interfaces;
 using Finance.Contracts.Inputs;
 using Finance.Domain.Common;
@@ -22,9 +23,13 @@ public class TransactionService(
     ICategoryRepository categoryRepository,
     ITagRepository tagRepository,
     TransactionRules rules,
+    ReportingCalendar calendar,
     FinanceChanges changes) : ITransactionService
 {
     private const string DuplicateMessage = "An identical transaction (same account, date, amount and description) already exists.";
+
+    /// <summary>The first year a transaction can be in, as for the reviews.</summary>
+    private const int FirstYear = 2000;
 
     // Each change below runs in FinanceChanges (T04): with the finance events on, the change and its events commit
     // together, and a change that moves a budget past 80 % or 100 % also sends BudgetLimitReached.
@@ -37,6 +42,13 @@ public class TransactionService(
     {
         var account = await accountRepository.GetByIdAsync(transaction.AccountId, cancellationToken)
                       ?? throw new NotFoundException(nameof(Account), transaction.AccountId);
+        // A mistyped year ("0206", "9999") would stretch every report from the first transaction to the last: the
+        // breakdown then has too many periods to show, or none past the calendar's end.
+        var latest = calendar.Today().AddYears(1);
+        if (transaction.Date.Year < FirstYear || transaction.Date > latest)
+        {
+            throw new InvalidInputException("date", $"Choose a date from {FirstYear} to {latest:yyyy-MM-dd}.");
+        }
         if (transaction.FlowLocked && !FlowMatcher.IsAllowed(transaction.Flow, transaction.TransactionType))
         {
             throw new InvalidInputException("flow", transaction.TransactionType == TransactionType.Debit
