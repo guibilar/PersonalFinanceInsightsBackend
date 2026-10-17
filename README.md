@@ -434,7 +434,8 @@ How it works (Wolverine, MIT licence):
    `hestia.finance-events` through a durable sender (table `wolverine.wolverine_outgoing_envelopes`). If the broker is
    down, the rows stay, and Wolverine sends them later.
 4. A failed change commits nothing, so it sends nothing. After a transient database failure (a dropped connection, a
-   deadlock) the whole change runs again, from what the database has: nothing the failed attempt left in memory.
+   deadlock) the whole change runs again, from what the database has: nothing the failed attempt left in memory, and
+   none of its events.
 
 Why the local queue (T79): Wolverine builds the routes of the published events when it starts, and a route to RabbitMQ
 needs a broker connection. A route to a local queue does not. So a broker that is down does not stop the start.
