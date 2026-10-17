@@ -145,15 +145,16 @@ public class ReportService(
     private static DateTime Min(DateTime a, DateTime? b) => b is { } other && other < a ? other : a;
 
     /// <summary>
-    /// Spending grouped by merchant: the category rules name merchants, so the keyword of the rule that decides a
-    /// description ("NO FRILLS" for every store of the chain); the description itself when no rule matches.
+    /// Spending grouped by merchant, as the review groups it (<see cref="MerchantNames.Of"/>): the keyword of the rule
+    /// that decides a description ("NO FRILLS" for every store of the chain); the start of the description when no rule
+    /// matches ("CORNER STORE" for "SQ *CORNER STORE #12").
     /// </summary>
     private async Task<List<MerchantTotal>> MerchantsAsync(List<Transaction> transactions, CancellationToken cancellationToken)
     {
         var matcher = new CategoryMatcher(await categoryRuleRepository.GetAllAsync(cancellationToken));
         return transactions
             .Where(t => t.Flow is Flow.Spending or Flow.Refund)
-            .GroupBy(t => matcher.MatchingKeyword(t.Description) ?? string.Join(' ', t.Description.Split(' ', StringSplitOptions.RemoveEmptyEntries)))
+            .GroupBy(t => MerchantNames.Of(matcher, t.Description))
             .Select(g => new MerchantTotal { Name = g.Key, Count = g.Count(), Spending = g.Sum(MonthlyRecordsCalculator.SpendingAmount) })
             .Where(m => m.Spending > 0)
             .OrderByDescending(m => m.Spending)

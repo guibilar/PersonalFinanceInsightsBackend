@@ -284,6 +284,17 @@ public class ImportTests
     }
 
     [Fact]
+    public void Parser_RefusesAnAmountThatIsNoNumber_RatherThanDroppingThatRow()
+    {
+        var ex = Assert.Throws<InvalidStatementException>(() => Parse("""
+            2026-01-05,METRO,8.00,
+            2026-01-06,METRO,(9.00),
+            """, AccountType.CreditCard));
+
+        Assert.Contains("(9.00)", ex.Message);
+    }
+
+    [Fact]
     public void Parser_StatementWithOnlyACardPayment_IsNotAnError()
     {
         // Still a statement: this month only has a card payment, which isn't spending.

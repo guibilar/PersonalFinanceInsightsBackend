@@ -76,7 +76,7 @@ public partial class CibcCsvParser : IStatementParser
     private static void AddIfAmount(List<Transaction> transactions, string? amountField, DateTime date, string description,
         TransactionType type)
     {
-        if (!decimal.TryParse(amountField, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount) || amount == 0)
+        if (!StatementText.TryParseAmount(amountField, out var amount) || amount == 0)
         {
             return;
         }

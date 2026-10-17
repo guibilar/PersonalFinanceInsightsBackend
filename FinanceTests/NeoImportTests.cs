@@ -98,6 +98,19 @@ public class NeoImportTests
     }
 
     [Fact]
+    public void Parser_RefusesAmountsASpreadsheetRewrote_RatherThanDroppingThoseRows()
+    {
+        // The accounting format: the money out in parentheses, and only the money in would be imported.
+        var ex = Assert.Throws<InvalidStatementException>(() => Parse("""
+            Transaction Date,Posted Date,Status,Description,Amount
+            2026-08-31,2026-09-01,Posted,FARMER'S FRIDGE,($10.70)
+            2026-08-28,2026-08-28,Posted,Payment Received - Thank you,"$2,158.23"
+            """));
+
+        Assert.Contains("($10.70)", ex.Message);
+    }
+
+    [Fact]
     public void CibcParser_RejectsANeoFile_InsteadOfReadingNothing()
     {
         var ex = Assert.Throws<InvalidStatementException>(() =>

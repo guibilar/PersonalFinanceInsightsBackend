@@ -100,7 +100,8 @@ public class AccountRepository(FinanceDbContext dbContext) : BaseRepository<Acco
             }
             catch (DbUpdateException ex) when (attempt == 1 && IsUniqueViolation(ex))
             {
-                // Another request stored that day's balance first: change it instead.
+                // Another request stored that day's balance first: change it instead. Inside a transaction, EF Core
+                // rolled the failed save back to its savepoint, so the transaction can go on.
                 DbContext.Entry(balance).State = EntityState.Detached;
             }
         }

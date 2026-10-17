@@ -21,7 +21,7 @@ namespace Finance.Infrastructure.Events;
 /// <see cref="FinanceEventForwarder{TEvent}"/>, which sends each event to RabbitMQ. If the broker is down or the process
 /// stops, the rows stay, and Wolverine tries again later.</item>
 /// <item>A failed save stores no envelope: its events go back to the queue, for a later save. A rolled-back
-/// transaction sends nothing.</item>
+/// transaction sends nothing, nor does one that failed and was disposed before a retry.</item>
 /// </list>
 /// One instance per request (scoped).
 /// </summary>
@@ -104,6 +104,10 @@ public sealed class FinanceOutbox(FinanceEventCollector collector, IWolverineRun
 
     internal void RolledBack() => _waitingForCommit.Clear();
 
+    // A transaction that failed after a save, then was disposed (not rolled back), leaves its outboxes here: drop them,
+    // or the commit of the retry sends that attempt's events too.
+    internal void Started() => _waitingForCommit.Clear();
+
     private async Task FlushAsync(DbContextOutbox outbox)
     {
         try
@@ -164,9 +168,22 @@ public sealed class FinanceOutboxSaveInterceptor(FinanceOutbox outbox) : SaveCha
     }
 }
 
-/// <summary>The transaction half of the outbox: sends after a commit, drops after a rollback.</summary>
+/// <summary>The transaction half of the outbox: sends after a commit, drops after a rollback or at a new start.</summary>
 public sealed class FinanceOutboxTransactionInterceptor(FinanceOutbox outbox) : DbTransactionInterceptor
 {
+    public override DbTransaction TransactionStarted(DbConnection connection, TransactionEndEventData eventData, DbTransaction result)
+    {
+        outbox.Started();
+        return result;
+    }
+
+    public override ValueTask<DbTransaction> TransactionStartedAsync(DbConnection connection, TransactionEndEventData eventData,
+        DbTransaction result, CancellationToken cancellationToken = default)
+    {
+        outbox.Started();
+        return ValueTask.FromResult(result);
+    }
+
     public override void TransactionCommitted(DbTransaction transaction, TransactionEndEventData eventData) =>
         outbox.CommittedAsync().GetAwaiter().GetResult();
 

@@ -1,3 +1,4 @@
+using System.Data.Common;
 using System.Net;
 using System.Net.Http.Json;
 using Finance.Contracts.Outputs;
@@ -5,9 +6,11 @@ using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 
 namespace FinanceTests;
 
@@ -98,6 +101,28 @@ public class DataIntegrityTests
     }
 
     [Fact]
+    public async Task Balance_StoredFirstByAnotherRequest_IsChanged_InsideTheChangesTransaction()
+    {
+        Assert.SkipUnless(OnPostgres, "Needs PostgreSQL: set FINANCE_TEST_POSTGRES (e.g. to \"container\").");
+        var events = new RecordedEvents();
+        var race = new StoreTheBalanceFirst();
+        await using var factory = new FinanceApiFactory(services =>
+        {
+            // The events on: the balance is set inside the transaction of FinanceChanges.
+            events.Register(services);
+            services.ConfigureDbContext<FinanceDbContext>(options => options.AddInterceptors(race));
+        });
+        var client = factory.CreateClient();
+        race.ConnectionString = factory.ConnectionString;
+
+        var response = await client.PostAsJsonAsync($"/api/Accounts/{Account.DefaultSavingsId}/Balances", new { date = "2026-01-05", amount = 250m });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.True(race.Done);
+        Assert.Equal([250m], await factory.QueryAsync(db => db.AccountBalances.Select(b => b.Amount).ToListAsync()));
+    }
+
+    [Fact]
     public async Task Migration_RemovesExistingDuplicates_KeepingTheBudgetLinkedCopy()
     {
         Assert.SkipUnless(OnPostgres, "Needs PostgreSQL: set FINANCE_TEST_POSTGRES (e.g. to \"container\").");
@@ -181,5 +206,39 @@ public class DataIntegrityTests
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         Assert.Equal(0, await factory.QueryAsync(db => db.Transactions.CountAsync()));
+    }
+
+    /// <summary>Just before the first insert of a balance, another connection stores that day's balance.</summary>
+    private sealed class StoreTheBalanceFirst : DbCommandInterceptor
+    {
+        public string? ConnectionString;
+        public volatile bool Done;
+
+        public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            await StoreFirstAsync(command);
+            return result;
+        }
+
+        public override async ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command, CommandEventData eventData,
+            InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            await StoreFirstAsync(command);
+            return result;
+        }
+
+        private async Task StoreFirstAsync(DbCommand command)
+        {
+            if (Done || !command.CommandText.Contains("INSERT INTO \"AccountBalances\"", StringComparison.Ordinal)) return;
+            Done = true;
+            await using var other = new NpgsqlConnection(ConnectionString);
+            await other.OpenAsync();
+            await using var insert = new NpgsqlCommand(
+                "INSERT INTO \"AccountBalances\" (\"Id\", \"AccountId\", \"Date\", \"Amount\") VALUES (@id, @account, '2026-01-05', 100)", other);
+            insert.Parameters.AddWithValue("id", Guid.NewGuid());
+            insert.Parameters.AddWithValue("account", Account.DefaultSavingsId);
+            await insert.ExecuteNonQueryAsync();
+        }
     }
 }

@@ -199,7 +199,7 @@ public class ReviewReport
     /// <summary>Spending transactions (refunds aside).</summary>
     public int Purchases { get; set; }
 
-    /// <summary>Days (up to today) without a purchase.</summary>
+    /// <summary>Days (up to today, and from the first transaction stored) without a purchase.</summary>
     public int NoSpendDays { get; set; }
 
     /// <summary>Every category spent in, now or in the period before, by spending now.</summary>

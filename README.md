@@ -184,6 +184,8 @@ already stored, with their category locked. Importing a chequing statement that 
 hides that month's "Monthly Rent" row, so rent counts once; it can be restored from the deleted transactions.
 
 Statements are read as UTF-8, or as Windows-1252 when the file isn't valid UTF-8 (e.g. re-saved in Excel).
+A date or an amount that a spreadsheet rewrote (`05/01/2026`, `(12.00)`) refuses the file with 400 rather than being
+guessed or its row dropped: download the statement again and import that.
 Transactions are duplicates only within the same account.
 
 ### Adding transactions by hand
@@ -365,7 +367,8 @@ inclusive) and spreads it over periods: `interval` is `Week` (from Monday), `Mon
 It returns the count, spending, refunds and income; one entry per period from the first to the last (the first
 matching transaction and today when no dates are given), empty ones included, with running totals; averages per
 period over the finished ones; and the top 8 merchants, grouped by the category rule keyword that matched ("NO FRILLS"
-for every store of the chain) or by description, with `merchantCount` for all of them. More than 400 periods are charted by the
+for every store of the chain) or, as the review does, by the start of the description ("CORNER STORE" for
+"SQ *CORNER STORE #12"), with `merchantCount` for all of them. More than 400 periods are charted by the
 next longer interval that fits (the response's `interval` says which); 400 years, or an end before the start, is a 400.
 
 `POST /api/Reports/merchants` takes the same criteria with `page` and `pageSize` (default 8) and pages through all of
@@ -393,9 +396,9 @@ months; ones that only count what is linked aren't projected.
 picked by hand, not on a savings account), most transactions first, each with a `keyword` to make a rule of.
 
 `GET /api/Reports/review?year=&month=` looks back on a month (or a year, without `month`; the last complete month
-without either) against the one before: spending and income, purchases, days without one, every category with both
-periods' spending, the top 5 merchants, the biggest purchase, each month of a year, the recurring payments as of
-today, and `earliest` (the first month with data). A period that hasn't started is a 400.
+without either) against the one before: spending and income, purchases, days without one (from the first transaction
+stored, not before), every category with both periods' spending, the top 5 merchants, the biggest purchase, each month
+of a year, the recurring payments as of today, and `earliest` (the first month with data). A period that hasn't started is a 400.
 
 `POST /api/Transaction/Bulk` `{transactionIds, categoryId?, flow?, budgetId?, unlinkBudget?, addTagId?, removeTagId?}`
 (up to 500) sets a category, flow or budget, or adds or removes a tag, on many at once, with the same rules as one by one: the category and flow are kept from the
@@ -434,7 +437,8 @@ How it works (Wolverine, MIT licence):
    `hestia.finance-events` through a durable sender (table `wolverine.wolverine_outgoing_envelopes`). If the broker is
    down, the rows stay, and Wolverine sends them later.
 4. A failed change commits nothing, so it sends nothing. After a transient database failure (a dropped connection, a
-   deadlock) the whole change runs again, from what the database has: nothing the failed attempt left in memory.
+   deadlock) the whole change runs again, from what the database has: nothing the failed attempt left in memory, and
+   none of its events.
 
 Why the local queue (T79): Wolverine builds the routes of the published events when it starts, and a route to RabbitMQ
 needs a broker connection. A route to a local queue does not. So a broker that is down does not stop the start.

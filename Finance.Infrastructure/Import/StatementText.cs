@@ -40,6 +40,23 @@ internal static partial class StatementText
         return false;
     }
 
+    /// <summary>
+    /// A row's amount, as the banks write it: "1,234.50" or "-10.70", with or without "$". Another way (a spreadsheet's
+    /// accounting format, "(12.00)") is refused rather than the row dropped: the file would import without it.
+    /// </summary>
+    /// <returns>False for a blank field (no amount on that side of the row).</returns>
+    /// <exception cref="InvalidStatementException">An amount that isn't a number.</exception>
+    public static bool TryParseAmount(string? text, out decimal amount)
+    {
+        amount = 0;
+        var trimmed = text?.Replace("$", "").Replace(" ", "").Trim();
+        if (string.IsNullOrEmpty(trimmed)) return false;
+        if (decimal.TryParse(trimmed, NumberStyles.Number, CultureInfo.InvariantCulture, out amount)) return true;
+        throw new InvalidStatementException(
+            $"The amount “{text!.Trim()}” isn't written as the bank writes it (1234.50, or -1234.50 for money out). Was the " +
+            "file opened and saved again in a spreadsheet? Download it again and import that.");
+    }
+
     // "05/01/2026", "5.1.26", "2026/01/05": a date, but not in the bank's layout.
     [GeneratedRegex(@"^\d{1,4}[/.-]\d{1,2}[/.-]\d{1,4}( \d{1,2}:\d{2}(:\d{2})?)?$")]
     private static partial Regex OtherDateLayout();
