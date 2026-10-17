@@ -117,7 +117,7 @@ public class BreakdownTests
     }
 
     [Fact]
-    public async Task TopMerchants_GroupTheStoresOfAChainByTheirRule_AndTheRestByDescription()
+    public async Task TopMerchants_GroupTheStoresOfAChainByTheirRule_AndTheRestByTheStartOfTheDescription()
     {
         await using var factory = FactoryOnSeptember15();
         await factory.SeedAsync(db => db.Transactions.AddRange(
@@ -126,15 +126,18 @@ public class BreakdownTests
             Tx(Day(2026, 9, 3), "SAFEWAY #8816", 30),
             Tx(Day(2026, 9, 4), "CORNER   STORE", 5),
             Tx(Day(2026, 9, 5), "CORNER STORE", 5, Flow.Refund),
-            Tx(Day(2026, 9, 6), "FARMERS MARKET", 12)));
+            Tx(Day(2026, 9, 6), "FARMERS MARKET", 12),
+            // Without a rule, as the review groups them: the processor and the store number dropped.
+            Tx(Day(2026, 9, 7), "SQ *BULK BARN #12", 9),
+            Tx(Day(2026, 9, 8), "bulk barn 4401 calgary", 6)));
 
         var result = await PostAsync(factory.CreateClient(), new { categoryId = DefaultCategories.Groceries });
 
         // The corner store's refund cancels its purchase, so it spent nothing there.
         Assert.Equal(
-            [("NO FRILLS", 2, 100m), ("SAFEWAY", 1, 30m), ("FARMERS MARKET", 1, 12m)],
+            [("NO FRILLS", 2, 100m), ("SAFEWAY", 1, 30m), ("BULK BARN", 2, 15m), ("FARMERS MARKET", 1, 12m)],
             result.TopMerchants.Select(m => (m.Name, m.Count, m.Spending)));
-        Assert.Equal(3, result.MerchantCount);
+        Assert.Equal(4, result.MerchantCount);
     }
 
     [Fact]
@@ -143,7 +146,7 @@ public class BreakdownTests
         await using var factory = FactoryOnSeptember15();
         // Twelve stores, the first the largest.
         await factory.SeedAsync(db => db.Transactions.AddRange(
-            Enumerable.Range(1, 12).Select(i => Tx(Day(2026, 9, 1), $"STORE {i:00}", 130 - i * 10))));
+            Enumerable.Range(1, 12).Select(i => Tx(Day(2026, 9, 1), $"STORE {(char)('A' + i - 1)}", 130 - i * 10))));
         var client = factory.CreateClient();
 
         var breakdown = await PostAsync(client, new { description = "store" });
@@ -152,7 +155,7 @@ public class BreakdownTests
         var page = await second.ReadAsync<PaginatedList<MerchantTotal>>();
 
         Assert.Equal((8, 12), (breakdown.TopMerchants.Count, breakdown.MerchantCount));
-        Assert.Equal(["STORE 09", "STORE 10", "STORE 11", "STORE 12"], page.Items.Select(m => m.Name));
+        Assert.Equal(["STORE I", "STORE J", "STORE K", "STORE L"], page.Items.Select(m => m.Name));
         Assert.Equal((12, false), (page.TotalCount, page.HasNextPage));
     }
 
