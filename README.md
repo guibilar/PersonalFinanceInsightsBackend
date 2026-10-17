@@ -396,9 +396,9 @@ months; ones that only count what is linked aren't projected.
 picked by hand, not on a savings account), most transactions first, each with a `keyword` to make a rule of.
 
 `GET /api/Reports/review?year=&month=` looks back on a month (or a year, without `month`; the last complete month
-without either) against the one before: spending and income, purchases, days without one, every category with both
-periods' spending, the top 5 merchants, the biggest purchase, each month of a year, the recurring payments as of
-today, and `earliest` (the first month with data). A period that hasn't started is a 400.
+without either) against the one before: spending and income, purchases, days without one (from the first transaction
+stored, not before), every category with both periods' spending, the top 5 merchants, the biggest purchase, each month
+of a year, the recurring payments as of today, and `earliest` (the first month with data). A period that hasn't started is a 400.
 
 `POST /api/Transaction/Bulk` `{transactionIds, categoryId?, flow?, budgetId?, unlinkBudget?, addTagId?, removeTagId?}`
 (up to 500) sets a category, flow or budget, or adds or removes a tag, on many at once, with the same rules as one by one: the category and flow are kept from the

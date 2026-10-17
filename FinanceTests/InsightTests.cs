@@ -321,6 +321,9 @@ public class InsightTests
 
         Assert.Equal(("2026", "2025", false, Day(2026, 12, 31)), (review.Label, review.PreviousLabel, review.Complete, review.End));
         Assert.Equal(10, review.Months.Count);
+        // The data starts on July 1st: 107 days to October 15th, 14 of them with a purchase. January to June aren't
+        // days without one.
+        Assert.Equal(93, review.NoSpendDays);
         Assert.Equal([("Jul", 1325m), ("Aug", 1325m), ("Sep", 1315m), ("Oct", 55m)], review.Months.Skip(6).Select(m => (m.Label, m.Spending)));
     }
 

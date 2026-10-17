@@ -48,15 +48,17 @@ public class ReviewService(
         var previous = both.Where(t => t.Date < previousEnd).ToList();
         var purchases = current.Where(t => t.Flow == Flow.Spending).ToList();
 
-        var lastDay = Min(end.AddDays(-1), today);
-        var days = lastDay >= start ? (lastDay - start).Days + 1 : 0;
+        var earliest = await transactionRepository.FilterAsync(
+            new TransactionFilterDto { SortBy = TransactionSortField.Date, SortDirection = SortDirection.Ascending, Page = 1, PageSize = 1 },
+            cancellationToken);
+        // The days before the first data say nothing about spending: they aren't days without it.
+        var firstDay = earliest.Items.FirstOrDefault()?.Date.Date is { } first && first > start ? first : start;
+        var lastDay = earliest.Items.Count == 0 ? start.AddDays(-1) : Min(end.AddDays(-1), today);
+        var days = lastDay >= firstDay ? (lastDay - firstDay).Days + 1 : 0;
         var spendDays = purchases.Where(t => t.Date <= lastDay).Select(t => t.Date.Date).Distinct().Count();
 
         var recurring = (await recurringPayments.DetectAsync(await recurringPayments.LoadAsync(RecurringPayments.Start(today), today.AddDays(1), cancellationToken), today, cancellationToken))
             .Select(d => d.Payment).Where(p => p.Status != RecurringStatus.Stopped).ToList();
-        var earliest = await transactionRepository.FilterAsync(
-            new TransactionFilterDto { SortBy = TransactionSortField.Date, SortDirection = SortDirection.Ascending, Page = 1, PageSize = 1 },
-            cancellationToken);
 
         var biggest = purchases.OrderByDescending(t => t.Amount).ThenBy(t => t.Date).FirstOrDefault();
         return new ReviewReport
