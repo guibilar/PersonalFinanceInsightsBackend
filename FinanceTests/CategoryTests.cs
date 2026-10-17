@@ -6,6 +6,7 @@ using Finance.Domain.Common;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Infrastructure.Persistence;
+using Hestia.Contracts.Finance;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -248,6 +249,33 @@ public class CategoryTests
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
         Assert.Equal(DefaultCategories.Dining, await factory.QueryAsync(db => db.Transactions.Select(t => t.CategoryId).SingleAsync()));
+    }
+
+    [Fact]
+    public async Task Delete_SendsTheMovedTransactions_AndABudgetTheyTakePastALimit()
+    {
+        var events = new RecordedEvents();
+        await using var factory = new FinanceApiFactory(services =>
+        {
+            events.Register(services);
+            services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FixedTimeProvider(DateTimeOffset.Parse("2026-09-15T12:00:00Z"))));
+        });
+        var client = factory.CreateClient();
+        var coffee = await AddAsync(client, "Coffee");
+        var visible = Stored("CAFE", coffee.Id);
+        await factory.SeedAsync(db => db.Transactions.AddRange(visible, Stored("CAFE AGAIN", coffee.Id, hidden: true)));
+        var budget = await (await client.PostAsJsonAsync("/api/Budget", new
+        {
+            name = "Dining out", description = "d", status = "Active", amount = 10, period = "Monthly", categoryIds = new[] { DefaultCategories.Dining }
+        })).ReadAsync<BudgetOutputDto>();
+
+        await client.DeleteAsync($"{Categories}/{coffee.Id}?moveTo={DefaultCategories.Dining}");
+
+        var changed = Assert.Single(events.All.OfType<TransactionChanged>());
+        Assert.Equal((visible.Id, TransactionChange.Updated, DefaultCategories.Dining, "Dining"),
+            (changed.TransactionId, changed.Change, changed.CategoryId, changed.CategoryName));
+        var reached = Assert.Single(events.All.OfType<BudgetLimitReached>());
+        Assert.Equal((budget.Id, 100), (reached.BudgetId, reached.Percent));
     }
 
     [Fact]

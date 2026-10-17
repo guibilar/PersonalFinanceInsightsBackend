@@ -20,5 +20,6 @@ public interface ICategoryRepository : IBaseRepository<Category>
     /// Deletes the category after moving its transactions (deleted ones included) and rules to <paramref name="targetId"/>;
     /// budgets that counted it stop counting it. All of it or nothing.
     /// </summary>
-    Task RemoveMovingUsageAsync(Category category, Guid targetId, CancellationToken cancellationToken = default);
+    /// <returns>The transactions moved.</returns>
+    Task<List<Transaction>> RemoveMovingUsageAsync(Category category, Guid targetId, CancellationToken cancellationToken = default);
 }
