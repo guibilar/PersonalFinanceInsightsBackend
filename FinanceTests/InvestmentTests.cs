@@ -96,6 +96,22 @@ public class InvestmentTests
     }
 
     [Fact]
+    public async Task AnotherPlan_DropsTheOldPlansRoom_UnlessItComesWithItsOwn()
+    {
+        await using var factory = FactoryOnOctober15();
+        var client = factory.CreateClient();
+        var account = await AddAsync(client, new { name = "Plan", type = AccountType.Investment, plan = RegisteredPlan.Tfsa, contributionRoom = 7000m });
+
+        var samePlan = await (await client.PutAsJsonAsync($"/api/Accounts/{account.Id}", new { name = "Plan", plan = RegisteredPlan.Tfsa }, FinanceApiFactory.Json)).ReadAsync<AccountOutputDto>();
+        var fhsa = await (await client.PutAsJsonAsync($"/api/Accounts/{account.Id}", new { name = "Plan", plan = RegisteredPlan.Fhsa }, FinanceApiFactory.Json)).ReadAsync<AccountOutputDto>();
+        var rrsp = await (await client.PutAsJsonAsync($"/api/Accounts/{account.Id}", new { name = "Plan", plan = RegisteredPlan.Rrsp, contributionRoom = 20000m }, FinanceApiFactory.Json)).ReadAsync<AccountOutputDto>();
+
+        Assert.Equal((RegisteredPlan.Tfsa, 7000m, 7000m), (samePlan.Plan, samePlan.ContributionRoom, samePlan.RoomLeft));
+        Assert.Equal((RegisteredPlan.Fhsa, null, null, null), (fhsa.Plan, fhsa.ContributionRoom, fhsa.ContributionRoomYear, fhsa.RoomLeft));
+        Assert.Equal((RegisteredPlan.Rrsp, 20000m, 2026), (rrsp.Plan, rrsp.ContributionRoom, rrsp.ContributionRoomYear));
+    }
+
+    [Fact]
     public async Task Balances_AreOneADay_NewestFirst_NotInTheFuture_AndGoWithTheAccount()
     {
         await using var factory = FactoryOnOctober15();

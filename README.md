@@ -134,7 +134,7 @@ investment movements are transfers by default, keep their category, and make the
 ### Registered plans and contribution room
 
 A savings or investment account can be held in a registered plan, `plan`: `Tfsa`, `Rrsp` or `Fhsa` (`None` clears it,
-and its room; other kinds are a 400). `contributionRoom` is the plan's room for `contributionRoomYear` (this year when
+and its room, as another plan does unless the request gives that plan's room; other kinds are a 400). `contributionRoom` is the plan's room for `contributionRoomYear` (this year when
 left out; 2009 to this year), as the CRA's My Account shows it: for a TFSA, the room on January 1. The account then
 says this year's transfers in (`depositedThisYear`: the contributions) and out (`withdrawnThisYear`: for a TFSA, room
 again next January), and `roomLeft`: this year's room less this year's deposits, or null until this year's room is
