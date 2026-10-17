@@ -62,6 +62,18 @@ public class NeoPdfImportTests
     }
 
     [Fact]
+    public void Parser_GivesFebruary29TheLeapYear_InAStatementEndingTheYearAfter()
+    {
+        var parsed = Parse(Build("Feb 15, 2028 - Feb 14, 2029", 100m, 70m,
+        [
+            new("Feb 29", "Groceries", -40m, 60m),
+            new("Feb 3", "Refund", 10m, 70m),
+        ]));
+
+        Assert.Equal([new DateTime(2028, 2, 29), new DateTime(2029, 2, 3)], parsed.Select(t => t.Date));
+    }
+
+    [Fact]
     public void Parser_GivesTheClosingBalance_OnThePeriodsLastDay()
     {
         var balance = new NeoCsvParser().Parse(new MemoryStream(February)).ClosingBalance;
