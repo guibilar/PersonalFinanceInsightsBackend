@@ -22,6 +22,9 @@ public class BudgetService(
     public Task<BudgetSummary> AddAsync(Budget budget, CancellationToken cancellationToken = default) =>
         changes.RunAsync(ChangeEffect.Spending, async ct =>
         {
+            // Only the categories' ids: a failed attempt linked them to its categories, which one after a database
+            // failure doesn't track (IUnitOfWork).
+            budget.Categories.ForEach(c => c.Category = null);
             await EnsureFitsAsync(budget, ct);
             await budgetRepository.AddAsync(budget, ct);
             // Totalled like any other read: a new budget's categories may already have spending this month.

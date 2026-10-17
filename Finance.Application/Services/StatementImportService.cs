@@ -94,7 +94,9 @@ public class StatementImportService(
 
             // A statement read in full counts as imported even when every row was already there: the reminders to import
             // ask whether statements are being brought in, not whether they had anything new.
-            account.LastImportedAt = timeProvider.GetUtcNow().UtcDateTime;
+            // Read again: a new attempt after a database failure starts with nothing tracked (IUnitOfWork).
+            var stored = await accountRepository.GetByIdAsync(account.Id, ct) ?? throw new NotFoundException(nameof(Account), account.Id);
+            stored.LastImportedAt = timeProvider.GetUtcNow().UtcDateTime;
             await RaiseImportedAsync(account, parsed, added, statementRows.ClosingBalance, ct);
             await accountRepository.SaveChangesAsync(ct);
 

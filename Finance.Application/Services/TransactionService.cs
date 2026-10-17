@@ -85,8 +85,9 @@ public class TransactionService(
 
         try
         {
-            await transactionRepository.AddAsync(transaction, cancellationToken);
+            // This attempt's account: one after a database failure starts with nothing tracked (IUnitOfWork).
             transaction.Account = account;
+            await transactionRepository.AddAsync(transaction, cancellationToken);
         }
         catch (DuplicateEntityException)
         {
