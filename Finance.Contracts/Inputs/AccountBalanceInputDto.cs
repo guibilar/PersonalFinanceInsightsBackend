@@ -10,6 +10,7 @@ public class AccountBalanceInputDto
     public DateOnly? Date { get; set; }
 
     /// <summary>For a credit card, what it owes; otherwise what it holds (negative for an overdraft).</summary>
-    [Required, Range(-100_000_000, 100_000_000)]
+    // As a decimal: with whole-number bounds, an amount past what an int holds failed the check with a 500.
+    [Required, Range(typeof(decimal), "-100000000", "100000000"), Cents]
     public decimal? Amount { get; set; }
 }

@@ -2,11 +2,14 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text;
 using Finance.Contracts.Outputs;
+using Finance.Contracts.Reports;
 using Finance.Domain.Common;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace FinanceTests;
 
@@ -178,5 +181,44 @@ public class ManualEntryTests
         var response = await client.PostAsJsonAsync(endpoint, body, FinanceApiFactory.Json);
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Theory]
+    [InlineData("9999-12-31")]  // past the calendar's end, the breakdown failed with a 500
+    [InlineData("2028-01-01")]  // more than a year ahead
+    [InlineData("0206-09-10")]  // years of periods: the breakdown refused every request without a start date
+    [InlineData("1999-12-31")]
+    public async Task ADateWithAMistypedYear_Returns400_AndTheBreakdownStillWorks(string date)
+    {
+        await using var factory = new FinanceApiFactory(services =>
+            services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FixedTimeProvider(DateTimeOffset.Parse("2026-10-15T16:00:00Z")))));
+        var client = factory.CreateClient();
+        var accountId = await AddManualAccountAsync(client);
+        await client.PostAsJsonAsync("/api/Transaction", Tx(accountId), FinanceApiFactory.Json);
+
+        var response = await client.PostAsJsonAsync("/api/Transaction",
+            new { date, description = "COFFEE", amount = 1m, transactionType = "Debit", accountId }, FinanceApiFactory.Json);
+        var breakdown = await client.PostAsJsonAsync("/api/Reports/breakdown", new { });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Choose a date from 2000 to 2027-10-15", await response.Content.ReadAsStringAsync());
+        Assert.Equal(HttpStatusCode.OK, breakdown.StatusCode);
+        Assert.Equal(1, (await breakdown.ReadAsync<TransactionBreakdown>()).Count);
+    }
+
+    [Theory]
+    [InlineData("2000-01-01")]
+    [InlineData("2027-10-15")]
+    public async Task ADateFrom2000ToAYearAhead_IsAdded(string date)
+    {
+        await using var factory = new FinanceApiFactory(services =>
+            services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FixedTimeProvider(DateTimeOffset.Parse("2026-10-15T16:00:00Z")))));
+        var client = factory.CreateClient();
+        var accountId = await AddManualAccountAsync(client);
+
+        var response = await client.PostAsJsonAsync("/api/Transaction",
+            new { date, description = "COFFEE", amount = 1m, transactionType = "Debit", accountId }, FinanceApiFactory.Json);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
 }

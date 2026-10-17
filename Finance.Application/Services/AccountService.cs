@@ -41,7 +41,10 @@ public class AccountService(IAccountRepository accountRepository, ReportingCalen
         return await accountRepository.GetSummaryAsync(account, calendar.Today().Year, cancellationToken);
     }
 
-    /// <summary>The plan and its room: only savings and investments are held in one, and only a plan has room.</summary>
+    /// <summary>
+    /// The plan and its room: only savings and investments are held in one, and only a plan has room. A new plan starts
+    /// without room (unless it comes with it).
+    /// </summary>
     private void Apply(Account account, AccountDetails details)
     {
         if (details.Plan is { } plan)
@@ -50,8 +53,9 @@ public class AccountService(IAccountRepository accountRepository, ReportingCalen
             {
                 throw new InvalidInputException("plan", "Only savings and investment accounts can be held in a registered plan.");
             }
+            // Another plan's room isn't this one's: a TFSA's 7,000 would otherwise show as an FHSA's room left.
+            if (plan != account.Plan) (account.ContributionRoom, account.ContributionRoomYear) = (null, null);
             account.Plan = plan;
-            if (plan == RegisteredPlan.None) (account.ContributionRoom, account.ContributionRoomYear) = (null, null);
         }
         if (details.ContributionRoom is { } room)
         {
