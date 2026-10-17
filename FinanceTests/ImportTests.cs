@@ -1,6 +1,8 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text;
+using Finance.Application.Events;
 using Finance.Application.Import;
 using Finance.Application.Reports;
 using Finance.Contracts.Outputs;
@@ -10,10 +12,14 @@ using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
 using Finance.Domain.Helpers;
 using Finance.Infrastructure.Import;
+using Hestia.Contracts;
+using Hestia.Contracts.Finance;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace FinanceTests;
 
@@ -388,6 +394,29 @@ public class ImportTests
         // Hidden, not deleted: it can still be restored.
         Assert.True(await factory.QueryAsync(db => db.Transactions.IgnoreQueryFilters()
             .Where(t => t.Id == january.Id).Select(t => t.Hidden).SingleAsync()));
+    }
+
+    /// <summary>The finance events on, without a broker: what the services raise, kept here.</summary>
+    private sealed class RaisedEvents : IFinanceEvents
+    {
+        public ConcurrentQueue<IIntegrationEvent> All { get; } = new();
+        public bool Enabled => true;
+        public void Raise(IIntegrationEvent @event) => All.Enqueue(@event);
+        public void Clear() { }
+    }
+
+    [Fact]
+    public async Task Import_RealRentPayment_SendsTheGeneratedRentAsDeleted()
+    {
+        var events = new RaisedEvents();
+        await using var factory = new FinanceApiFactory(services => services.Replace(ServiceDescriptor.Singleton<IFinanceEvents>(events)));
+        var january = GeneratedRent(new DateTime(2026, 1, 1));
+        await factory.SeedAsync(db => db.Transactions.Add(january));
+
+        await factory.CreateClient().PostAsync("/api/Transaction/Import", Statement("2026-01-03,VALIANT RENTAL PAYMENT,1947.50,", "Chequing"));
+
+        var deleted = Assert.Single(events.All.OfType<TransactionChanged>(), e => e.TransactionId == january.Id);
+        Assert.Equal((TransactionChange.Deleted, "Monthly Rent", -1947.50m), (deleted.Change, deleted.Description, deleted.Amount));
     }
 
     [Fact]

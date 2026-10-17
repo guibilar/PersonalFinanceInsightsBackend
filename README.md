@@ -191,7 +191,8 @@ Transactions are duplicates only within the same account.
 `POST /api/Transaction` `{date, description, amount, transactionType, accountId, categoryId?, flow?, allowDuplicate?}`
 adds one transaction, for accounts without an importer (statement format `Manual`) or a purchase that isn't on a
 statement yet. The amount is positive and `transactionType` (`Debit` or `Credit`) says which way the money moved.
-The date is from 2000 to a year from today; another year (a typo) is a 400. Without `categoryId` and `flow` the rules decide, as for an imported row; a given one is kept when the rules are
+The date is from 2000 to a year from today; another year (a typo) is a 400. Like every date the API reads (the
+filters' and a custom budget's too), it is the calendar day as written: `2026-09-01T23:30-04:00` is September 1st. Without `categoryId` and `flow` the rules decide, as for an imported row; a given one is kept when the rules are
 re-applied, and a flow that doesn't fit the direction is a 400. An identical transaction (same account, day, amount
 and description) is a 409 unless `allowDuplicate`, for two purchases that really were the same.
 
@@ -338,7 +339,7 @@ follows `Reports:TimeZone`.
 
 A budget with a period other than `Total` can also count spending by itself, with no linking, by **category**
 (`categoryIds` on `POST`/`PUT`, returned as `categories`) or by **merchant** (`merchant`: part of the description,
-ignoring case, so `no frills` counts every store of the chain). That is the period's spending as the reports count it
+ignoring case and runs of spaces as the rules do, so `no frills` counts every store of the chain, `NO  FRILLS #12` too). That is the period's spending as the reports count it
 (`Spending` minus `Refund`, so transfers and ignored rows stay out), deleted transactions excluded, and transactions
 linked to another budget left to that one. A transaction linked to the budget and also matching counts once.
 
@@ -413,7 +414,7 @@ no outbox, no RabbitMQ, and no extra queries.
 | Event | When |
 | --- | --- |
 | `TransactionsImported` | A statement import finished (also when it added nothing). |
-| `TransactionChanged` | A transaction was added by hand, changed (description, category, flow, note, tags, budget link, rules), deleted, or restored. |
+| `TransactionChanged` | A transaction was added by hand, changed (description, category, flow, note, tags, budget link, rules), deleted (a generated "Monthly Rent" row too, when an import replaces it), or restored. |
 | `BudgetLimitReached` | A change made an active budget's spending cross 80 % or 100 % in its current period. |
 | `BalanceRecorded` | A balance was entered, or a statement gave one. |
 | `SubscriptionPriceChanged` | A new charge of a recurring payment has a new fixed price. |

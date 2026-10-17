@@ -3,10 +3,10 @@ using Finance.Application.Abstractions;
 using Finance.Application.Models;
 using Finance.Application.Reports;
 using Finance.Application.Services.Interfaces;
-using Finance.Contracts.Inputs;
 using Finance.Contracts.Reports;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
+using Finance.Domain.Helpers;
 
 namespace Finance.Application.Services;
 
@@ -51,8 +51,7 @@ public class ForecastService(
             : thisMonth.Where(t => !recurring.Contains(t.Id)).Sum(MonthlyRecordsCalculator.SpendingAmount) / DaysSoFar(monthStart, firstDay, today);
         dailyRate = Math.Max(0, dailyRate);
 
-        var budgets = await budgetRepository.FilterAsync(
-            new BudgetFilterDto { Status = Status.Active, Page = 1, PageSize = PagingLimits.MaxPageSize }, today, cancellationToken);
+        var budgets = await budgetRepository.GetActiveSummariesAsync(today, cancellationToken);
         return new SpendingForecast
         {
             Month = monthStart.ToString("MMMM yyyy", CultureInfo.InvariantCulture),
@@ -66,10 +65,10 @@ public class ForecastService(
             UsualMonths = history.Count,
             DailyRate = Math.Round(dailyRate, 2),
             Upcoming = upcoming,
-            Budgets = budgets.Items
+            Budgets = budgets
                 .Select(b => BudgetForecast(b, transactions, history, historyDays, firstDay, today))
                 .OfType<BudgetForecast>()
-                .OrderByDescending(b => b.ProjectedPercentage)
+                .OrderByDescending(b => b.ProjectedPercentage).ThenBy(b => b.Name, StringComparer.Ordinal)
                 .ToList(),
         };
     }
@@ -130,13 +129,14 @@ public class ForecastService(
         if (summary.Categories.Count == 0 && string.IsNullOrWhiteSpace(budget.Merchant)) return null;
 
         var categories = summary.Categories.Select(c => c.Id).ToHashSet();
-        var merchant = budget.Merchant?.Trim();
+        // Compared as the budget's total compares it: ignoring case and runs of spaces.
+        var merchant = string.IsNullOrWhiteSpace(budget.Merchant) ? null : RuleText.Of(budget.Merchant);
         decimal Counted(Transaction t) =>
             t.BudgetId == budget.Id
                 ? (t.Flow is Flow.Transfer or Flow.Ignored) ? 0 : t.TransactionType == TransactionType.Credit ? -t.Amount : t.Amount
                 : t.BudgetId is null && (t.Flow is Flow.Spending or Flow.Refund)
                   && (categories.Contains(t.CategoryId)
-                      || (!string.IsNullOrEmpty(merchant) && t.Description.Contains(merchant, StringComparison.OrdinalIgnoreCase)))
+                      || (merchant is not null && RuleText.Of(t.Description).Contains(merchant, StringComparison.Ordinal)))
                     ? MonthlyRecordsCalculator.SpendingAmount(t)
                     : 0;
 

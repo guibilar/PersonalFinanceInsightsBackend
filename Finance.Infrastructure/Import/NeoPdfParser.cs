@@ -88,8 +88,9 @@ internal static partial class NeoPdfParser
         // The year is the period's end's, or the one before when that would put the row after the period: a December
         // row in a statement running into January, or a purchase made Dec 31 and posted Jan 2 in a January statement
         // (rows are dated when made, which can be just before the period). A few days' grace for late postings.
+        // Feb 29 in a period ending in a year without one is the leap year's before.
         var year = end.Year;
-        if (day <= DateTime.DaysInMonth(year, month) && new DateTime(year, month, day, 0, 0, 0, DateTimeKind.Utc) > end.AddDays(7))
+        if (day > DateTime.DaysInMonth(year, month) || new DateTime(year, month, day, 0, 0, 0, DateTimeKind.Utc) > end.AddDays(7))
             year--;
         if (day > DateTime.DaysInMonth(year, month)) return false;
         row = new Row(

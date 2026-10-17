@@ -8,6 +8,7 @@ using FinanceApi;
 using FinanceApi.Auth;
 using FinanceApi.Errors;
 using FinanceApi.Health;
+using FinanceApi.Mapping;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 
@@ -19,8 +20,12 @@ builder.Configuration
     .AddEnvironmentVariables();
 
 builder.Services.AddControllers()
-    // Enums by name only: a number ("status": 7) would otherwise be accepted as a value no enum has, and stored.
-    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false)));
+    .AddJsonOptions(options =>
+    {
+        // Enums by name only: a number ("status": 7) would otherwise be accepted as a value no enum has, and stored.
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false));
+        options.JsonSerializerOptions.Converters.Add(new CalendarDateConverter());
+    });
 
 builder.Services.AddReverseProxySupport(builder.Configuration);
 builder.Services.AddProblemDetails();

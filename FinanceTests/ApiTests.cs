@@ -240,6 +240,22 @@ public class ApiTests : IAsyncLifetime
         Assert.Equal(new DateTime(2026, 9, 1), stored);
     }
 
+    [Theory]
+    [InlineData("2026-09-01T23:30:00-04:00")]
+    [InlineData("2026-09-01T00:30:00+09:00")]
+    public async Task FilterTransactions_TakesTheDatesAsWritten(string day)
+    {
+        await _factory.SeedAsync(db => db.Transactions.AddRange(
+            NewTransaction("AUGUST 31", 1, new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc)),
+            NewTransaction("SEPTEMBER 1", 1, new DateTime(2026, 9, 1, 0, 0, 0, DateTimeKind.Utc)),
+            NewTransaction("SEPTEMBER 2", 1, new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc))));
+
+        var result = await (await _client.PostAsJsonAsync("/api/Transaction/Filter", new { startDate = day, endDate = day }))
+            .ReadAsync<PaginatedList<TransactionOutputDto>>();
+
+        Assert.Equal("SEPTEMBER 1", Assert.Single(result.Items).Description);
+    }
+
     [Fact]
     public async Task FilterTransactions_DescriptionMatchesPartiallyAndIgnoresCase()
     {

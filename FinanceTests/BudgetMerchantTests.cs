@@ -65,6 +65,21 @@ public class BudgetMerchantTests
     }
 
     [Fact]
+    public async Task AMerchantBudget_TakesRunsOfSpacesAsOne_AsTheRulesDo()
+    {
+        await using var factory = FactoryOnSeptember15();
+        var client = factory.CreateClient();
+        var budget = await CreateAsync(client, "Coffee", "Monthly", merchant: "tim  hortons");
+        // Banks pad descriptions unevenly.
+        await factory.SeedAsync(db => db.Transactions.AddRange(
+            Tx(new DateTime(2026, 9, 2), "TIM  HORTONS #55", 5),
+            Tx(new DateTime(2026, 9, 3), "TIM HORTONS     #12", 3),
+            Tx(new DateTime(2026, 9, 4), "TIMHORTONS", 100)));
+
+        Assert.Equal(8m, (await GetAsync(client, budget.Id)).TotalSpent);
+    }
+
+    [Fact]
     public async Task AYearlyBudget_CountsThisCalendarYear_AndItsLinkedTransactionsToo()
     {
         await using var factory = FactoryOnSeptember15();
@@ -99,6 +114,18 @@ public class BudgetMerchantTests
         var result = await GetAsync(client, budget.Id);
 
         Assert.Equal(50m, result.TotalSpent);
+        Assert.Equal((new DateTime(2026, 7, 1), new DateTime(2026, 8, 15)), (result.StartDate, result.EndDate)!);
+    }
+
+    [Fact]
+    public async Task ACustomBudget_KeepsItsDaysAsWritten_WithAnOffset()
+    {
+        await using var factory = FactoryOnSeptember15();
+        var client = factory.CreateClient();
+
+        var result = await CreateAsync(client, "Trip", "Custom", merchant: "hotel",
+            startDate: "2026-07-01T23:30:00-04:00", endDate: "2026-08-15T00:30:00+09:00");
+
         Assert.Equal((new DateTime(2026, 7, 1), new DateTime(2026, 8, 15)), (result.StartDate, result.EndDate)!);
     }
 
