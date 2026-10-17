@@ -5,6 +5,7 @@ using Finance.Domain.Common;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Infrastructure.Persistence;
+using Hestia.Contracts.Finance;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -150,6 +151,33 @@ public class BudgetCategoryTests
 
         Assert.Equal(HttpStatusCode.NoContent, deleted.StatusCode);
         Assert.Equal(HttpStatusCode.Created, again.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeletingABudget_SendsItsUnlinkedTransactions_AndABudgetTheyTakePastALimit()
+    {
+        var events = new RecordedEvents();
+        await using var factory = new FinanceApiFactory(services =>
+        {
+            events.Register(services);
+            services.Replace(ServiceDescriptor.Singleton<TimeProvider>(new FixedTimeProvider(DateTimeOffset.Parse("2026-04-01T02:00:00Z"))));
+        });
+        var client = factory.CreateClient();
+        var dining = await CreateAsync(client, "Dining", "Monthly", "Dining");
+        var trip = Guid.NewGuid();
+        var linked = Tx(new DateTime(2026, 3, 20), 90m, DefaultCategories.Dining, budgetId: trip);
+        await factory.SeedAsync(db =>
+        {
+            db.Budgets.Add(new Budget { Id = trip, Name = "Trip", Description = "d", Amount = 500, Status = Status.Active });
+            db.Transactions.Add(linked);
+        });
+
+        await client.DeleteAsync($"/api/Budget/{trip}");
+
+        var changed = Assert.Single(events.All.OfType<TransactionChanged>());
+        Assert.Equal((linked.Id, TransactionChange.Updated), (changed.TransactionId, changed.Change));
+        var reached = Assert.Single(events.All.OfType<BudgetLimitReached>());
+        Assert.Equal((dining.Id, 80), (reached.BudgetId, reached.Percent));
     }
 
     [Fact]

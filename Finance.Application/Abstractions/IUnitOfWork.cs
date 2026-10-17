@@ -8,7 +8,8 @@ public interface IUnitOfWork
     /// <summary>
     /// Runs <paramref name="work"/> in one transaction and commits it. Inside a transaction that is open already, it
     /// joins that one. After a transient database failure the whole <paramref name="work"/> can run again, so it must
-    /// start from the same input (for example, the rows of a statement that was read before).
+    /// start from the same input (for example, the rows of a statement that was read before), and read again what it
+    /// changes: the new attempt starts with nothing tracked.
     /// </summary>
     Task<T> InTransactionAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken cancellationToken = default);
 

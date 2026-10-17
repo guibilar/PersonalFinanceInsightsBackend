@@ -1,12 +1,14 @@
 using Finance.Application.Abstractions;
+using Finance.Application.Events;
 using Finance.Application.Models;
 using Finance.Application.Services.Interfaces;
 using Finance.Domain.Entities;
 using Finance.Domain.Exceptions;
+using Hestia.Contracts.Finance;
 
 namespace Finance.Application.Services;
 
-public class CategoryService(ICategoryRepository categoryRepository) : ICategoryService
+public class CategoryService(ICategoryRepository categoryRepository, FinanceChanges changes) : ICategoryService
 {
     public Task<List<CategorySummary>> GetAllAsync(CancellationToken cancellationToken = default) =>
         categoryRepository.GetSummariesAsync(cancellationToken);
@@ -32,7 +34,11 @@ public class CategoryService(ICategoryRepository categoryRepository) : ICategory
         return await categoryRepository.GetSummaryAsync(category, cancellationToken);
     }
 
-    public async Task RemoveAsync(Guid id, Guid? moveTo, CancellationToken cancellationToken = default)
+    // The moved transactions are changed ones (T04), and can take a budget of the category they move to past 80 % or 100 %.
+    public Task RemoveAsync(Guid id, Guid? moveTo, CancellationToken cancellationToken = default) =>
+        changes.RunAsync(ChangeEffect.Spending, ct => RemoveOnceAsync(id, moveTo, ct), cancellationToken);
+
+    private async Task RemoveOnceAsync(Guid id, Guid? moveTo, CancellationToken cancellationToken)
     {
         var category = await categoryRepository.GetByIdAsync(id, cancellationToken)
                        ?? throw new NotFoundException(nameof(Category), id);
@@ -51,7 +57,9 @@ public class CategoryService(ICategoryRepository categoryRepository) : ICategory
             throw new InvalidInputException("moveTo", "The category to move its transactions and rules to doesn't exist.");
         }
 
-        await categoryRepository.RemoveMovingUsageAsync(category, targetId, cancellationToken);
+        var moved = await categoryRepository.RemoveMovingUsageAsync(category, targetId, cancellationToken);
+        // As for the rules applied again: the events are of those the list shows.
+        await changes.RaiseChangedAsync(moved.Where(t => !t.Hidden).ToList(), TransactionChange.Updated, cancellationToken);
     }
 
     private static string NormalizeColor(string color) => color.Trim().ToUpperInvariant();

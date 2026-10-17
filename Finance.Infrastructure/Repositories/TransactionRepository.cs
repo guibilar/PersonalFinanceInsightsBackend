@@ -115,6 +115,9 @@ public class TransactionRepository(FinanceDbContext dbContext)
                 .Select(t => t.Hash)
                 .ToListAsync(ct)).ToHashSet();
             var toAdd = transactions.Where(t => !existing.Contains(t.Hash)).ToList();
+            // Only the rows: a failed attempt's save linked them to its account and categories, which a new one doesn't
+            // track (UnitOfWork), and would insert again.
+            toAdd.ForEach(t => (t.Account, t.Category) = (null, null));
 
             DbContext.Transactions.AddRange(toAdd);
             await SaveChangesAsync(ct);

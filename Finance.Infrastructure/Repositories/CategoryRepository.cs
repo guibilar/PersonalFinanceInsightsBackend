@@ -41,7 +41,7 @@ public class CategoryRepository(FinanceDbContext dbContext) : BaseRepository<Cat
         return ByName(await DbContext.Categories.Where(c => ids.Contains(c.Id)).ToListAsync(cancellationToken));
     }
 
-    public async Task RemoveMovingUsageAsync(Category category, Guid targetId, CancellationToken cancellationToken = default)
+    public async Task<List<Transaction>> RemoveMovingUsageAsync(Category category, Guid targetId, CancellationToken cancellationToken = default)
     {
         // Loaded rather than updated in bulk, so the in-memory test database does the same; one save stores it all.
         // Hidden transactions move too: they are kept for duplicate detection and can be restored.
@@ -59,6 +59,7 @@ public class CategoryRepository(FinanceDbContext dbContext) : BaseRepository<Cat
 
         DbContext.Categories.Remove(category);
         await SaveChangesAsync(cancellationToken);
+        return transactions;
     }
 
     // In memory: ordering by name ignoring case is the same everywhere, unlike the database's collation.

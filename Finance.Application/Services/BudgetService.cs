@@ -8,6 +8,7 @@ using Finance.Domain.Common;
 using Finance.Domain.Entities;
 using Finance.Domain.Enums;
 using Finance.Domain.Exceptions;
+using Hestia.Contracts.Finance;
 
 namespace Finance.Application.Services;
 
@@ -22,6 +23,9 @@ public class BudgetService(
     public Task<BudgetSummary> AddAsync(Budget budget, CancellationToken cancellationToken = default) =>
         changes.RunAsync(ChangeEffect.Spending, async ct =>
         {
+            // Only the categories' ids: a failed attempt linked them to its categories, which one after a database
+            // failure doesn't track (IUnitOfWork).
+            budget.Categories.ForEach(c => c.Category = null);
             await EnsureFitsAsync(budget, ct);
             await budgetRepository.AddAsync(budget, ct);
             // Totalled like any other read: a new budget's categories may already have spending this month.
@@ -122,19 +126,23 @@ public class BudgetService(
         }
     }
 
-    public async Task RemoveAsync(Guid id, CancellationToken cancellationToken = default)
-    {
-        var budget = await budgetRepository.GetWithTransactionsAsync(id, cancellationToken)
-                     ?? throw new NotFoundException(nameof(Budget), id);
-
-        // The foreign key has no ON DELETE action, so unlink transactions before deleting.
-        foreach (var transaction in budget.Transactions)
+    // Unlinked, its transactions count in the budgets of their categories again, which can take one past 80 % or 100 %.
+    public Task RemoveAsync(Guid id, CancellationToken cancellationToken = default) =>
+        changes.RunAsync(ChangeEffect.Spending, async ct =>
         {
-            transaction.BudgetId = null;
-        }
+            var budget = await budgetRepository.GetWithTransactionsAsync(id, ct)
+                         ?? throw new NotFoundException(nameof(Budget), id);
 
-        await budgetRepository.RemoveAsync(budget, cancellationToken);
-    }
+            // The foreign key has no ON DELETE action, so unlink transactions before deleting.
+            foreach (var transaction in budget.Transactions)
+            {
+                transaction.BudgetId = null;
+            }
+            // Unlinked, as one by one: the events are of those the list shows.
+            await changes.RaiseChangedAsync(budget.Transactions.Where(t => !t.Hidden).ToList(), TransactionChange.Updated, ct);
+
+            await budgetRepository.RemoveAsync(budget, ct);
+        }, cancellationToken);
 
     public Task<PaginatedList<BudgetSummary>> FilterAsync(BudgetFilterDto filter, CancellationToken cancellationToken = default)
     {

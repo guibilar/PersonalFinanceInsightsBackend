@@ -414,7 +414,7 @@ no outbox, no RabbitMQ, and no extra queries.
 | Event | When |
 | --- | --- |
 | `TransactionsImported` | A statement import finished (also when it added nothing). |
-| `TransactionChanged` | A transaction was added by hand, changed (description, category, flow, note, tags, budget link, rules), deleted (a generated "Monthly Rent" row too, when an import replaces it), or restored. |
+| `TransactionChanged` | A transaction was added by hand, changed (description, category, flow, note, tags, budget link, rules; moved by deleting its category, or unlinked by deleting its budget), deleted (a generated "Monthly Rent" row too, when an import replaces it), or restored. |
 | `BudgetLimitReached` | A change made an active budget's spending cross 80 % or 100 % in its current period. |
 | `BalanceRecorded` | A balance was entered, or a statement gave one. |
 | `SubscriptionPriceChanged` | A new charge of a recurring payment has a new fixed price. |
@@ -433,7 +433,8 @@ How it works (Wolverine, MIT licence):
 3. After the commit, `FinanceEventForwarder` takes each event from the queue and sends it to the fanout exchange
    `hestia.finance-events` through a durable sender (table `wolverine.wolverine_outgoing_envelopes`). If the broker is
    down, the rows stay, and Wolverine sends them later.
-4. A failed change commits nothing, so it sends nothing.
+4. A failed change commits nothing, so it sends nothing. After a transient database failure (a dropped connection, a
+   deadlock) the whole change runs again, from what the database has: nothing the failed attempt left in memory.
 
 Why the local queue (T79): Wolverine builds the routes of the published events when it starts, and a route to RabbitMQ
 needs a broker connection. A route to a local queue does not. So a broker that is down does not stop the start.
