@@ -68,8 +68,7 @@ public partial class NeoCsvParser : IStatementParser
                 continue;
             }
 
-            var amountText = csv.GetField(AmountHeader)?.Replace("$", "").Replace(" ", "").Trim();
-            if (!decimal.TryParse(amountText, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount) || amount == 0)
+            if (!StatementText.TryParseAmount(csv.GetField(AmountHeader), out var amount) || amount == 0)
             {
                 continue;
             }

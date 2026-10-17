@@ -184,6 +184,8 @@ already stored, with their category locked. Importing a chequing statement that 
 hides that month's "Monthly Rent" row, so rent counts once; it can be restored from the deleted transactions.
 
 Statements are read as UTF-8, or as Windows-1252 when the file isn't valid UTF-8 (e.g. re-saved in Excel).
+A date or an amount that a spreadsheet rewrote (`05/01/2026`, `(12.00)`) refuses the file with 400 rather than being
+guessed or its row dropped: download the statement again and import that.
 Transactions are duplicates only within the same account.
 
 ### Adding transactions by hand
